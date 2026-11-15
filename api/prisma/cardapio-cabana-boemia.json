@@ -1,0 +1,97 @@
+{
+  "restaurante": {
+    "nome": "Cabana Boemia",
+    "subtitulo": "Restaurante e Lanchonete",
+    "cidade": "Abatiá - PR",
+    "paleta": {
+      "vermelho": "#C8102E",
+      "vermelho_escuro": "#9E0B22",
+      "dourado": "#C9A646",
+      "preto": "#111111",
+      "creme": "#FBF3E8",
+      "laranja_destaque": "#D9541E",
+      "branco": "#FFFFFF"
+    }
+  },
+  "turnos": [
+    {
+      "nome": "Lanches",
+      "horarios": [
+        { "dia": "quinta", "inicio": "19:00", "fim": "23:00" },
+        { "dia": "sexta", "inicio": "19:00", "fim": "00:00" },
+        { "dia": "sabado", "inicio": "19:00", "fim": "00:00" },
+        { "dia": "domingo", "inicio": "18:00", "fim": "23:00" }
+      ]
+    },
+    {
+      "nome": "Almoço",
+      "horarios": []
+    }
+  ],
+  "insumos": [
+    { "nome": "Pão de lanche", "estoque_inicial": 0 },
+    { "nome": "Pão de cachorro-quente", "estoque_inicial": 0 }
+  ],
+  "categorias": [
+    {
+      "nome": "Lanches",
+      "turnos": ["Lanches"],
+      "produtos": [
+        { "nome": "Misto Quente", "descricao": "Pão, presunto e mussarela", "preco_centavos": 1000, "insumos": [{ "insumo": "Pão de lanche", "qtd": 1 }] },
+        { "nome": "Cachorro Quente", "descricao": "Pão, salsicha, tomate, bacon, calabresa, milho e batata palha", "preco_centavos": 1000, "insumos": [{ "insumo": "Pão de cachorro-quente", "qtd": 1 }] },
+        { "nome": "X-Burguer", "descricao": "Pão, hambúrguer, presunto e mussarela", "preco_centavos": 1200, "insumos": [{ "insumo": "Pão de lanche", "qtd": 1 }] },
+        { "nome": "X-Salada", "descricao": "Pão, hambúrguer, presunto, mussarela, tomate e alface", "preco_centavos": 1300, "insumos": [{ "insumo": "Pão de lanche", "qtd": 1 }] },
+        { "nome": "X-Egg", "descricao": "Pão, hambúrguer, presunto, mussarela, ovo, tomate e alface", "preco_centavos": 1500, "insumos": [{ "insumo": "Pão de lanche", "qtd": 1 }] },
+        { "nome": "X-Bacon", "descricao": "Pão, hambúrguer, presunto, mussarela, bacon, tomate e alface", "preco_centavos": 1600, "insumos": [{ "insumo": "Pão de lanche", "qtd": 1 }] },
+        { "nome": "X-Calabresa", "descricao": "Pão, hambúrguer, presunto, mussarela, calabresa, tomate e alface", "preco_centavos": 1600, "insumos": [{ "insumo": "Pão de lanche", "qtd": 1 }] },
+        { "nome": "X-Frango", "descricao": "Pão, frango, catupiry, presunto, mussarela, milho, tomate e alface", "preco_centavos": 1600, "insumos": [{ "insumo": "Pão de lanche", "qtd": 1 }] },
+        { "nome": "X-Tudo", "descricao": "Pão, hambúrguer, ovo, salsicha, frango, bacon, calabresa, catupiry, presunto, mussarela, milho, tomate, alface e batata palha", "preco_centavos": 2300, "insumos": [{ "insumo": "Pão de lanche", "qtd": 1 }] }
+      ]
+    },
+    {
+      "nome": "Pizzas",
+      "turnos": ["Lanches"],
+      "produtos": [
+        { "nome": "Pizza Tradicional", "descricao": "Molho, presunto, mussarela, tomate, cebola e orégano", "preco_centavos": 5000, "insumos": [] },
+        { "nome": "Pizza Calabresa", "descricao": "Molho, presunto, mussarela, calabresa, tomate, cebola e orégano", "preco_centavos": 5000, "insumos": [] },
+        { "nome": "Pizza Bacon", "descricao": "Molho, presunto, mussarela, bacon, tomate, cebola e orégano", "preco_centavos": 5000, "insumos": [] },
+        { "nome": "Pizza Frango", "descricao": "Molho, mussarela, frango, catupiry e orégano", "preco_centavos": 5000, "insumos": [] },
+        { "nome": "Pizza 4 Queijos", "descricao": "Molho, mussarela, queijo prato, catupiry, cheddar e orégano", "preco_centavos": 5000, "insumos": [] },
+        { "nome": "Pizza Moda da Casa", "descricao": "Molho, presunto, mussarela, calabresa, bacon, frango, cheddar e orégano", "preco_centavos": 6000, "insumos": [] }
+      ]
+    },
+    {
+      "nome": "Porções",
+      "turnos": ["Lanches"],
+      "produtos": [
+        { "nome": "Calabresa Acebolada (500g)", "descricao": "Acompanha pão e alface", "preco_centavos": 2500, "insumos": [] },
+        { "nome": "Salame", "descricao": "Acompanha alface", "preco_centavos": 2000, "insumos": [] },
+        { "nome": "Batata Frita (500g)", "descricao": "", "preco_centavos": 2000, "insumos": [] },
+        { "nome": "Batata Frita com Mussarela e Bacon (500g)", "descricao": "", "preco_centavos": 2800, "insumos": [] },
+        { "nome": "Batata Frita com Cheddar e Bacon (500g)", "descricao": "", "preco_centavos": 2800, "insumos": [] },
+        { "nome": "Frango a Passarinho (1kg)", "descricao": "Acompanha alface", "preco_centavos": 3000, "insumos": [] }
+      ]
+    },
+    {
+      "nome": "Bebidas",
+      "turnos": ["Lanches", "Almoço"],
+      "controla_estoque": true,
+      "produtos": [
+        { "nome": "Refrigerante Lata", "descricao": "", "preco_centavos": 500, "estoque_inicial": 0 },
+        { "nome": "Coca-Cola 1L", "descricao": "", "preco_centavos": 900, "estoque_inicial": 0 },
+        { "nome": "Coca-Cola 2L", "descricao": "", "preco_centavos": 1500, "estoque_inicial": 0 },
+        { "nome": "Suco 300ml", "descricao": "", "preco_centavos": 700, "estoque_inicial": 0 },
+        { "nome": "Suco 900ml", "descricao": "", "preco_centavos": 1500, "estoque_inicial": 0 }
+      ]
+    },
+    {
+      "nome": "Marmitas",
+      "turnos": ["Almoço"],
+      "produtos": [
+        { "nome": "Marmita P", "descricao": "Cardápio do dia", "preco_centavos": null },
+        { "nome": "Marmita M", "descricao": "Cardápio do dia", "preco_centavos": null },
+        { "nome": "Marmita G", "descricao": "Cardápio do dia", "preco_centavos": null }
+      ]
+    }
+  ]
+}

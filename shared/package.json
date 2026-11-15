@@ -1,0 +1,8 @@
+{
+  "name": "@restaurante/shared",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"[shared] dev ainda nao configurado\""
+  }
+}

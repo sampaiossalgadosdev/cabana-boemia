@@ -1,0 +1,8 @@
+{
+  "name": "@restaurante/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"[api] dev ainda nao configurado\""
+  }
+}

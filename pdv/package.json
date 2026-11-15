@@ -1,0 +1,8 @@
+{
+  "name": "@restaurante/pdv",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"[pdv] dev ainda nao configurado\""
+  }
+}

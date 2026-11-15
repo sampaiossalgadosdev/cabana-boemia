@@ -2,7 +2,12 @@
   "name": "@restaurante/shared",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
+  "exports": {
+    "./telefone": "./src/telefone.js"
+  },
   "scripts": {
-    "dev": "echo \"[shared] dev ainda nao configurado\""
+    "dev": "echo \"[shared] dev ainda nao configurado\"",
+    "test": "node --test \"test/**/*.test.js\""
   }
 }

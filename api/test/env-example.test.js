@@ -33,13 +33,14 @@ test('.env.example declara toda variável de ambiente lida pela API', async () =
   assert.deepEqual(faltando, [], `faltam no .env.example: ${faltando.join(', ')}`);
 });
 
-test('.env.example traz as variáveis de banco, tokens, Google, CORS e porta', async () => {
+test('.env.example traz as variáveis de banco, tokens (equipe e cliente), Google, CORS e porta', async () => {
   const exemplo = await readFile(path.join(raizApi, '.env.example'), 'utf8');
   for (const v of [
     'DATABASE_URL',
     'DATABASE_URL_TEST',
     'JWT_SECRET',
     'JWT_REFRESH_SECRET',
+    'JWT_CLIENTE_SECRET',
     'GOOGLE_CLIENT_ID',
     'CORS_ORIGINS',
     'PORT',

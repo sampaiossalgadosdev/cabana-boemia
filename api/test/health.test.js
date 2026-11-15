@@ -22,6 +22,18 @@ describe('API base', () => {
     assert.deepEqual(await res.json(), { status: 'ok' });
   });
 
+  test('Cross-Origin-Opener-Policy é same-origin-allow-popups (popup do login Google)', async () => {
+    for (const [rota, status] of [
+      ['/health', 200],
+      ['/nao-existe', 404],
+      ['/cliente/me', 401],
+    ]) {
+      const res = await fetch(`${base}${rota}`);
+      assert.equal(res.status, status, rota);
+      assert.equal(res.headers.get('cross-origin-opener-policy'), 'same-origin-allow-popups', rota);
+    }
+  });
+
   test('rota inexistente responde 404 em JSON', async () => {
     const res = await fetch(`${base}/nao-existe`);
     assert.equal(res.status, 404);

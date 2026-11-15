@@ -13,6 +13,10 @@ if (problemas.length) {
   process.exit(1);
 }
 
+if (!process.env.GOOGLE_CLIENT_ID) {
+  console.warn('Aviso: GOOGLE_CLIENT_ID ausente. O login de clientes no site responde 503 até configurar.');
+}
+
 const porta = Number(process.env.PORT) || 3000;
 const app = criarApp();
 

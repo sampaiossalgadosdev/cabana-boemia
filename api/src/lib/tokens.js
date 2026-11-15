@@ -3,8 +3,14 @@ import jwt from 'jsonwebtoken';
 
 export const ACCESS_TOKEN_DURACAO_SEG = 15 * 60; // 15 min
 export const REFRESH_TOKEN_DURACAO_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+export const CLIENTE_TOKEN_DURACAO_SEG = 7 * 24 * 60 * 60; // 7 dias, sem refresh
 
-const SEGREDOS = ['JWT_SECRET', 'JWT_REFRESH_SECRET'];
+// Audiences: um token da equipe nunca vale como token de cliente e vice-versa
+// (além disso, cada um é assinado com um segredo diferente).
+const AUD_EQUIPE = 'equipe';
+const AUD_CLIENTE = 'cliente';
+
+const SEGREDOS = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'JWT_CLIENTE_SECRET'];
 const SEGREDO_MIN = 32;
 
 /**
@@ -22,8 +28,11 @@ export function problemasNosSegredos(env = process.env) {
       problemas.push(`${nome} curto demais (${valor.length} caracteres; mínimo ${SEGREDO_MIN})`);
     }
   }
-  if (env.JWT_SECRET && env.JWT_SECRET === env.JWT_REFRESH_SECRET) {
-    problemas.push('JWT_SECRET e JWT_REFRESH_SECRET precisam ser diferentes');
+  for (let i = 0; i < SEGREDOS.length; i++) {
+    for (let j = i + 1; j < SEGREDOS.length; j++) {
+      const [a, b] = [SEGREDOS[i], SEGREDOS[j]];
+      if (env[a] && env[a] === env[b]) problemas.push(`${a} e ${b} precisam ser diferentes`);
+    }
   }
   return problemas;
 }
@@ -36,18 +45,37 @@ function segredo(nome) {
   return valor;
 }
 
-/** JWT de acesso HS256 com { sub, papel }, válido por 15 min. */
+/** JWT de acesso da equipe, HS256 com { sub, papel, aud: "equipe" }, válido por 15 min. */
 export function gerarAccessToken(usuario) {
   return jwt.sign({ papel: usuario.papel }, segredo('JWT_SECRET'), {
     algorithm: 'HS256',
     subject: String(usuario.id),
+    audience: AUD_EQUIPE,
     expiresIn: ACCESS_TOKEN_DURACAO_SEG,
   });
 }
 
 /** Devolve o payload ou lança o erro do jsonwebtoken (TokenExpiredError, JsonWebTokenError). */
 export function verificarAccessToken(token) {
-  return jwt.verify(token, segredo('JWT_SECRET'), { algorithms: ['HS256'] });
+  return jwt.verify(token, segredo('JWT_SECRET'), { algorithms: ['HS256'], audience: AUD_EQUIPE });
+}
+
+/** JWT do cliente do site, HS256 com { sub, aud: "cliente" } e segredo próprio, válido por 7 dias. */
+export function gerarTokenCliente(cliente) {
+  return jwt.sign({}, segredo('JWT_CLIENTE_SECRET'), {
+    algorithm: 'HS256',
+    subject: String(cliente.id),
+    audience: AUD_CLIENTE,
+    expiresIn: CLIENTE_TOKEN_DURACAO_SEG,
+  });
+}
+
+/** Como verificarAccessToken, mas para o token do cliente. */
+export function verificarTokenCliente(token) {
+  return jwt.verify(token, segredo('JWT_CLIENTE_SECRET'), {
+    algorithms: ['HS256'],
+    audience: AUD_CLIENTE,
+  });
 }
 
 /** Hash guardado no banco: HMAC-SHA256 do token com JWT_REFRESH_SECRET. */

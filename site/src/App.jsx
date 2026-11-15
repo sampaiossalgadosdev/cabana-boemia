@@ -97,6 +97,7 @@ export function App() {
         aberta={gavetaAberta}
         onFechar={() => setGavetaAberta(false)}
         onEditar={editarDoCarrinho}
+        fechado={fechado}
       />
       <ModalProduto
         key={modal?.chave ?? 0}

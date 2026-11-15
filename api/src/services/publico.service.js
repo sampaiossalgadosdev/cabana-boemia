@@ -82,5 +82,10 @@ export function bairros() {
 
 export async function config() {
   const c = await configuracao();
-  return { nome: c.nomeRestaurante, whatsapp: c.whatsappNumero };
+  return {
+    nome: c.nomeRestaurante,
+    whatsapp: c.whatsappNumero,
+    // O Client ID OAuth é público: o site precisa dele para desenhar o botão do Google.
+    googleClientId: process.env.GOOGLE_CLIENT_ID || null,
+  };
 }

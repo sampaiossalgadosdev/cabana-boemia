@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import { Dialogo } from './Dialogo.jsx';
+import { Checkout } from './Checkout.jsx';
 import { formatarPreco } from '../lib/dinheiro.js';
 import { subtotal } from '../carrinho/carrinho.js';
 import { useCarrinho } from '../carrinho/CarrinhoContext.jsx';
@@ -49,14 +51,25 @@ function ItemCarrinho({ item, onEditar, onRemover }) {
   );
 }
 
-/** Gaveta com os itens. Checkout fica para depois (botão desabilitado). */
-export function GavetaCarrinho({ aberta, onFechar, onEditar }) {
+/**
+ * Gaveta do carrinho. "Continuar" passa para o checkout na mesma gaveta
+ * (login com Google e telefone), sem sair do carrinho.
+ */
+export function GavetaCarrinho({ aberta, onFechar, onEditar, fechado = false }) {
   const { itens, totalItens, totalCentavos, remover } = useCarrinho();
+  const [etapa, setEtapa] = useState('itens');
+
+  // Fechou a gaveta ou o carrinho esvaziou (ex.: item saiu do cardápio): volta aos itens.
+  useEffect(() => {
+    if (!aberta || itens.length === 0) setEtapa('itens');
+  }, [aberta, itens.length]);
+
+  const noCheckout = etapa === 'checkout';
 
   return (
     <Dialogo
       aberto={aberta}
-      titulo="Seu carrinho"
+      titulo={noCheckout ? 'Finalizar pedido' : 'Seu carrinho'}
       onFechar={onFechar}
       rodape={
         itens.length > 0 && (
@@ -65,16 +78,31 @@ export function GavetaCarrinho({ aberta, onFechar, onEditar }) {
               <span>Total dos itens ({rotuloItens(totalItens)})</span>
               <span>{formatarPreco(totalCentavos)}</span>
             </div>
-            <button type="button" className="botao botao--primario botao--bloco" disabled>
-              Continuar
-            </button>
-            <p className="nota">Finalização do pedido em breve.</p>
+            {noCheckout ? (
+              <button type="button" className="botao botao--secundario botao--bloco" onClick={() => setEtapa('itens')}>
+                Voltar ao carrinho
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="botao botao--primario botao--bloco"
+                  disabled={fechado}
+                  onClick={() => setEtapa('checkout')}
+                >
+                  Continuar
+                </button>
+                {fechado && <p className="nota">Estamos fechados agora. Os pedidos voltam quando abrirmos.</p>}
+              </>
+            )}
           </>
         )
       }
     >
       {itens.length === 0 ? (
         <p className="vazio">Seu carrinho está vazio.</p>
+      ) : noCheckout ? (
+        <Checkout />
       ) : (
         <ul className="itens-carrinho">
           {itens.map((item) => (

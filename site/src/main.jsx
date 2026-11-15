@@ -5,6 +5,7 @@ import './estilos/tokens.css';
 import './estilos/global.css';
 import { App } from './App.jsx';
 import { CarrinhoProvider } from './carrinho/CarrinhoContext.jsx';
+import { ClienteProvider } from './cliente/ClienteContext.jsx';
 import { AvisosProvider } from './componentes/Avisos.jsx';
 import { aplicarFavicon } from './lib/logo.js';
 
@@ -13,9 +14,11 @@ aplicarFavicon();
 createRoot(document.getElementById('raiz')).render(
   <StrictMode>
     <AvisosProvider>
-      <CarrinhoProvider>
-        <App />
-      </CarrinhoProvider>
+      <ClienteProvider>
+        <CarrinhoProvider>
+          <App />
+        </CarrinhoProvider>
+      </ClienteProvider>
     </AvisosProvider>
   </StrictMode>,
 );

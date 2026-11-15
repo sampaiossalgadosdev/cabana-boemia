@@ -19,6 +19,14 @@ export function lerTexto(chave, storage = storagePadrao()) {
   }
 }
 
+export function removerTexto(chave, storage = storagePadrao()) {
+  try {
+    storage?.removeItem(chave);
+  } catch {
+    // sem storage: nada a remover
+  }
+}
+
 /** @returns {boolean} se gravou */
 export function gravarTexto(chave, valor, storage = storagePadrao()) {
   try {

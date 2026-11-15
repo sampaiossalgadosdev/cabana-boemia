@@ -20,6 +20,7 @@ body {
 }
 
 button,
+input,
 textarea {
   font: inherit;
   color: inherit;
@@ -650,4 +651,86 @@ button:disabled {
   font-size: 1.2rem;
   line-height: 1;
   padding: 2px 4px;
+}
+
+/* ───────── Checkout (dentro da gaveta) ───────── */
+
+.checkout-passo__titulo {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.checkout-passo__texto {
+  margin: 0 0 16px;
+  color: var(--cor-texto-suave);
+  font-size: 0.95rem;
+}
+
+.checkout-passo__acao {
+  margin-top: 20px;
+}
+
+/* O Google desenha o botão aqui (iframe); a altura evita "pulo" ao carregar. */
+.botao-google {
+  display: flex;
+  justify-content: center;
+  min-height: 44px;
+}
+
+.campo input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-fundo);
+  font-size: 1rem; /* 16px: o iOS não dá zoom ao focar */
+}
+
+.campo input:focus {
+  border-color: var(--cor-dourado);
+  outline: none;
+}
+
+.campo input[aria-invalid='true'] {
+  border-color: var(--cor-vermelho);
+}
+
+.erro {
+  margin: 6px 0 0;
+  color: var(--cor-vermelho-escuro);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.perfil-resumo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--raio);
+  background: var(--cor-fundo);
+  border: 1px solid var(--cor-borda);
+}
+
+.perfil-resumo > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.perfil-resumo__email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--cor-texto-suave);
+  font-size: 0.85rem;
+}
+
+.perfil-resumo__acoes {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin: -6px -8px 0 0;
 }

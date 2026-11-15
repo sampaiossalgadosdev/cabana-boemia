@@ -3,11 +3,12 @@ import { healthRoutes } from './health.routes.js';
 import { criarAuthRoutes } from './auth.routes.js';
 import { criarUsuarioRoutes } from './usuario.routes.js';
 import { criarPublicoRoutes } from './publico.routes.js';
+import { criarClienteRoutes } from './cliente.routes.js';
 
 /**
  * Rotas montadas por app: cada criarApp() tem seu próprio rate limiter
  * (estado em memória), o que isola os testes.
- * @param {{ limiteLogin?: number, relogio?: () => Date }} [opcoes]
+ * @param {{ limiteLogin?: number, relogio?: () => Date, verificarIdTokenGoogle?: Function }} [opcoes]
  */
 export function criarRotas(opcoes = {}) {
   const routes = Router();
@@ -15,5 +16,6 @@ export function criarRotas(opcoes = {}) {
   routes.use('/auth', criarAuthRoutes(opcoes));
   routes.use('/usuarios', criarUsuarioRoutes());
   routes.use('/publico', criarPublicoRoutes(opcoes));
+  routes.use('/cliente', criarClienteRoutes(opcoes));
   return routes;
 }

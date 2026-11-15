@@ -105,10 +105,22 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - `autenticar` busca o usuário no banco a cada requisição (papel vem do banco; desativado perde acesso na hora). `exigirPapel('DONO')` para rotas do dono.
 - Desativar atendente e trocar senha revogam todos os refresh tokens dele. Rotas `/usuarios` só alteram ATENDENTE.
 - `/usuarios` não tem excluir (pedidos ficam vinculados ao usuário; usa-se desativar/reativar) nem editar nome/email por enquanto. Decisão do dono, não é lacuna.
-- A API **recusa iniciar** (`server.js`, código 1) se `JWT_SECRET`/`JWT_REFRESH_SECRET` estiverem ausentes, com menos de 32 caracteres ou iguais entre si (`problemasNosSegredos` em `lib/tokens.js`).
+- Access token da equipe leva `aud: "equipe"` (verificado).
+- A API **recusa iniciar** (`server.js`, código 1) se `JWT_SECRET`/`JWT_REFRESH_SECRET`/`JWT_CLIENTE_SECRET` estiverem ausentes, com menos de 32 caracteres ou iguais entre si (`problemasNosSegredos` em `lib/tokens.js`).
 - Rate limit no login por IP+email, só tentativas com falha contam. `trust proxy = 1` (Railway).
 - Refresh trafega no corpo JSON. A retaguarda será servida no mesmo domínio da API (`/admin`), então **cookie httpOnly para o refresh é melhoria futura** (sem CORS/SameSite=None).
 - Primeiro dono: `npm run criar-dono -w api -- --nome "..." --email ... --senha ...`.
+
+## Autenticação do cliente (site)
+- Google Identity Services no site → ID token → `POST /cliente/auth/google { credential }`. A API valida com `google-auth-library` (assinatura com as chaves do Google, emissor, validade, `aud = GOOGLE_CLIENT_ID`; `lib/google.js`). Sem `GOOGLE_CLIENT_ID` responde 503 (nunca verifica sem audience); token inválido = 401 `TOKEN_GOOGLE_INVALIDO`.
+- Upsert do `Cliente` por `googleId` (= `sub`). Novo nasce com nome/email do Google; existente só tem o email atualizado (nome editado pelo cliente não é sobrescrito). Email só é gravado se `email_verified`.
+- JWT de cliente: HS256, segredo próprio `JWT_CLIENTE_SECRET`, `aud: "cliente"`, 7 dias, **sem refresh** (re-login é um toque no Google). Token da equipe não vale no cliente e vice-versa (segredo e audience diferentes). `autenticarCliente` busca o cliente no banco a cada requisição.
+- Rotas (`Cache-Control: no-store`): `GET/PUT /cliente/me` (nome + telefone, ambos obrigatórios no PUT), `GET/POST /cliente/enderecos`, `PUT/DELETE /cliente/enderecos/:id`. Endereço de outro cliente = 404. Bairro inexistente/inativo = 422 `BAIRRO_INVALIDO`. Primeiro endereço vira principal; apagar o principal promove o mais recente. Máx. 10 endereços.
+- Telefone (`shared/src/telefone.js`, usado por API e site): celular com DDD válido + 9 dígitos, aceita formatação/`+55`/`0`, salvo só com números (`43999990000`).
+- Pedido do site exige telefone: `exigirTelefoneCliente` (422 `TELEFONE_OBRIGATORIO`) vai na rota de criação de pedido.
+- `GET /publico/config` devolve `googleClientId` (público); o site lê dali, sem variável própria.
+- Helmet com `crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' }` (`app.js`): a API vai servir o site no deploy e o padrão `same-origin` quebra o popup do login Google. Testado em `test/health.test.js`. Quem servir o site (API ou outro host) não pode mandar `same-origin`.
+- Site: token em `localStorage` (`cabana-boemia:cliente:v1`); 401 apaga. Checkout dentro da gaveta do carrinho: login → telefone obrigatório → resumo. "Continuar" desabilitado com a loja fechada.
 
 ## Testes
 - `npm test` (raiz) roda os arquivos em série (`--test-concurrency=1`), com `test/setup.js` pré-carregado.
@@ -133,13 +145,14 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - Feito na API: schema + migration `init`, seed do cardápio, autenticação (dono/atendentes, `/auth`, `/usuarios`), turno ativo e rotas públicas do site (`GET /publico/cardapio`, `/publico/bairros`, `/publico/config`, sem login, `Cache-Control: public, max-age=15`).
 - Banco local: PostgreSQL 18, usuário `postgres`. `api/.env` tem `DATABASE_URL` (`restaurante`, migration aplicada e seed rodado), `DATABASE_URL_TEST` (`restaurante_test`) e `JWT_SECRET`/`JWT_REFRESH_SECRET` gerados (64 caracteres, diferentes).
 - Banco de dev tem um DONO de teste (`dono.teste@exemplo.com`, id 1), criado por `npm run criar-dono`; login, `/auth/me` e refresh (com rotação e recusa do refresh antigo) conferidos via curl contra a API rodando.
-- Testes: API 65/65 e site 20/20 passando, nenhum pulado (`npm test` na raiz roda os dois).
+- Testes: API 94/94, site 25/25 e shared 4/4 passando, nenhum pulado (`npm test` na raiz roda todos).
 - `.env.example` declara toda variável lida pela API (garantido por `test/env-example.test.js`).
 - Site (prompt 5): cardápio com abas, modal do produto (quantidade + observação), carrinho em barra + gaveta, estado fechado com prévia e botões desabilitados, atualização a cada 30 s com aviso de item removido/preço alterado. `vite build` sem erro; telas conferidas num Chrome headless (390×844). Logo no cabeçalho e no favicon, com fallback em Dancing Script conferido bloqueando a imagem.
 - Seed cria produtos com `disponivelHoje = true`. No banco de dev (semeado antes dessa regra) os 30 produtos foram ligados com `UPDATE "Produto" SET "disponivelHoje" = true` em 2026-11-15.
 - Branches `feat/api-base` e `feat/site-cardapio` já integrados na `main` e apagados.
 - Pendência: logo em PNG com fundo transparente (e uma versão quadrada para favicon e ícone do instalador), pedida ao dono. Até chegar, segue o JPEG `shared/assets/logo-cabana-boemia.jpg` (fundo claro, sombra escura no canto inferior direito).
-- Falta: login Google e checkout do site, pedidos (criação com baixa de estoque, numeração por dia), PDV, retaguarda, impressão, relatório do dia.
+- Login Google do cliente (API + passo no checkout do site), perfil/telefone e CRUD de endereços feitos (branch `feat/cliente-auth-google`). Telas de login, telefone inválido e resumo conferidas no Chrome headless (390×844). Falta configurar o OAuth Client no Google Cloud Console e pôr `GOOGLE_CLIENT_ID` no `api/.env`.
+- Falta: endereço/pagamento no checkout do site, pedidos (criação com baixa de estoque, numeração por dia), PDV, retaguarda, impressão, relatório do dia.
 
 ## FORA DA V1
 - Status do pedido para o cliente.

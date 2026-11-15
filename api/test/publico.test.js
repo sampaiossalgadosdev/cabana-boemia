@@ -1,0 +1,162 @@
+import { test, describe, before, after, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+
+const local = (iso) => new Date(`${iso}-03:00`);
+const SABADO_20H = local('2026-11-14T20:00');
+const QUINTA_18H59 = local('2026-11-12T18:59');
+
+describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
+  let prisma;
+  let servidor;
+  let base;
+  let agora = SABADO_20H;
+
+  async function get(rota) {
+    const res = await fetch(`${base}${rota}`);
+    return { status: res.status, headers: res.headers, corpo: await res.json() };
+  }
+
+  const nomesNoCardapio = async () =>
+    (await get('/publico/cardapio')).corpo.categorias.flatMap((c) => c.produtos.map((p) => p.nome));
+
+  before(async () => {
+    resetarBancoDeTeste();
+    ({ prisma } = await import('../src/lib/prisma.js'));
+    const { seed } = await import('../prisma/seed.js');
+    await seed(prisma, { log: () => {} });
+
+    const { criarApp } = await import('../src/app.js');
+    const app = criarApp({ log: false, relogio: () => agora });
+    servidor = await new Promise((resolve) => {
+      const s = app.listen(0, () => resolve(s));
+    });
+    base = `http://127.0.0.1:${servidor.address().port}`;
+  });
+
+  // Estado conhecido: tudo disponível hoje, com saldo.
+  beforeEach(async () => {
+    agora = SABADO_20H;
+    await prisma.produto.updateMany({ data: { disponivelHoje: true } });
+    await prisma.produto.updateMany({ where: { controlaEstoque: true }, data: { estoque: 10 } });
+    await prisma.insumo.updateMany({ data: { estoque: 10 } });
+    await prisma.configuracao.update({
+      where: { id: 1 },
+      data: { tempoEstimadoPadraoMin: 40, tempoEstimadoManualMin: null, tempoManualDefinidoEm: null },
+    });
+  });
+
+  after(async () => {
+    await new Promise((resolve) => servidor?.close(resolve));
+    await prisma?.$disconnect();
+  });
+
+  test('sábado 20:00: aberto no turno Lanches, só produtos vendáveis no site', async () => {
+    const { status, corpo } = await get('/publico/cardapio');
+    assert.equal(status, 200);
+    assert.equal(corpo.aberto, true);
+    assert.equal(corpo.turno.nome, 'Lanches');
+    assert.equal(corpo.proximaAbertura, null);
+    assert.deepEqual(
+      corpo.categorias.map((c) => c.nome),
+      ['Lanches', 'Pizzas', 'Porções', 'Bebidas'],
+    );
+    const nomes = corpo.categorias.flatMap((c) => c.produtos.map((p) => p.nome));
+    assert.equal(nomes.length, 26);
+    assert.ok(!nomes.includes('Prato por kg'));
+    assert.ok(!nomes.some((n) => n.startsWith('Marmita')));
+    // Não vaza dados internos de estoque.
+    assert.deepEqual(Object.keys(corpo.categorias[0].produtos[0]).sort(), [
+      'descricao',
+      'id',
+      'nome',
+      'precoCentavos',
+      'tipoPreco',
+    ]);
+  });
+
+  test('lanche some do cardápio quando o pão zera', async () => {
+    await prisma.insumo.update({ where: { nome: 'Pão de lanche' }, data: { estoque: 0 } });
+    const nomes = await nomesNoCardapio();
+    assert.ok(!nomes.includes('Misto Quente'));
+    assert.ok(!nomes.includes('X-Tudo'));
+    assert.ok(nomes.includes('Cachorro Quente'), 'usa outro pão, continua');
+
+    await prisma.insumo.update({ where: { nome: 'Pão de cachorro-quente' }, data: { estoque: 0 } });
+    const cats = (await get('/publico/cardapio')).corpo.categorias.map((c) => c.nome);
+    assert.ok(!cats.includes('Lanches'), 'categoria vazia não aparece');
+  });
+
+  test('bebida some quando o estoque zera', async () => {
+    await prisma.produto.update({ where: { nome: 'Coca-Cola 2L' }, data: { estoque: 0 } });
+    const nomes = await nomesNoCardapio();
+    assert.ok(!nomes.includes('Coca-Cola 2L'));
+    assert.ok(nomes.includes('Coca-Cola 1L'));
+  });
+
+  test('produto fora do cardápio do dia ou inativo não aparece', async () => {
+    await prisma.produto.update({ where: { nome: 'Pizza Bacon' }, data: { disponivelHoje: false } });
+    await prisma.produto.update({ where: { nome: 'Salame' }, data: { ativo: false } });
+    const nomes = await nomesNoCardapio();
+    assert.ok(!nomes.includes('Pizza Bacon'));
+    assert.ok(!nomes.includes('Salame'));
+    await prisma.produto.update({ where: { nome: 'Salame' }, data: { ativo: true } });
+  });
+
+  test('quinta 18:59: fechado, sem categorias, com próxima abertura', async () => {
+    agora = QUINTA_18H59;
+    const { corpo } = await get('/publico/cardapio');
+    assert.equal(corpo.aberto, false);
+    assert.equal(corpo.turno, null);
+    assert.deepEqual(corpo.categorias, []);
+    assert.equal(corpo.proximaAbertura.turno.nome, 'Lanches');
+    assert.equal(corpo.proximaAbertura.em, '2026-11-12T22:00:00.000Z');
+  });
+
+  test('tempoEstimadoMin: manual definido hoje vale; de ontem, vale o padrão', async () => {
+    await prisma.configuracao.update({
+      where: { id: 1 },
+      data: { tempoEstimadoManualMin: 70, tempoManualDefinidoEm: local('2026-11-14T00:10') },
+    });
+    assert.equal((await get('/publico/cardapio')).corpo.tempoEstimadoMin, 70);
+
+    // 23:50 de sexta (local) já é sábado em UTC, mas é "ontem" no restaurante.
+    await prisma.configuracao.update({
+      where: { id: 1 },
+      data: { tempoManualDefinidoEm: local('2026-11-13T23:50') },
+    });
+    assert.equal((await get('/publico/cardapio')).corpo.tempoEstimadoMin, 40);
+  });
+
+  test('cache-control curto e sem autenticação', async () => {
+    for (const rota of ['/publico/cardapio', '/publico/bairros', '/publico/config']) {
+      const r = await get(rota);
+      assert.equal(r.status, 200, rota);
+      assert.equal(r.headers.get('cache-control'), 'public, max-age=15', rota);
+    }
+  });
+
+  test('GET /publico/bairros: só ativos, com taxa, em ordem alfabética', async () => {
+    await prisma.bairro.createMany({
+      data: [
+        { nome: 'Vila Nova', taxaCentavos: 700 },
+        { nome: 'Centro', taxaCentavos: 500 },
+        { nome: 'Sítio Desativado', taxaCentavos: 1500, ativo: false },
+      ],
+    });
+    const { corpo } = await get('/publico/bairros');
+    assert.deepEqual(
+      corpo.bairros.map(({ nome, taxaCentavos }) => ({ nome, taxaCentavos })),
+      [
+        { nome: 'Centro', taxaCentavos: 500 },
+        { nome: 'Vila Nova', taxaCentavos: 700 },
+      ],
+    );
+  });
+
+  test('GET /publico/config: nome e whatsapp', async () => {
+    await prisma.configuracao.update({ where: { id: 1 }, data: { whatsappNumero: '5543999990000' } });
+    const { corpo } = await get('/publico/config');
+    assert.deepEqual(corpo, { nome: 'Cabana Boemia', whatsapp: '5543999990000' });
+  });
+});

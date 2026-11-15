@@ -1,0 +1,338 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Convenções: dinheiro em centavos (Int), peso em gramas (Int), datas em UTC.
+// Saldo de estoque oficial = campo `estoque` (Produto/Insumo), alterado só por
+// decremento/incremento atômico. MovimentacaoEstoque é apenas histórico.
+
+// ───────────── Enums ─────────────
+
+enum Papel {
+  DONO
+  ATENDENTE
+}
+
+enum TipoPreco {
+  UNIDADE
+  POR_KG
+}
+
+enum CanalPedido {
+  SITE
+  WHATSAPP
+  SALAO
+}
+
+enum StatusPedido {
+  ABERTO
+  CONFIRMADO
+  FINALIZADO
+  CANCELADO
+}
+
+enum FormaPagamento {
+  PIX
+  DINHEIRO
+  DEBITO
+  CREDITO
+}
+
+enum TipoMovimentacao {
+  VENDA
+  ESTORNO
+  ENTRADA
+  AJUSTE
+}
+
+enum TipoTrabalhoImpressao {
+  PEDIDO
+  CANCELAMENTO
+  CONTA
+}
+
+enum StatusTrabalhoImpressao {
+  PENDENTE
+  IMPRESSO
+  FALHOU
+}
+
+// ───────────── Acesso ─────────────
+
+model Usuario {
+  id           Int      @id @default(autoincrement())
+  nome         String
+  email        String   @unique
+  senhaHash    String
+  papel        Papel
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  refreshTokens  RefreshToken[]
+  pedidosCriados Pedido[]
+  movimentacoes  MovimentacaoEstoque[]
+}
+
+model RefreshToken {
+  id         Int       @id @default(autoincrement())
+  usuarioId  Int
+  hash       String    @unique
+  expiraEm   DateTime
+  revogadoEm DateTime?
+  criadoEm   DateTime  @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+}
+
+// ───────────── Clientes ─────────────
+
+model Cliente {
+  id           Int      @id @default(autoincrement())
+  googleId     String?  @unique
+  nome         String
+  email        String?
+  telefone     String?
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  enderecos Endereco[]
+  pedidos   Pedido[]
+
+  @@index([telefone])
+}
+
+model Endereco {
+  id          Int      @id @default(autoincrement())
+  clienteId   Int
+  rua         String
+  numero      String
+  complemento String?
+  referencia  String?
+  bairroId    Int
+  principal   Boolean  @default(false) // no máximo um por cliente (garantido no service)
+  criadoEm    DateTime @default(now())
+
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  bairro  Bairro  @relation(fields: [bairroId], references: [id])
+
+  @@index([clienteId])
+}
+
+model Bairro {
+  id           Int     @id @default(autoincrement())
+  nome         String  @unique
+  taxaCentavos Int
+  ativo        Boolean @default(true)
+
+  enderecos Endereco[]
+}
+
+// ───────────── Cardápio ─────────────
+
+model Categoria {
+  id    Int     @id @default(autoincrement())
+  nome  String  @unique
+  ordem Int     @default(0)
+  ativo Boolean @default(true)
+
+  produtos Produto[]
+}
+
+model Produto {
+  id              Int       @id @default(autoincrement())
+  nome            String    @unique
+  descricao       String    @default("")
+  categoriaId     Int
+  tipoPreco       TipoPreco @default(UNIDADE)
+  precoCentavos   Int // UNIDADE: preço da unidade; POR_KG: preço do quilo
+  ativo           Boolean   @default(true)
+  disponivelHoje  Boolean   @default(false)
+  vendidoNoSite   Boolean   @default(true) // false: só aparece no PDV (ex.: Prato por kg)
+  controlaEstoque Boolean   @default(false)
+  estoque         Int? // saldo oficial quando controlaEstoque = true
+  estoqueMinimo   Int?
+  ordem           Int       @default(0)
+  criadoEm        DateTime  @default(now())
+  atualizadoEm    DateTime  @updatedAt
+
+  categoria     Categoria             @relation(fields: [categoriaId], references: [id])
+  turnos        ProdutoTurno[]
+  insumos       ProdutoInsumo[]
+  itensPedido   ItemPedido[]
+  movimentacoes MovimentacaoEstoque[]
+
+  @@index([categoriaId])
+}
+
+model Turno {
+  id    Int     @id @default(autoincrement())
+  nome  String  @unique
+  ativo Boolean @default(true)
+
+  horarios HorarioTurno[]
+  produtos ProdutoTurno[]
+}
+
+model HorarioTurno {
+  id        Int    @id @default(autoincrement())
+  turnoId   Int
+  diaSemana Int // 0 = domingo … 6 = sábado (validado no service)
+  inicio    String @db.VarChar(5) // "HH:MM"
+  fim       String @db.VarChar(5) // "HH:MM"; "00:00" = meia-noite (fim do dia)
+
+  turno Turno @relation(fields: [turnoId], references: [id], onDelete: Cascade)
+
+  @@index([turnoId, diaSemana])
+}
+
+model ProdutoTurno {
+  produtoId Int
+  turnoId   Int
+
+  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  turno   Turno   @relation(fields: [turnoId], references: [id], onDelete: Cascade)
+
+  @@id([produtoId, turnoId])
+  @@index([turnoId])
+}
+
+// ───────────── Estoque ─────────────
+
+model Insumo {
+  id            Int    @id @default(autoincrement())
+  nome          String @unique
+  estoque       Int    @default(0) // saldo oficial
+  estoqueMinimo Int    @default(0)
+
+  produtos      ProdutoInsumo[]
+  movimentacoes MovimentacaoEstoque[]
+}
+
+model ProdutoInsumo {
+  produtoId  Int
+  insumoId   Int
+  quantidade Int // unidades do insumo consumidas por 1 unidade do produto
+
+  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  insumo  Insumo  @relation(fields: [insumoId], references: [id], onDelete: Restrict)
+
+  @@id([produtoId, insumoId])
+  @@index([insumoId])
+}
+
+/// Histórico/auditoria apenas. Nunca usado para calcular saldo.
+model MovimentacaoEstoque {
+  id           Int              @id @default(autoincrement())
+  tipo         TipoMovimentacao
+  produtoId    Int?
+  insumoId     Int?
+  quantidade   Int // delta com sinal: VENDA negativo, ESTORNO/ENTRADA positivo, AJUSTE ±
+  itemPedidoId Int?
+  usuarioId    Int?
+  criadoEm     DateTime         @default(now())
+
+  produto    Produto?    @relation(fields: [produtoId], references: [id])
+  insumo     Insumo?     @relation(fields: [insumoId], references: [id])
+  itemPedido ItemPedido? @relation(fields: [itemPedidoId], references: [id])
+  usuario    Usuario?    @relation(fields: [usuarioId], references: [id])
+
+  @@index([produtoId])
+  @@index([insumoId])
+  @@index([itemPedidoId])
+}
+
+// ───────────── Pedidos ─────────────
+
+model Pedido {
+  id                  Int             @id @default(autoincrement())
+  numeroDia           Int
+  dataRef             DateTime        @db.Date // dia local (America/Sao_Paulo) do pedido
+  canal               CanalPedido
+  status              StatusPedido    @default(ABERTO)
+  clienteId           Int?
+  nomeCliente         String
+  telefone            String?
+  enderecoTexto       String?
+  bairroNome          String?
+  taxaEntregaCentavos Int             @default(0)
+  subtotalCentavos    Int             @default(0)
+  totalCentavos       Int             @default(0)
+  formaPagamento      FormaPagamento?
+  trocoParaCentavos   Int?
+  mesaRotulo          String?
+  tempoEstimadoMin    Int? // tempo mostrado ao cliente, gravado na criação
+  criadoPorId         Int?
+  criadoEm            DateTime        @default(now())
+  atualizadoEm        DateTime        @updatedAt
+  finalizadoEm        DateTime?
+  canceladoEm         DateTime?
+
+  cliente    Cliente?            @relation(fields: [clienteId], references: [id])
+  criadoPor  Usuario?            @relation(fields: [criadoPorId], references: [id])
+  itens      ItemPedido[]
+  impressoes TrabalhoImpressao[]
+
+  @@unique([dataRef, numeroDia])
+  @@index([status])
+  @@index([clienteId, criadoEm])
+  @@index([criadoEm])
+}
+
+model ItemPedido {
+  id                    Int       @id @default(autoincrement())
+  pedidoId              Int
+  produtoId             Int
+  nomeSnapshot          String
+  precoUnitarioCentavos Int // UNIDADE: por unidade; POR_KG: por quilo
+  quantidade            Int       @default(1)
+  pesoGramas            Int? // só para POR_KG
+  totalCentavos         Int
+  observacao            String?
+  criadoEm              DateTime  @default(now())
+  canceladoEm           DateTime?
+
+  pedido        Pedido                @relation(fields: [pedidoId], references: [id])
+  produto       Produto               @relation(fields: [produtoId], references: [id])
+  movimentacoes MovimentacaoEstoque[]
+
+  @@index([pedidoId])
+  @@index([produtoId])
+}
+
+// ───────────── Impressão ─────────────
+
+model TrabalhoImpressao {
+  id         Int                     @id @default(autoincrement())
+  pedidoId   Int
+  tipo       TipoTrabalhoImpressao
+  status     StatusTrabalhoImpressao @default(PENDENTE)
+  tentativas Int                     @default(0)
+  ultimoErro String?
+  criadoEm   DateTime                @default(now())
+  impressoEm DateTime?
+
+  pedido Pedido @relation(fields: [pedidoId], references: [id])
+
+  @@index([status, criadoEm])
+  @@index([pedidoId])
+}
+
+// ───────────── Configuração (linha única) ─────────────
+
+model Configuracao {
+  id                     Int       @id @default(1)
+  nomeRestaurante        String    @default("Cabana Boemia")
+  whatsappNumero         String    @default("")
+  tempoEstimadoPadraoMin Int       @default(40)
+  tempoEstimadoManualMin Int?
+  tempoManualDefinidoEm  DateTime?
+  atualizadoEm           DateTime  @updatedAt
+}

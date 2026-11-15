@@ -32,21 +32,34 @@ export function temSaldo(produto) {
   return produto.insumos.every((pi) => pi.insumo.estoque >= pi.quantidade);
 }
 
+/**
+ * Aberto: produtos do turno ativo, disponíveis hoje e com saldo.
+ * Fechado: prévia do turno da próxima abertura (ativos e vendidos no site),
+ * SEM filtrar disponivelHoje nem saldo, que valem só para o dia corrente.
+ * O site mostra a prévia com os botões desabilitados.
+ */
 export async function cardapio(agora = new Date()) {
   const [turnos, config] = await Promise.all([turnoRepo.listarAtivosComHorarios(), configuracao()]);
   const turno = calcularTurnoAtivo(turnos, agora);
+  const proximaAbertura = turno ? null : calcularProximaAbertura(turnos, agora);
   const base = {
     aberto: turno !== null,
     turno,
-    proximaAbertura: turno ? null : calcularProximaAbertura(turnos, agora),
+    proximaAbertura,
     tempoEstimadoMin: calcularTempoEstimado(config, agora),
   };
-  if (!turno) return { ...base, categorias: [] };
+
+  const turnoDoCardapio = turno ?? proximaAbertura?.turno;
+  if (!turnoDoCardapio) return { ...base, categorias: [] };
+
+  const produtos = await publicoRepo.listarProdutosDoSite(turnoDoCardapio.id, {
+    somenteDisponiveisHoje: Boolean(turno),
+  });
 
   // Produtos já vêm ordenados por categoria.ordem e produto.ordem.
   const categorias = [];
-  for (const p of await publicoRepo.listarProdutosDoSite(turno.id)) {
-    if (!temSaldo(p)) continue;
+  for (const p of produtos) {
+    if (turno && !temSaldo(p)) continue;
     let cat = categorias.at(-1);
     if (cat?.id !== p.categoria.id) {
       cat = { id: p.categoria.id, nome: p.categoria.nome, produtos: [] };

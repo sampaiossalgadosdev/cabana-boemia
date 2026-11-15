@@ -154,6 +154,8 @@ export async function seed(prisma, { cardapio, log = console.log } = {}) {
               tipoPreco: p.tipoPreco ?? 'UNIDADE',
               precoCentavos: semPreco ? 0 : p.preco_centavos,
               ativo: !semPreco,
+              // Nasce disponível; não reseta sozinho: o dono desliga o que acabou e religa quando quiser.
+              disponivelHoje: true,
               vendidoNoSite: p.vendidoNoSite ?? true,
               controlaEstoque,
               estoque: controlaEstoque ? (p.estoque_inicial ?? 0) : null,

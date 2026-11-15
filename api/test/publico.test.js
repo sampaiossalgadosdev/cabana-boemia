@@ -103,14 +103,50 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
     await prisma.produto.update({ where: { nome: 'Salame' }, data: { ativo: true } });
   });
 
-  test('quinta 18:59: fechado, sem categorias, com próxima abertura', async () => {
+  test('quinta 18:59: fechado, com próxima abertura e prévia do cardápio do turno Lanches', async () => {
     agora = QUINTA_18H59;
     const { corpo } = await get('/publico/cardapio');
     assert.equal(corpo.aberto, false);
     assert.equal(corpo.turno, null);
-    assert.deepEqual(corpo.categorias, []);
     assert.equal(corpo.proximaAbertura.turno.nome, 'Lanches');
     assert.equal(corpo.proximaAbertura.em, '2026-11-12T22:00:00.000Z');
+    assert.deepEqual(
+      corpo.categorias.map((c) => c.nome),
+      ['Lanches', 'Pizzas', 'Porções', 'Bebidas'],
+    );
+  });
+
+  test('prévia com a loja fechada ignora disponivelHoje e saldo, mas não ativo nem vendidoNoSite', async () => {
+    agora = QUINTA_18H59;
+    await prisma.produto.updateMany({ data: { disponivelHoje: false } });
+    await prisma.insumo.updateMany({ data: { estoque: 0 } });
+    await prisma.produto.updateMany({ where: { controlaEstoque: true }, data: { estoque: 0 } });
+    await prisma.produto.update({ where: { nome: 'Salame' }, data: { ativo: false } });
+    try {
+      const nomes = await nomesNoCardapio();
+      assert.equal(nomes.length, 25, '26 do turno Lanches menos o Salame inativo');
+      assert.ok(nomes.includes('X-Tudo'), 'sem pão continua na prévia');
+      assert.ok(nomes.includes('Coca-Cola 2L'), 'sem estoque continua na prévia');
+      assert.ok(!nomes.includes('Salame'));
+      assert.ok(!nomes.includes('Prato por kg'));
+      assert.ok(!nomes.some((n) => n.startsWith('Marmita')), 'Almoço não é o próximo turno');
+    } finally {
+      await prisma.produto.update({ where: { nome: 'Salame' }, data: { ativo: true } });
+    }
+  });
+
+  test('fechado e sem nenhum horário cadastrado: sem próxima abertura e sem categorias', async () => {
+    agora = QUINTA_18H59;
+    const horarios = await prisma.horarioTurno.findMany();
+    await prisma.horarioTurno.deleteMany();
+    try {
+      const { corpo } = await get('/publico/cardapio');
+      assert.equal(corpo.aberto, false);
+      assert.equal(corpo.proximaAbertura, null);
+      assert.deepEqual(corpo.categorias, []);
+    } finally {
+      await prisma.horarioTurno.createMany({ data: horarios });
+    }
   });
 
   test('tempoEstimadoMin: manual definido hoje vale; de ontem, vale o padrão', async () => {

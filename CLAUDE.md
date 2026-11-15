@@ -19,11 +19,13 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 ## Turnos
 - "Almoço": marmitas P/M/G, prato por kg no salão, bebidas.
 - "Lanches": lanches, pizzas, porções, bebidas.
-- Cada turno tem horários por dia da semana. O site só mostra e só aceita pedidos do turno ativo.
+- Cada turno tem horários por dia da semana. O site só aceita pedidos do turno ativo.
+- Com a loja fechada, `GET /publico/cardapio` devolve `aberto: false` e uma **prévia** do cardápio do turno da próxima abertura: produtos ativos, `vendidoNoSite` e de categoria ativa, **sem** filtrar `disponivelHoje` nem saldo (valem só para o dia corrente). O site mostra a prévia com os botões desabilitados. Sem próxima abertura (nenhum horário cadastrado), `categorias: []`.
 - Turno ativo (`services/turno.service.js`): calculado no horário local America/Sao_Paulo; cada horário é `[inicio, fim)`; `fim <= inicio` cruza a meia-noite (`"00:00"` = fim do dia, então domingo 00:00 vindo de sábado 19:00–00:00 está fechado).
 
 ## Cardápio do dia
 - O dono escolhe quais produtos estão disponíveis hoje e edita a descrição da marmita.
+- `disponivelHoje` **não reseta sozinho** (nada o desliga na virada do dia): o dono desliga o que acabou e liga de volta quando quiser. Produtos nascem com `disponivelHoje = true` no seed.
 
 ## Estoque
 - Bebidas têm estoque próprio; lanches consomem insumos (pão de lanche, pão de cachorro-quente) via `ProdutoInsumo`.
@@ -46,6 +48,7 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - Fonte: `api/prisma/cardapio-cabana-boemia.json` + "Prato por kg". Idempotente, upsert por nome.
 - Só cria o que falta. Em registro existente atualiza apenas a estrutura (categoria/ordem) e acrescenta vínculos `ProdutoTurno`/`ProdutoInsumo` ausentes.
 - **Nunca sobrescreve** o que o dono edita: preço, `ativo`, `disponivelHoje`, descrição, estoque, horários de turno, `Configuracao`.
+- Produto novo é criado com `disponivelHoje = true`. Em produto existente o valor nunca é tocado (se o dono desligou, continua desligado).
 - Teste do seed usa banco próprio (`DATABASE_URL_TEST`, nome com "test"), que é resetado a cada execução.
 - `HorarioTurno.fim = "00:00"` significa meia-noite (fim do dia).
 - `Configuracao` tem linha única (`id = 1`).
@@ -65,6 +68,10 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - Botão "repetir último pedido".
 - Tempo estimado de entrega exibido.
 - Cancelamento só pelo WhatsApp (link wa.me com mensagem pronta contendo número do pedido e nome).
+- Código (`site/`): React 18 + Vite 5, mobile first, sem biblioteca de estado/UI. `npm run dev -w site` (porta 5173; o Vite repassa `/publico` para `http://localhost:3000`). Em produção, `VITE_API_URL` aponta para a API.
+- Cores do CLAUDE.md em `src/estilos/tokens.css` (`--cor-*`). `NomeRestaurante` mostra a logo (`alt="Cabana Boemia"`, até 72 px de altura no celular, 96 px a partir de 700 px); se a imagem falhar, cai no nome em Dancing Script (`@fontsource`), único uso de fonte cursiva. A logo também é o favicon (`src/lib/logo.js`, importada de `shared/assets` para o Vite servir no dev e empacotar com hash no build).
+- Carrinho (`src/carrinho/carrinho.js`, lógica pura testada com `node:test`): mesmo produto + mesma observação soma na mesma linha; observação diferente vira outra linha. Salvo em `localStorage` (`cabana-boemia:carrinho:v1`) com try/catch; dado corrompido vira carrinho vazio.
+- Cardápio atualiza a cada 30 s (com a aba visível) e ao voltar para a aba. Só respostas bem-sucedidas conciliam o carrinho: remove o que sumiu, atualiza preço e avisa o cliente. Falha de rede mantém o último cardápio.
 
 ## Tempo estimado
 - Só manual. A atendente digita no PDV; se não digitar, vale o padrão configurado na retaguarda.
@@ -120,13 +127,17 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 | Creme | `#FBF3E8` |
 | Laranja | `#D9541E` |
 
+- Logo: `shared/assets/logo-cabana-boemia.jpg` (JPEG 811×344, fundo claro, sem transparência). Fonte única usada pelo **site** (cabeçalho e favicon), pelo **PDV** e pelo **ícone do instalador** do PDV. Não copiar o arquivo para dentro de cada parte: importar de `shared/assets`.
+
 ## Status (2026-11-15)
 - Feito na API: schema + migration `init`, seed do cardápio, autenticação (dono/atendentes, `/auth`, `/usuarios`), turno ativo e rotas públicas do site (`GET /publico/cardapio`, `/publico/bairros`, `/publico/config`, sem login, `Cache-Control: public, max-age=15`).
 - Banco local: PostgreSQL 18, usuário `postgres`. `api/.env` tem `DATABASE_URL` (`restaurante`, migration aplicada e seed rodado), `DATABASE_URL_TEST` (`restaurante_test`) e `JWT_SECRET`/`JWT_REFRESH_SECRET` gerados (64 caracteres, diferentes).
 - Banco de dev tem um DONO de teste (`dono.teste@exemplo.com`, id 1), criado por `npm run criar-dono`; login, `/auth/me` e refresh (com rotação e recusa do refresh antigo) conferidos via curl contra a API rodando.
-- Testes: 62/62 passando, nenhum pulado (health, prisma, seed, auth, turno, publico, env-example, segredos).
+- Testes: API 65/65 e site 20/20 passando, nenhum pulado (`npm test` na raiz roda os dois).
 - `.env.example` declara toda variável lida pela API (garantido por `test/env-example.test.js`).
-- Falta: pedidos (criação com baixa de estoque, numeração por dia), PDV, retaguarda, front do site, impressão, relatório do dia.
+- Site (prompt 5): cardápio com abas, modal do produto (quantidade + observação), carrinho em barra + gaveta, estado fechado com prévia e botões desabilitados, atualização a cada 30 s com aviso de item removido/preço alterado. `vite build` sem erro; telas conferidas num Chrome headless (390×844). Logo no cabeçalho e no favicon, com fallback em Dancing Script conferido bloqueando a imagem.
+- Seed cria produtos com `disponivelHoje = true`. O banco de dev foi semeado antes dessa regra: lá os 30 produtos seguem com `disponivelHoje = false` até o dono ligar (o seed não sobrescreve).
+- Falta: login Google e checkout do site, pedidos (criação com baixa de estoque, numeração por dia), PDV, retaguarda, impressão, relatório do dia.
 
 ## FORA DA V1
 - Status do pedido para o cliente.

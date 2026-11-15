@@ -77,10 +77,15 @@ describe('seed do cardápio', { skip: semBancoDeTeste }, () => {
     ]);
   });
 
-  test('rodar de novo não sobrescreve preço, estoque nem ativo editados pelo dono', async () => {
+  test('produtos são criados com disponivelHoje = true', async () => {
+    const indisponiveis = await prisma.produto.count({ where: { disponivelHoje: false } });
+    assert.equal(indisponiveis, 0);
+  });
+
+  test('rodar de novo não sobrescreve preço, estoque, ativo nem disponivelHoje editados pelo dono', async () => {
     await prisma.produto.update({
       where: { nome: 'Coca-Cola 2L' },
-      data: { precoCentavos: 1600, estoque: 12, ativo: false },
+      data: { precoCentavos: 1600, estoque: 12, ativo: false, disponivelHoje: false },
     });
     await prisma.insumo.update({ where: { nome: 'Pão de lanche' }, data: { estoque: 40 } });
 
@@ -90,6 +95,7 @@ describe('seed do cardápio', { skip: semBancoDeTeste }, () => {
     assert.equal(coca.precoCentavos, 1600);
     assert.equal(coca.estoque, 12);
     assert.equal(coca.ativo, false);
+    assert.equal(coca.disponivelHoje, false, 'o dono desligou: o seed não religa');
     const pao = await prisma.insumo.findUnique({ where: { nome: 'Pão de lanche' } });
     assert.equal(pao.estoque, 40);
   });

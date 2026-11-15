@@ -1,14 +1,15 @@
 import { prisma } from '../lib/prisma.js';
 
 /**
- * Produtos que o site pode oferecer no turno: ativos, disponíveis hoje,
- * vendidos no site e de categoria ativa. O saldo é filtrado no service.
+ * Produtos do site no turno: ativos, vendidos no site e de categoria ativa.
+ * `somenteDisponiveisHoje` (padrão) também exige disponivelHoje; o saldo é
+ * filtrado no service. Sem ele, serve à prévia do cardápio com a loja fechada.
  */
-export function listarProdutosDoSite(turnoId, db = prisma) {
+export function listarProdutosDoSite(turnoId, { somenteDisponiveisHoje = true } = {}, db = prisma) {
   return db.produto.findMany({
     where: {
       ativo: true,
-      disponivelHoje: true,
+      ...(somenteDisponiveisHoje && { disponivelHoje: true }),
       vendidoNoSite: true,
       categoria: { ativo: true },
       turnos: { some: { turnoId } },

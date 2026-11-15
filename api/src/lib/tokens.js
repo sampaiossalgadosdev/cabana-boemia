@@ -4,10 +4,34 @@ import jwt from 'jsonwebtoken';
 export const ACCESS_TOKEN_DURACAO_SEG = 15 * 60; // 15 min
 export const REFRESH_TOKEN_DURACAO_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
 
+const SEGREDOS = ['JWT_SECRET', 'JWT_REFRESH_SECRET'];
+const SEGREDO_MIN = 32;
+
+/**
+ * Problemas nos segredos dos tokens (vazio = tudo certo). O server.js recusa
+ * iniciar se houver algum, para não subir e só quebrar no primeiro login.
+ * @param {Record<string, string | undefined>} [env]
+ * @returns {string[]}
+ */
+export function problemasNosSegredos(env = process.env) {
+  const problemas = [];
+  for (const nome of SEGREDOS) {
+    const valor = env[nome];
+    if (!valor) problemas.push(`${nome} ausente`);
+    else if (valor.length < SEGREDO_MIN) {
+      problemas.push(`${nome} curto demais (${valor.length} caracteres; mínimo ${SEGREDO_MIN})`);
+    }
+  }
+  if (env.JWT_SECRET && env.JWT_SECRET === env.JWT_REFRESH_SECRET) {
+    problemas.push('JWT_SECRET e JWT_REFRESH_SECRET precisam ser diferentes');
+  }
+  return problemas;
+}
+
 function segredo(nome) {
   const valor = process.env[nome];
-  if (!valor || valor.length < 32) {
-    throw new Error(`${nome} ausente ou curto demais (mínimo 32 caracteres) no .env`);
+  if (!valor || valor.length < SEGREDO_MIN) {
+    throw new Error(`${nome} ausente ou curto demais (mínimo ${SEGREDO_MIN} caracteres) no .env`);
   }
   return valor;
 }

@@ -105,6 +105,74 @@ describe('handlers IPC', () => {
     assert.deepEqual(chamadas[0], ['PUT', '/equipe/config/tempo-estimado', { minutos: null }]);
   });
 
+  test('pedido do WhatsApp: só os campos aceitos vão para a API (sem preço injetado)', async () => {
+    const { h, chamadas } = montar();
+    await h['pedidos:criar']({
+      clienteId: 7,
+      enderecoId: 9,
+      formaPagamento: 'DINHEIRO',
+      trocoParaCentavos: 5000,
+      chaveIdempotencia: 'c-1',
+      totalCentavos: 1,
+      canal: 'SITE',
+      itens: [{ produtoId: 3, quantidade: 2, observacao: 'sem cebola', precoCentavos: 1 }, { produtoId: 4, quantidade: 1, observacao: '  ' }],
+    });
+    assert.deepEqual(chamadas[0], [
+      'POST',
+      '/equipe/pedidos',
+      {
+        clienteId: 7,
+        enderecoId: 9,
+        formaPagamento: 'DINHEIRO',
+        trocoParaCentavos: 5000,
+        chaveIdempotencia: 'c-1',
+        itens: [
+          { produtoId: 3, quantidade: 2, observacao: 'sem cebola' },
+          { produtoId: 4, quantidade: 1, observacao: null },
+        ],
+      },
+    ]);
+    for (const ruim of [null, { clienteId: 0, enderecoId: 1, itens: [], formaPagamento: 'PIX' }, { clienteId: 1, enderecoId: 1, itens: [], formaPagamento: 'FIADO' }]) {
+      assert.equal((await executar(h['pedidos:criar'], [ruim])).ok, false);
+    }
+  });
+
+  test('cancelar valida o id; busca de cliente vai codificada na URL', async () => {
+    const { h, chamadas } = montar();
+    assert.equal((await executar(h['pedidos:cancelar'], ['1'])).ok, false);
+    await h['pedidos:cancelar'](12);
+    await h['clientes:buscar'](' (43) 9&x ');
+    await h['cardapio:obter'](null);
+    await h['cardapio:obter'](2);
+    assert.deepEqual(chamadas.map((c) => c.slice(0, 2)), [
+      ['PATCH', '/equipe/pedidos/12/cancelar'],
+      ['GET', '/equipe/clientes?busca=(43)%209%26x'],
+      ['GET', '/equipe/cardapio'],
+      ['GET', '/equipe/cardapio?turnoId=2'],
+    ]);
+  });
+
+  test('cadastro de cliente: endereço só com os campos aceitos e bairro numérico', async () => {
+    const { h, chamadas } = montar();
+    await h['clientes:criar']({
+      nome: 'Ana', telefone: '43999990000', admin: true,
+      endereco: { rua: 'R', numero: '1', bairroId: '5', complemento: '', referencia: 'praça', principal: false },
+    });
+    assert.deepEqual(chamadas[0][2], {
+      nome: 'Ana',
+      telefone: '43999990000',
+      endereco: { rua: 'R', numero: '1', complemento: null, referencia: 'praça', bairroId: 5 },
+    });
+  });
+
+  test('erro da API leva os detalhes até o renderer', async () => {
+    const erro = Object.assign(new Error('Já existe'), { codigo: 'CLIENTE_JA_EXISTE', status: 409, detalhes: { cliente: { id: 1 } } });
+    const r = await executar(async () => {
+      throw erro;
+    }, []);
+    assert.deepEqual(r, { ok: false, erro: { mensagem: 'Já existe', codigo: 'CLIENTE_JA_EXISTE', status: 409, detalhes: { cliente: { id: 1 } } } });
+  });
+
   test('não troca de servidor com sessão aberta', async () => {
     const { h } = montar({ logado: true });
     const r = await executar(h['config:definirApiUrl'], ['https://outro.com']);

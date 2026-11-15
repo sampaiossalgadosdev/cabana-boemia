@@ -159,3 +159,35 @@ export async function finalizarSeAberto(id, { formaPagamento, trocoParaCentavos,
 export function buscarStatus(id, db = prisma) {
   return db.pedido.findUnique({ where: { id }, select: { id: true, status: true } });
 }
+
+/**
+ * Cancela só se ainda estiver aberto (UPDATE condicionado: cancelar duas
+ * vezes, ou cancelar e finalizar ao mesmo tempo, só um vence). Devolve o count.
+ */
+export async function cancelarSeAberto(id, canceladoEm, statusAbertos, db = prisma) {
+  const { count } = await db.pedido.updateMany({
+    where: { id, status: { in: statusAbertos } },
+    data: { status: 'CANCELADO', canceladoEm },
+  });
+  return count;
+}
+
+/**
+ * Baixas (VENDA) dos itens ainda não cancelados do pedido: é exatamente o que
+ * o estorno devolve (não a receita atual, que pode ter mudado desde a venda).
+ */
+export function vendasDoPedido(pedidoId, db = prisma) {
+  return db.movimentacaoEstoque.findMany({
+    where: { tipo: 'VENDA', itemPedido: { pedidoId, canceladoEm: null } },
+    select: { produtoId: true, insumoId: true, quantidade: true, itemPedidoId: true },
+    orderBy: { id: 'asc' },
+  });
+}
+
+export async function devolverEstoqueProduto(id, quantidade, db = prisma) {
+  await db.produto.update({ where: { id }, data: { estoque: { increment: quantidade } } });
+}
+
+export async function devolverEstoqueInsumo(id, quantidade, db = prisma) {
+  await db.insumo.update({ where: { id }, data: { estoque: { increment: quantidade } } });
+}

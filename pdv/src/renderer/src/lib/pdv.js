@@ -10,5 +10,6 @@ export async function chamar(promessa) {
   const erro = new Error(r?.erro?.mensagem ?? 'Erro inesperado');
   erro.codigo = r?.erro?.codigo ?? 'ERRO';
   erro.status = r?.erro?.status ?? 0;
+  erro.detalhes = r?.erro?.detalhes ?? null;
   throw erro;
 }

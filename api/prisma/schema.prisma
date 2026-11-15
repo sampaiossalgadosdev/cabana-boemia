@@ -98,6 +98,9 @@ model Cliente {
   id           Int      @id @default(autoincrement())
   googleId     String?  @unique
   nome         String
+  /// Nome sem acento e minúsculo (busca do PDV: "joao" acha "João"). Calculado
+  /// pela extensão em src/lib/prisma.js a cada gravação de `nome`; sem default.
+  nomeBusca    String
   email        String?
   telefone     String?
   criadoEm     DateTime @default(now())

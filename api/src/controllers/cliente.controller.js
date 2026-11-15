@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { normalizarTelefone, MENSAGEM_TELEFONE_INVALIDO } from '@restaurante/shared/telefone';
+import { telefone, enderecoSchema, idSchema, itemPedidoSchema, trocoSoEmDinheiro } from './esquemas.js';
 import { validar } from '../lib/validar.js';
 import * as clienteService from '../services/cliente.service.js';
 import * as enderecoService from '../services/endereco.service.js';
@@ -9,51 +9,12 @@ const googleSchema = z.object({
   credential: z.string().min(1, 'Informe o credential do Google').max(4096),
 });
 
-/** Celular brasileiro (DDD + 9 dígitos); sai só com números. */
-const telefone = z.string({ error: MENSAGEM_TELEFONE_INVALIDO }).transform((v, ctx) => {
-  const n = normalizarTelefone(v);
-  if (!n) {
-    ctx.addIssue({ code: 'custom', message: MENSAGEM_TELEFONE_INVALIDO });
-    return z.NEVER;
-  }
-  return n;
-});
-
 const perfilSchema = z.object({
   nome: z.string({ error: 'Informe o nome' }).trim().min(1, 'Informe o nome').max(100),
   telefone,
 });
 
-/** Texto opcional: vazio ou ausente vira null. */
-const opcional = (max) =>
-  z
-    .string()
-    .trim()
-    .max(max)
-    .nullish()
-    .transform((v) => v || null);
-
-const enderecoSchema = z.object({
-  rua: z.string({ error: 'Informe a rua' }).trim().min(1, 'Informe a rua').max(120),
-  numero: z.string({ error: 'Informe o número' }).trim().min(1, 'Informe o número').max(20),
-  complemento: opcional(120),
-  referencia: opcional(200),
-  bairroId: z.number({ error: 'Escolha o bairro' }).int().positive(),
-  principal: z.boolean().optional(),
-});
-
-const idSchema = z.object({ id: z.coerce.number().int().positive() });
-
-/**
- * Pedido do site. Só produtoId, quantidade e observação por item: qualquer
- * outro campo (ex.: precoCentavos) é descartado pelo zod e o preço sai do banco.
- */
-const itemPedidoSchema = z.object({
-  produtoId: z.number({ error: 'Item inválido' }).int().positive(),
-  quantidade: z.number({ error: 'Quantidade inválida' }).int().min(1).max(20),
-  observacao: opcional(140),
-});
-
+/** Pedido do site (itens: ver itemPedidoSchema; o preço sempre sai do banco). */
 const pedidoSchema = z
   .object({
     itens: z.array(itemPedidoSchema, { error: 'O carrinho está vazio' }).min(1, 'O carrinho está vazio').max(50),
@@ -64,11 +25,7 @@ const pedidoSchema = z
     // Total que o cliente viu (só para conferir: o preço sempre sai do banco).
     totalEsperadoCentavos: z.number({ error: 'Informe o total do pedido' }).int().min(0),
   })
-  .superRefine((d, ctx) => {
-    if (d.trocoParaCentavos != null && d.formaPagamento !== 'DINHEIRO') {
-      ctx.addIssue({ code: 'custom', path: ['trocoParaCentavos'], message: 'Troco só para pagamento em dinheiro' });
-    }
-  });
+  .superRefine(trocoSoEmDinheiro);
 
 /**
  * @param {(idToken: string) => Promise<object>} verificarIdTokenGoogle

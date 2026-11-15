@@ -17,7 +17,13 @@ export function criarEquipeRoutes({ relogio } = {}) {
   });
   r.use(autenticar, exigirPapel('DONO', 'ATENDENTE'));
   r.get('/pedidos', assincrono(c.listarPedidos));
+  r.post('/pedidos', assincrono(c.criarPedido));
   r.patch('/pedidos/:id/finalizar', assincrono(c.finalizarPedido));
+  r.patch('/pedidos/:id/cancelar', assincrono(c.cancelarPedido));
+  r.get('/clientes', assincrono(c.buscarClientes));
+  r.post('/clientes', assincrono(c.criarCliente));
+  r.post('/clientes/:id/enderecos', assincrono(c.adicionarEndereco));
+  r.get('/cardapio', assincrono(c.cardapio));
   r.get('/config/tempo-estimado', assincrono(c.obterTempo));
   r.put('/config/tempo-estimado', assincrono(c.definirTempo));
   return r;

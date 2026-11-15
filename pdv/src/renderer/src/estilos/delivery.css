@@ -1,0 +1,555 @@
+/* Lançamento de delivery do WhatsApp (3 passos) e ações da fila. */
+
+kbd {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font: 600 11px/1.4 var(--fonte-base);
+  opacity: 0.8;
+}
+
+.texto-suave {
+  margin: 0;
+  color: var(--cor-texto-suave);
+}
+
+.botao--perigo {
+  background: var(--cor-vermelho-escuro);
+  border-color: var(--cor-vermelho-escuro);
+}
+.botao--grande {
+  min-height: 60px;
+  font-size: 19px;
+}
+
+.campo select {
+  min-height: 46px;
+  padding: 0 10px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+  font: inherit;
+  font-weight: 400;
+}
+.campo input.campo__grande {
+  min-height: 54px;
+  font-size: 19px;
+}
+.campo--largo {
+  grid-column: span 2;
+}
+.form-grade {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px 16px;
+}
+
+.aviso-sucesso {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-left: 5px solid var(--cor-ok);
+  border-radius: var(--raio-pequeno);
+  background: #e8f3e9;
+  font-weight: 700;
+}
+
+.pedido__acoes {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 8px;
+}
+.cancelar__pergunta {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* ───────── Cabeçalho e etapas ───────── */
+
+.novo-delivery {
+  display: grid;
+  gap: 16px;
+}
+.novo-delivery__topo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.novo-delivery__topo h2 {
+  margin: 0;
+  font-size: 22px;
+}
+.etapas {
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  gap: 8px;
+}
+.etapa {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--cor-superficie);
+  color: var(--cor-texto-suave);
+  font-weight: 600;
+}
+.etapa__numero {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--cor-borda);
+  color: var(--cor-texto);
+  font-size: 13px;
+}
+.etapa--atual {
+  background: var(--cor-vermelho);
+  color: var(--cor-branco);
+}
+.etapa--atual .etapa__numero {
+  background: var(--cor-branco);
+  color: var(--cor-vermelho);
+}
+.etapa--feita .etapa__numero {
+  background: var(--cor-ok);
+  color: var(--cor-branco);
+}
+
+/* ───────── Passo 1: cliente ───────── */
+
+.passo {
+  display: grid;
+  gap: 16px;
+  max-width: 820px;
+  padding: 24px;
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+}
+.passo__titulo {
+  margin: 0;
+  font-size: 20px;
+}
+.passo__acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.passo .aviso {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lista-clientes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.cliente-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 16px;
+  padding: 12px 16px;
+  border: 2px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.cliente-item strong {
+  font-size: 18px;
+}
+.cliente-item__endereco {
+  grid-column: 1 / -1;
+  color: var(--cor-texto-suave);
+}
+.cliente-item--destaque {
+  border-color: var(--cor-vermelho);
+  background: var(--cor-aviso-fundo);
+}
+
+.confirmar-cliente {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.confirmar-cliente p {
+  margin: 0;
+}
+.confirmar-cliente__nome {
+  font-size: 24px;
+  font-weight: 800;
+}
+.confirmar-cliente__telefone {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--cor-vermelho-escuro);
+}
+.enderecos {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: 8px;
+}
+.enderecos legend {
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+.enderecos .link {
+  justify-self: start;
+}
+.endereco-opcao {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 2px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  cursor: pointer;
+}
+.endereco-opcao input {
+  margin-top: 4px;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--cor-vermelho);
+}
+.endereco-opcao > span {
+  display: grid;
+  gap: 2px;
+}
+.endereco-opcao strong {
+  font-size: 17px;
+}
+.endereco-opcao__bairro {
+  color: var(--cor-texto-suave);
+}
+.endereco-opcao--marcada {
+  border-color: var(--cor-vermelho);
+  background: var(--cor-aviso-fundo);
+}
+
+/* ───────── Passo 2: grade + itens ───────── */
+
+.passo-itens {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 16px;
+  align-items: start;
+}
+.grade {
+  display: grid;
+  gap: 12px;
+}
+.grade__topo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.grade__topo .botao {
+  margin-left: auto;
+}
+.selo--aviso {
+  background: var(--cor-aviso-fundo);
+  color: var(--cor-laranja);
+}
+.segmentado {
+  display: inline-flex;
+  border: 2px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  overflow: hidden;
+}
+.segmentado__opcao {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  background: var(--cor-superficie);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.segmentado__opcao--ativa {
+  background: var(--cor-preto);
+  color: var(--cor-branco);
+}
+.abas-categorias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.aba-categoria {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 2px solid var(--cor-borda);
+  border-radius: 999px;
+  background: var(--cor-superficie);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.aba-categoria--ativa {
+  border-color: var(--cor-dourado);
+  background: var(--cor-dourado);
+  color: var(--cor-preto);
+}
+.grade__botoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+}
+.produto-botao {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 104px;
+  padding: 14px;
+  border: 2px solid var(--cor-borda);
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+  text-align: left;
+  font: inherit;
+  color: var(--cor-texto);
+  cursor: pointer;
+}
+.produto-botao:hover:not(:disabled) {
+  border-color: var(--cor-vermelho);
+}
+.produto-botao:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.produto-botao:focus-visible,
+.aba-categoria:focus-visible,
+.segmentado__opcao:focus-visible,
+.cliente-item:focus-visible {
+  outline: 3px solid var(--cor-dourado);
+  outline-offset: 2px;
+}
+.produto-botao__nome {
+  font-size: 17px;
+  font-weight: 700;
+}
+.produto-botao__preco {
+  font-weight: 700;
+  color: var(--cor-vermelho-escuro);
+}
+/* Selos numa linha própria, embaixo do preço (nunca por cima do nome). */
+.produto-botao__selo,
+.produto-botao__restam,
+.produto-botao__fora {
+  justify-self: start;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.produto-botao__selo {
+  background: var(--cor-preto);
+  color: var(--cor-branco);
+}
+.produto-botao__restam {
+  background: var(--cor-aviso-fundo);
+  color: var(--cor-laranja);
+}
+.produto-botao__fora {
+  background: var(--cor-borda);
+  color: var(--cor-texto-suave);
+}
+.produto-botao--esgotado {
+  background: #eee9e2;
+  box-shadow: none;
+  color: var(--cor-texto-suave);
+  cursor: not-allowed;
+}
+.produto-botao--esgotado .produto-botao__nome,
+.produto-botao--esgotado .produto-botao__preco {
+  color: var(--cor-texto-suave);
+  text-decoration: line-through;
+}
+
+.carrinho {
+  position: sticky;
+  top: calc(var(--altura-barra) + 16px);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+}
+.carrinho h3 {
+  margin: 0;
+}
+.carrinho__linhas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  max-height: calc(100vh - 360px);
+  overflow-y: auto;
+}
+.carrinho__rodape {
+  display: flex;
+  justify-content: space-between;
+  font-size: 18px;
+}
+.linha {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--cor-borda);
+}
+.linha__topo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.linha__nome {
+  flex: 1;
+  font-weight: 600;
+}
+.linha__total {
+  color: var(--cor-texto-suave);
+}
+.linha__remover {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--cor-texto-suave);
+  font-size: 20px;
+  cursor: pointer;
+}
+.linha__remover:hover {
+  background: var(--cor-aviso-fundo);
+  color: var(--cor-vermelho);
+}
+.linha__obs {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--cor-borda);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+}
+.qtd {
+  display: inline-flex;
+  align-items: center;
+  border: 2px solid var(--cor-borda);
+  border-radius: 999px;
+}
+.qtd button {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.qtd span {
+  min-width: 24px;
+  text-align: center;
+  font-weight: 800;
+}
+
+/* ───────── Passo 3: pagamento ───────── */
+
+.passo-pagamento {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.resumo,
+.pagamento {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+}
+.resumo p {
+  margin: 0;
+}
+.resumo__cliente {
+  font-size: 18px;
+}
+.resumo__itens {
+  margin: 0;
+  padding: 10px 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  border-block: 1px dashed var(--cor-borda);
+}
+.pedido__valores dd.resumo__total {
+  font-size: 24px;
+}
+.formas {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.formas legend {
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+.forma {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  border: 2px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  font-size: 19px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.forma input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.forma--marcada {
+  border-color: var(--cor-vermelho);
+  background: var(--cor-vermelho);
+  color: var(--cor-branco);
+}
+.forma:has(input:focus-visible) {
+  outline: 3px solid var(--cor-dourado);
+  outline-offset: 2px;
+}
+.pagamento__levar {
+  font-weight: 800;
+  color: var(--cor-ok);
+}
+
+@media (max-width: 1100px) {
+  .passo-itens,
+  .passo-pagamento {
+    grid-template-columns: 1fr;
+  }
+  .carrinho {
+    position: static;
+  }
+}

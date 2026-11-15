@@ -14,6 +14,7 @@ import { emitirParaEquipe } from '../lib/eventos.js';
 import * as pedidoRepo from '../repositories/pedido.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoRepo from '../repositories/endereco.repository.js';
+import * as clienteRepo from '../repositories/cliente.repository.js';
 import { calcularTurnoAtivo } from './turno.service.js';
 import { calcularTempoEstimado } from './publico.service.js';
 import { garantirTelefone } from './cliente.service.js';
@@ -29,6 +30,9 @@ export const canalExigeLojaAberta = (canal) => canal === 'SITE';
 
 /** Comanda do salão nasce aberta; site e WhatsApp já confirmados (é quando baixa o estoque). */
 const STATUS_INICIAL = { SITE: 'CONFIRMADO', WHATSAPP: 'CONFIRMADO', SALAO: 'ABERTO' };
+
+/** Status de pedido "ainda aberto" (na fila; pode ser finalizado ou cancelado). */
+export const STATUS_ABERTOS = ['ABERTO', 'CONFIRMADO'];
 
 const OPCOES_TRANSACAO = { maxWait: 10_000, timeout: 15_000 };
 
@@ -435,4 +439,98 @@ export async function criarPedidoDoSite(
 export async function ultimoPedidoDoCliente(clienteId) {
   const p = await pedidoRepo.ultimoDoCliente(clienteId);
   return p ? pedidoPublico(p) : null;
+}
+
+// ───────── WhatsApp (lançado pela equipe no PDV) ─────────
+
+/**
+ * Pedido do WhatsApp: cliente e endereço do cadastro (o endereço precisa ser
+ * daquele cliente). Mesmo `criarPedido` do site: preço do banco, baixa
+ * atômica, número do dia, impressão. Sem trava de horário (canal da equipe).
+ */
+export async function criarPedidoDoWhatsapp(
+  { clienteId, enderecoId, itens, formaPagamento, trocoParaCentavos, chaveIdempotencia },
+  { usuarioId, agora } = {},
+) {
+  const cliente = await clienteRepo.buscarPorId(clienteId);
+  if (!cliente) throw new ErroHttp(422, 'Escolha o cliente', { codigo: 'CLIENTE_INVALIDO' });
+  const endereco = await enderecoRepo.buscarDoCliente(cliente.id, enderecoId);
+  if (!endereco) {
+    throw new ErroHttp(422, 'Escolha um endereço de entrega do cliente', { codigo: 'ENDERECO_INVALIDO' });
+  }
+  return criarPedido({
+    canal: 'WHATSAPP',
+    itens,
+    cliente: { id: cliente.id, nome: cliente.nome, telefone: cliente.telefone },
+    endereco: { texto: formatarEndereco(endereco), bairroId: endereco.bairro.id },
+    pagamento: { forma: formaPagamento, trocoParaCentavos: trocoParaCentavos ?? null },
+    usuarioId,
+    chaveIdempotencia,
+    agora,
+  });
+}
+
+// ───────── Cancelamento ─────────
+
+/**
+ * Soma as baixas (VENDA, delta negativo) por produto e por insumo, em ordem
+ * de id: a devolução trava as linhas na mesma ordem da baixa.
+ */
+export function somarDevolucoes(vendas) {
+  const produtos = new Map();
+  const insumos = new Map();
+  for (const v of vendas) {
+    const alvo = v.produtoId != null ? produtos : insumos;
+    const id = v.produtoId ?? v.insumoId;
+    alvo.set(id, (alvo.get(id) ?? 0) - v.quantidade);
+  }
+  const lista = (m) => [...m].map(([id, quantidade]) => ({ id, quantidade })).sort((a, b) => a.id - b.id);
+  return { produtos: lista(produtos), insumos: lista(insumos) };
+}
+
+/**
+ * Cancela um pedido aberto numa transação: muda o status (UPDATE condicionado;
+ * já encerrado = 409), devolve EXATAMENTE o que foi baixado na venda (as
+ * movimentações VENDA dos itens, não a receita atual), grava ESTORNO por
+ * movimentação e cria o TrabalhoImpressao CANCELAMENTO. Eventos depois do commit.
+ */
+export async function cancelarPedido(id, { usuarioId = null, agora = new Date() } = {}) {
+  const { pedido, trabalho } = await prisma.$transaction(async (tx) => {
+    const count = await pedidoRepo.cancelarSeAberto(id, agora, STATUS_ABERTOS, tx);
+    if (count === 0) {
+      const atual = await pedidoRepo.buscarStatus(id, tx);
+      if (!atual) throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+      const situacao = atual.status === 'CANCELADO' ? 'cancelado' : 'finalizado';
+      throw new ErroHttp(409, `Pedido já está ${situacao}`, { codigo: 'PEDIDO_ENCERRADO' });
+    }
+
+    const vendas = await pedidoRepo.vendasDoPedido(id, tx);
+    const devolver = somarDevolucoes(vendas);
+    for (const p of devolver.produtos) await pedidoRepo.devolverEstoqueProduto(p.id, p.quantidade, tx);
+    for (const i of devolver.insumos) await pedidoRepo.devolverEstoqueInsumo(i.id, i.quantidade, tx);
+    if (vendas.length) {
+      await pedidoRepo.criarMovimentacoes(
+        vendas.map((v) => ({
+          tipo: 'ESTORNO',
+          produtoId: v.produtoId,
+          insumoId: v.insumoId,
+          quantidade: -v.quantidade,
+          itemPedidoId: v.itemPedidoId,
+          usuarioId,
+        })),
+        tx,
+      );
+    }
+
+    const trabalho = await pedidoRepo.criarTrabalhoImpressao(
+      { pedidoId: id, tipo: 'CANCELAMENTO', status: 'PENDENTE' },
+      tx,
+    );
+    return { pedido: await pedidoRepo.buscarPorId(id, tx), trabalho };
+  }, OPCOES_TRANSACAO);
+
+  const publico = pedidoPublico(pedido);
+  emitirParaEquipe('pedido:atualizado', publico);
+  emitirParaEquipe('impressao:nova', trabalho);
+  return publico;
 }

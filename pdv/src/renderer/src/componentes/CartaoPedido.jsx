@@ -13,8 +13,9 @@ import {
  * Um pedido da fila. "Finalizar" abre a escolha da forma de pagamento
  * (pré-selecionada com a do pedido; a escolhida sobrescreve).
  */
-export function CartaoPedido({ pedido, novo, aoFinalizar, aoVer }) {
-  const [finalizando, setFinalizando] = useState(false);
+export function CartaoPedido({ pedido, novo, aoFinalizar, aoCancelar, aoVer }) {
+  const [acao, setAcao] = useState(null); // null | 'finalizar' | 'cancelar'
+  const finalizando = acao === 'finalizar';
   const [forma, setForma] = useState(pedido.formaPagamento ?? '');
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
@@ -33,6 +34,22 @@ export function CartaoPedido({ pedido, novo, aoFinalizar, aoVer }) {
       setEnviando(false);
     }
   }
+
+  async function confirmarCancelamento() {
+    setEnviando(true);
+    setErro('');
+    try {
+      await aoCancelar(pedido.id);
+    } catch (err) {
+      setErro(err.message);
+      setEnviando(false);
+    }
+  }
+
+  const fechar = () => {
+    setAcao(null);
+    setErro('');
+  };
 
   const troco =
     pedido.formaPagamento === 'DINHEIRO' && pedido.trocoParaCentavos
@@ -114,8 +131,7 @@ export function CartaoPedido({ pedido, novo, aoFinalizar, aoVer }) {
           </fieldset>
           {erro && <p className="erro" role="alert">{erro}</p>}
           <div className="finalizar__acoes">
-            <button type="button" className="botao botao--contorno" disabled={enviando}
-              onClick={() => { setFinalizando(false); setErro(''); }}>
+            <button type="button" className="botao botao--contorno" disabled={enviando} onClick={fechar}>
               Voltar
             </button>
             <button type="button" className="botao" disabled={enviando} onClick={confirmar}>
@@ -123,10 +139,30 @@ export function CartaoPedido({ pedido, novo, aoFinalizar, aoVer }) {
             </button>
           </div>
         </div>
+      ) : acao === 'cancelar' ? (
+        <div className="finalizar cancelar" role="group" aria-label="Cancelar pedido">
+          <p className="cancelar__pergunta">
+            Cancelar o pedido #{pedido.numeroDia}? O estoque volta e sai um cupom de cancelamento.
+          </p>
+          {erro && <p className="erro" role="alert">{erro}</p>}
+          <div className="finalizar__acoes">
+            <button type="button" className="botao botao--contorno" disabled={enviando} onClick={fechar} autoFocus>
+              Não
+            </button>
+            <button type="button" className="botao botao--perigo" disabled={enviando} onClick={confirmarCancelamento}>
+              {enviando ? 'Cancelando…' : 'Sim, cancelar'}
+            </button>
+          </div>
+        </div>
       ) : (
-        <button type="button" className="botao botao--largo" onClick={() => setFinalizando(true)}>
-          Finalizar
-        </button>
+        <div className="pedido__acoes">
+          <button type="button" className="botao botao--contorno" onClick={() => setAcao('cancelar')}>
+            Cancelar
+          </button>
+          <button type="button" className="botao" onClick={() => setAcao('finalizar')}>
+            Finalizar
+          </button>
+        </div>
       )}
     </article>
   );

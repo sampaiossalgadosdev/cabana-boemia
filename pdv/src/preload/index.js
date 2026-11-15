@@ -23,6 +23,19 @@ contextBridge.exposeInMainWorld('pdv', {
   pedidos: {
     listarFila: () => chamar('pedidos:fila'),
     finalizar: (id, formaPagamento) => chamar('pedidos:finalizar', Number(id), String(formaPagamento ?? '')),
+    cancelar: (id) => chamar('pedidos:cancelar', Number(id)),
+    criar: (dados) => chamar('pedidos:criar', dados),
+  },
+  cardapio: {
+    obter: (turnoId) => chamar('cardapio:obter', turnoId == null ? null : Number(turnoId)),
+  },
+  bairros: {
+    listar: () => chamar('bairros:listar'),
+  },
+  clientes: {
+    buscar: (busca) => chamar('clientes:buscar', String(busca ?? '')),
+    criar: (dados) => chamar('clientes:criar', dados),
+    adicionarEndereco: (clienteId, endereco) => chamar('clientes:adicionarEndereco', Number(clienteId), endereco),
   },
   tempo: {
     obter: () => chamar('tempo:obter'),

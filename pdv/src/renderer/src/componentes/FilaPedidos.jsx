@@ -12,7 +12,7 @@ const RECARREGAR_MS = 5 * 60_000;
  * depois segue os eventos do socket; recarrega ao (re)conectar, porque
  * eventos emitidos durante a queda não são reenviados.
  */
-export function FilaPedidos({ statusConexao }) {
+export function FilaPedidos({ statusConexao, aoNovoDelivery }) {
   const [fila, setFila] = useState([]);
   const [novos, setNovos] = useState(() => new Set());
   const [carregando, setCarregando] = useState(true);
@@ -67,6 +67,16 @@ export function FilaPedidos({ statusConexao }) {
     }
   }, []);
 
+  const cancelar = useCallback(async (id) => {
+    try {
+      await chamar(pdv.pedidos.cancelar(id));
+      setFila((f) => removerPedido(f, id));
+    } catch (err) {
+      if (err.codigo === 'PEDIDO_ENCERRADO' || err.status === 404) setFila((f) => removerPedido(f, id));
+      throw err;
+    }
+  }, []);
+
   const marcarVisto = (id) =>
     setNovos((n) => {
       const c = new Set(n);
@@ -79,8 +89,11 @@ export function FilaPedidos({ statusConexao }) {
       <div className="fila__cabecalho">
         <h2 id="titulo-fila">Fila de pedidos</h2>
         <span className="fila__contagem">{fila.length}</span>
-        <button type="button" className="botao botao--contorno botao--pequeno" onClick={carregar}>
+        <button type="button" className="botao botao--contorno botao--pequeno fila__atualizar" onClick={carregar}>
           Atualizar
+        </button>
+        <button type="button" className="botao" onClick={aoNovoDelivery}>
+          + Novo delivery <kbd>F2</kbd>
         </button>
       </div>
 
@@ -97,7 +110,7 @@ export function FilaPedidos({ statusConexao }) {
       ) : (
         <div className="fila__lista">
           {fila.map((p) => (
-            <CartaoPedido key={p.id} pedido={p} novo={novos.has(p.id)} aoFinalizar={finalizar}
+            <CartaoPedido key={p.id} pedido={p} novo={novos.has(p.id)} aoFinalizar={finalizar} aoCancelar={cancelar}
               aoVer={() => marcarVisto(p.id)} />
           ))}
         </div>

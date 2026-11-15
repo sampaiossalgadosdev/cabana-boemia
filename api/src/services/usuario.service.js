@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { ErroHttp } from '../lib/erros.js';
 import { gerarHashSenha } from '../lib/senha.js';
+import { emitirInterno } from '../lib/eventos.js';
 import { normalizarEmail } from './auth.service.js';
 import * as usuarioRepo from '../repositories/usuario.repository.js';
 import * as refreshRepo from '../repositories/refreshToken.repository.js';
@@ -47,10 +48,13 @@ async function buscarAtendente(id) {
 
 export async function desativar(id) {
   await buscarAtendente(id);
-  return prisma.$transaction(async (tx) => {
+  const usuario = await prisma.$transaction(async (tx) => {
     await refreshRepo.revogarTodosDoUsuario(id, tx);
     return usuarioRepo.atualizar(id, { ativo: false }, tx);
   });
+  // Depois do commit: derruba os sockets dele (PDV aberto deixa de receber pedidos).
+  emitirInterno('usuario:desativado', { usuarioId: id });
+  return usuario;
 }
 
 export async function reativar(id) {

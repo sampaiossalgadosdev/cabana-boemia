@@ -10,6 +10,8 @@ import { useCardapio } from './hooks/useCardapio.js';
 import { useCategoriaAtiva } from './hooks/useCategoriaAtiva.js';
 import { useCarrinho } from './carrinho/CarrinhoContext.jsx';
 import { conciliar, mensagensDaConciliacao } from './carrinho/carrinho.js';
+import { repetirPedido } from './pedido/pedido.js';
+import { useUltimoPedido } from './hooks/useUltimoPedido.js';
 
 const SEM_CATEGORIAS = [];
 
@@ -17,6 +19,7 @@ export function App() {
   const { dados, semConexao, atualizadoEm, recarregar } = useCardapio();
   const carrinho = useCarrinho();
   const { avisar } = useAvisos();
+  const { ultimoPedido, recarregarUltimoPedido } = useUltimoPedido();
 
   const categorias = dados?.categorias ?? SEM_CATEGORIAS;
   const fechado = dados ? !dados.aberto : false;
@@ -54,6 +57,21 @@ export function App() {
     setModal(null);
   };
 
+  /** Só o que está no cardápio agora, com o preço de agora. */
+  const repetirUltimo = () => {
+    const r = repetirPedido(carrinho.itens, ultimoPedido, categorias);
+    if (r.adicionados) {
+      carrinho.substituir(r.itens);
+      avisar(
+        r.adicionados === 1
+          ? '1 item do seu último pedido foi para o carrinho.'
+          : `${r.adicionados} itens do seu último pedido foram para o carrinho.`,
+      );
+    }
+    if (r.indisponiveis.length) avisar(`Indisponível agora: ${r.indisponiveis.join(', ')}.`);
+    if (r.adicionados) setGavetaAberta(true);
+  };
+
   const editarDoCarrinho = (item) => {
     setGavetaAberta(false);
     const produto = produtosPorId.get(item.produtoId) ?? {
@@ -71,6 +89,14 @@ export function App() {
       <div className="conteudo">
         {semConexao && dados && <FaixaSemConexao />}
         {fechado && <AvisoFechado proximaAbertura={dados.proximaAbertura} />}
+        {!fechado && ultimoPedido?.itens.length > 0 && categorias.length > 0 && (
+          <div className="repetir">
+            <span>Bateu a vontade de novo?</span>
+            <button type="button" className="botao botao--secundario" onClick={repetirUltimo}>
+              Repetir último pedido
+            </button>
+          </div>
+        )}
       </div>
 
       {dados && categorias.length > 0 && (
@@ -98,6 +124,8 @@ export function App() {
         onFechar={() => setGavetaAberta(false)}
         onEditar={editarDoCarrinho}
         fechado={fechado}
+        onPedidoEnviado={recarregarUltimoPedido}
+        onCardapioDesatualizado={recarregar}
       />
       <ModalProduto
         key={modal?.chave ?? 0}

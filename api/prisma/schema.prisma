@@ -269,6 +269,7 @@ model Pedido {
   trocoParaCentavos   Int?
   mesaRotulo          String?
   tempoEstimadoMin    Int? // tempo mostrado ao cliente, gravado na criação
+  chaveIdempotencia   String?         @unique // reenvio do mesmo pedido devolve o já criado
   criadoPorId         Int?
   criadoEm            DateTime        @default(now())
   atualizadoEm        DateTime        @updatedAt
@@ -305,6 +306,13 @@ model ItemPedido {
 
   @@index([pedidoId])
   @@index([produtoId])
+}
+
+/// Último numeroDia emitido em cada dia local. Incrementado por
+/// INSERT ... ON CONFLICT DO UPDATE dentro da transação do pedido (sem corrida).
+model ContadorPedido {
+  dataRef DateTime @id @db.Date
+  ultimo  Int
 }
 
 // ───────────── Impressão ─────────────

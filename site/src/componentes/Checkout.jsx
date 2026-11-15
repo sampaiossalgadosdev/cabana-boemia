@@ -1,23 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { mascararTelefone, normalizarTelefone, formatarTelefone, MENSAGEM_TELEFONE_INVALIDO } from '@restaurante/shared/telefone';
+import { mascararTelefone, normalizarTelefone, MENSAGEM_TELEFONE_INVALIDO } from '@restaurante/shared/telefone';
 import { useCliente } from '../cliente/ClienteContext.jsx';
 import { etapaCheckout } from '../cliente/sessao.js';
-import { buscarConfig } from '../lib/api.js';
+import { obterConfig } from '../lib/config.js';
+import { Finalizacao } from './Finalizacao.jsx';
 import { desenharBotaoGoogle } from '../lib/google.js';
 
 const ERRO_GENERICO = 'Não foi possível concluir agora. Confira sua conexão e tente de novo.';
-
-/** Busca o client ID do Google em /publico/config (uma vez por página). */
-let configPromessa = null;
-function obterClientIdGoogle() {
-  configPromessa ??= buscarConfig()
-    .then((c) => c.googleClientId)
-    .catch((err) => {
-      configPromessa = null;
-      throw err;
-    });
-  return configPromessa;
-}
 
 function PassoLogin() {
   const { entrar } = useCliente();
@@ -39,8 +28,8 @@ function PassoLogin() {
       }
     };
 
-    obterClientIdGoogle()
-      .then((clientId) => {
+    obterConfig()
+      .then(({ googleClientId: clientId }) => {
         if (!vivo || !alvo.current) return;
         if (!clientId) {
           setErro('Login indisponível no momento. Peça pelo WhatsApp.');
@@ -177,32 +166,11 @@ function PassoTelefone({ onSalvo, onCancelar }) {
   );
 }
 
-function PassoPronto({ onEditarTelefone }) {
-  const { cliente, sair } = useCliente();
-  return (
-    <section className="checkout-passo" aria-label="Seus dados">
-      <div className="perfil-resumo">
-        <div>
-          <strong>{cliente.nome}</strong>
-          <span>{formatarTelefone(cliente.telefone)}</span>
-          {cliente.email && <span className="perfil-resumo__email">{cliente.email}</span>}
-        </div>
-        <div className="perfil-resumo__acoes">
-          <button type="button" className="botao botao--texto" onClick={onEditarTelefone}>
-            Alterar
-          </button>
-          <button type="button" className="botao botao--texto" onClick={sair}>
-            Sair
-          </button>
-        </div>
-      </div>
-      <p className="nota">Endereço, pagamento e envio do pedido chegam na próxima etapa.</p>
-    </section>
-  );
-}
-
-/** Passos do checkout dentro da gaveta do carrinho: login → telefone → pronto. */
-export function Checkout() {
+/**
+ * Checkout dentro da gaveta do carrinho: login → telefone (obrigatório) →
+ * confirmar dados → pagamento → envio.
+ */
+export function Checkout({ onPedidoEnviado, onCardapioDesatualizado }) {
   const sessao = useCliente();
   const [editando, setEditando] = useState(false);
   const etapa = etapaCheckout(sessao);
@@ -218,5 +186,12 @@ export function Checkout() {
       />
     );
   }
-  return <PassoPronto onEditarTelefone={() => setEditando(true)} />;
+  return (
+    <Finalizacao
+      key={sessao.cliente.id}
+      onEditarTelefone={() => setEditando(true)}
+      onPedidoEnviado={onPedidoEnviado}
+      onCardapioDesatualizado={onCardapioDesatualizado}
+    />
+  );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Dialogo } from './Dialogo.jsx';
 import { Checkout } from './Checkout.jsx';
+import { PedidoEnviado } from './PedidoEnviado.jsx';
 import { formatarPreco } from '../lib/dinheiro.js';
 import { subtotal } from '../carrinho/carrinho.js';
 import { useCarrinho } from '../carrinho/CarrinhoContext.jsx';
@@ -53,16 +54,32 @@ function ItemCarrinho({ item, onEditar, onRemover }) {
 
 /**
  * Gaveta do carrinho. "Continuar" passa para o checkout na mesma gaveta
- * (login com Google e telefone), sem sair do carrinho.
+ * (login, telefone, dados, pagamento); ao enviar, mostra o pedido recebido.
  */
-export function GavetaCarrinho({ aberta, onFechar, onEditar, fechado = false }) {
-  const { itens, totalItens, totalCentavos, remover } = useCarrinho();
+export function GavetaCarrinho({ aberta, onFechar, onEditar, fechado = false, onPedidoEnviado, onCardapioDesatualizado }) {
+  const { itens, totalItens, totalCentavos, remover, substituir } = useCarrinho();
   const [etapa, setEtapa] = useState('itens');
+  const [enviado, setEnviado] = useState(null);
 
   // Fechou a gaveta ou o carrinho esvaziou (ex.: item saiu do cardápio): volta aos itens.
   useEffect(() => {
     if (!aberta || itens.length === 0) setEtapa('itens');
+    if (!aberta) setEnviado(null);
   }, [aberta, itens.length]);
+
+  const aoEnviar = (pedido) => {
+    setEnviado(pedido);
+    substituir([]);
+    onPedidoEnviado?.(pedido);
+  };
+
+  if (enviado) {
+    return (
+      <Dialogo aberto={aberta} titulo="Pedido enviado" onFechar={onFechar}>
+        <PedidoEnviado pedido={enviado} onFechar={onFechar} />
+      </Dialogo>
+    );
+  }
 
   const noCheckout = etapa === 'checkout';
 
@@ -72,37 +89,34 @@ export function GavetaCarrinho({ aberta, onFechar, onEditar, fechado = false }) 
       titulo={noCheckout ? 'Finalizar pedido' : 'Seu carrinho'}
       onFechar={onFechar}
       rodape={
-        itens.length > 0 && (
+        itens.length > 0 &&
+        (noCheckout ? (
+          <button type="button" className="botao botao--secundario botao--bloco" onClick={() => setEtapa('itens')}>
+            Voltar ao carrinho
+          </button>
+        ) : (
           <>
             <div className="total">
               <span>Total dos itens ({rotuloItens(totalItens)})</span>
               <span>{formatarPreco(totalCentavos)}</span>
             </div>
-            {noCheckout ? (
-              <button type="button" className="botao botao--secundario botao--bloco" onClick={() => setEtapa('itens')}>
-                Voltar ao carrinho
-              </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="botao botao--primario botao--bloco"
-                  disabled={fechado}
-                  onClick={() => setEtapa('checkout')}
-                >
-                  Continuar
-                </button>
-                {fechado && <p className="nota">Estamos fechados agora. Os pedidos voltam quando abrirmos.</p>}
-              </>
-            )}
+            <button
+              type="button"
+              className="botao botao--primario botao--bloco"
+              disabled={fechado}
+              onClick={() => setEtapa('checkout')}
+            >
+              Continuar
+            </button>
+            {fechado && <p className="nota">Estamos fechados agora. Os pedidos voltam quando abrirmos.</p>}
           </>
-        )
+        ))
       }
     >
       {itens.length === 0 ? (
         <p className="vazio">Seu carrinho está vazio.</p>
       ) : noCheckout ? (
-        <Checkout />
+        <Checkout onPedidoEnviado={aoEnviar} onCardapioDesatualizado={onCardapioDesatualizado} />
       ) : (
         <ul className="itens-carrinho">
           {itens.map((item) => (

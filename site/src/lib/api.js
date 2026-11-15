@@ -33,9 +33,14 @@ async function requisitar(metodo, rota, { corpo, token, signal } = {}) {
   return dados;
 }
 
-/** GET /publico/cardapio. Lança em erro de rede ou status ≠ 2xx. */
-export async function buscarCardapio(signal) {
-  const res = await fetch(`${BASE}/publico/cardapio`, { signal });
+/**
+ * GET /publico/cardapio. Lança em erro de rede ou status ≠ 2xx.
+ * `forcar`: ignora o cache HTTP do navegador (a API manda max-age=15). Usado
+ * quando a API acabou de dizer que o cardápio mudou: com cache, voltaria o
+ * preço antigo e a conciliação desfaria o preço novo.
+ */
+export async function buscarCardapio(signal, { forcar = false } = {}) {
+  const res = await fetch(`${BASE}/publico/cardapio`, { signal, cache: forcar ? 'no-cache' : 'default' });
   if (!res.ok) throw new Error(`Cardápio indisponível (HTTP ${res.status})`);
   return res.json();
 }
@@ -49,6 +54,21 @@ export const entrarComGoogle = (credential) =>
 
 /** GET /cliente/me → { cliente } */
 export const buscarCliente = (token) => requisitar('GET', '/cliente/me', { token });
+
+/** GET /publico/bairros → { bairros: [{ id, nome, taxaCentavos }] } */
+export const buscarBairros = () => requisitar('GET', '/publico/bairros');
+
+/** GET /cliente/enderecos → { enderecos } */
+export const listarEnderecos = (token) => requisitar('GET', '/cliente/enderecos', { token });
+
+/** POST /cliente/enderecos → { endereco } */
+export const criarEndereco = (token, dados) => requisitar('POST', '/cliente/enderecos', { token, corpo: dados });
+
+/** POST /cliente/pedidos → { pedido } (201 criado; 200 = mesma chave, pedido já existia) */
+export const enviarPedido = (token, corpo) => requisitar('POST', '/cliente/pedidos', { token, corpo });
+
+/** GET /cliente/pedidos/ultimo → { pedido | null } */
+export const buscarUltimoPedido = (token) => requisitar('GET', '/cliente/pedidos/ultimo', { token });
 
 /** PUT /cliente/me → { cliente } */
 export const salvarPerfil = (token, { nome, telefone }) =>

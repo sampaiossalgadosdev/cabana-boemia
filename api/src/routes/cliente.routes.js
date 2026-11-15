@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { assincrono } from '../lib/assincrono.js';
 import { criarVerificadorGoogle } from '../lib/google.js';
-import { autenticarCliente } from '../middlewares/autenticarCliente.js';
+import { autenticarCliente, exigirTelefoneCliente } from '../middlewares/autenticarCliente.js';
 import { criarClienteController } from '../controllers/cliente.controller.js';
 
 /** Dados pessoais: nunca em cache. */
@@ -12,10 +12,10 @@ function semCache(req, res, next) {
 
 /**
  * Rotas do cliente do site (JWT de cliente, separado do da equipe).
- * @param {{ verificarIdTokenGoogle?: (idToken: string) => Promise<object> }} [opcoes]
+ * @param {{ verificarIdTokenGoogle?: (idToken: string) => Promise<object>, relogio?: () => Date }} [opcoes]
  */
-export function criarClienteRoutes({ verificarIdTokenGoogle = criarVerificadorGoogle() } = {}) {
-  const c = criarClienteController(verificarIdTokenGoogle);
+export function criarClienteRoutes({ verificarIdTokenGoogle = criarVerificadorGoogle(), relogio } = {}) {
+  const c = criarClienteController(verificarIdTokenGoogle, relogio);
   const r = Router();
   r.use(semCache);
 
@@ -28,5 +28,7 @@ export function criarClienteRoutes({ verificarIdTokenGoogle = criarVerificadorGo
   r.post('/enderecos', assincrono(c.criarEndereco));
   r.put('/enderecos/:id', assincrono(c.atualizarEndereco));
   r.delete('/enderecos/:id', assincrono(c.removerEndereco));
+  r.post('/pedidos', exigirTelefoneCliente, assincrono(c.criarPedido));
+  r.get('/pedidos/ultimo', assincrono(c.ultimoPedido));
   return r;
 }

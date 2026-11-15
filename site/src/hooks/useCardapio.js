@@ -12,12 +12,12 @@ export function useCardapio(intervaloMs = INTERVALO_MS) {
   const [estado, setEstado] = useState({ dados: null, semConexao: false, atualizadoEm: 0 });
   const controle = useRef(null);
 
-  const buscar = useCallback(async () => {
+  const buscar = useCallback(async ({ forcar = false } = {}) => {
     controle.current?.abort();
     const atual = new AbortController();
     controle.current = atual;
     try {
-      const dados = await buscarCardapio(atual.signal);
+      const dados = await buscarCardapio(atual.signal, { forcar });
       setEstado({ dados, semConexao: false, atualizadoEm: Date.now() });
     } catch (err) {
       if (err.name === 'AbortError') return;
@@ -41,5 +41,7 @@ export function useCardapio(intervaloMs = INTERVALO_MS) {
     };
   }, [buscar, intervaloMs]);
 
-  return { ...estado, recarregar: buscar };
+  // recarregar = o usuário pediu ou a API avisou que mudou: sempre do servidor.
+  const recarregar = useCallback(() => buscar({ forcar: true }), [buscar]);
+  return { ...estado, recarregar };
 }

@@ -21,6 +21,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
   color: inherit;
@@ -733,4 +734,230 @@ button:disabled {
   flex-direction: column;
   align-items: flex-end;
   margin: -6px -8px 0 0;
+}
+
+/* ───────── Finalização do pedido ───────── */
+
+.campo select {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-fundo);
+  font-size: 1rem;
+}
+
+.dados-entrega {
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  background: var(--cor-fundo);
+}
+
+.dados-entrega__linha {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 8px 12px 16px;
+}
+
+.dados-entrega__linha + .dados-entrega__linha {
+  border-top: 1px solid var(--cor-borda);
+}
+
+.dados-entrega__linha > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dados-entrega__rotulo {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cor-texto-suave);
+}
+
+.dados-entrega small,
+.opcao small {
+  display: block;
+  color: var(--cor-texto-suave);
+  font-size: 0.85rem;
+}
+
+.opcoes {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.opcao {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 52px;
+  margin-bottom: 8px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.opcao:has(input:checked) {
+  border-color: var(--cor-vermelho);
+  background: #fdf1ef;
+}
+
+.opcao:has(input:disabled) {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.opcao input {
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  accent-color: var(--cor-vermelho);
+  flex: none;
+}
+
+.opcao--simples {
+  min-height: 0;
+  padding: 10px 0;
+  border: 0;
+  background: none;
+}
+
+.opcao--simples:has(input:checked) {
+  background: none;
+}
+
+.troco {
+  margin-top: 4px;
+}
+
+.troco .campo {
+  margin-top: 4px;
+}
+
+.campo-reais {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.resumo {
+  margin: 20px 0 8px;
+  padding: 14px 16px;
+  border-radius: var(--raio);
+  background: var(--cor-fundo);
+  border: 1px solid var(--cor-borda);
+}
+
+.resumo div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+}
+
+.resumo dt,
+.resumo dd {
+  margin: 0;
+}
+
+.resumo__total {
+  margin-top: 6px;
+  padding-top: 8px !important;
+  border-top: 1px solid var(--cor-borda);
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.nota--esquerda {
+  text-align: left;
+}
+
+.sucesso {
+  text-align: center;
+}
+
+.sucesso__selo {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 4px auto 10px;
+  border-radius: 50%;
+  background: var(--cor-dourado);
+  color: var(--cor-preto);
+  font-size: 1.7rem;
+  font-weight: 800;
+}
+
+.sucesso__titulo {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.sucesso__tempo {
+  margin: 6px 0 16px;
+}
+
+.sucesso__itens {
+  margin: 0 0 8px;
+  padding: 12px 16px;
+  list-style: none;
+  text-align: left;
+  border-radius: var(--raio);
+  background: var(--cor-fundo);
+  border: 1px solid var(--cor-borda);
+}
+
+.sucesso__itens li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.sucesso__itens .observacao {
+  display: block;
+  width: fit-content;
+}
+
+.sucesso__total {
+  margin-top: 6px;
+  padding-top: 8px !important;
+  border-top: 1px solid var(--cor-borda);
+  font-weight: 800;
+}
+
+a.botao {
+  text-decoration: none;
+}
+
+a.botao--texto {
+  text-decoration: underline;
+}
+
+.repetir {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+  font-weight: 600;
 }

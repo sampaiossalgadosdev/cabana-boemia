@@ -73,6 +73,23 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - Carrinho (`src/carrinho/carrinho.js`, lógica pura testada com `node:test`): mesmo produto + mesma observação soma na mesma linha; observação diferente vira outra linha. Salvo em `localStorage` (`cabana-boemia:carrinho:v1`) com try/catch; dado corrompido vira carrinho vazio.
 - Cardápio atualiza a cada 30 s (com a aba visível) e ao voltar para a aba. Só respostas bem-sucedidas conciliam o carrinho: remove o que sumiu, atualiza preço e avisa o cliente. Falha de rede mantém o último cardápio.
 
+## Criação de pedido (`services/pedido.service.js`)
+- `criarPedido({ canal, itens, cliente, endereco, pagamento, usuarioId, mesaRotulo, chaveIdempotencia, agora })` serve SITE, WHATSAPP e SALAO. Uma `prisma.$transaction` (READ COMMITTED, `maxWait` 10 s, `timeout` 15 s) faz, nesta ordem:
+  1. turno ativo (409 `LOJA_FECHADA`) — **só no SITE**. WHATSAPP e SALAO não são bloqueados por horário nem por turno (a equipe lança fora do horário, ex.: cliente do salão que continua comendo depois do fim do turno);
+  2. produtos revalidados (409 `PRODUTO_INDISPONIVEL`): todos os canais exigem produto e categoria ativos; só o SITE exige também `disponivelHoje`, produto do turno ativo e `vendidoNoSite`. Saldo vale para todos (passo 5);
+  3. bairro ativo (taxa do banco);
+  4. preços/totais **só do banco** (UNIDADE = preço × qtd; POR_KG = round(preço × g / 1000)). No SITE, o corpo traz `totalEsperadoCentavos` (o total que o cliente viu); se o recalculado for diferente → 409 `PRECO_ALTERADO` com `detalhes { subtotalCentavos, taxaEntregaCentavos, totalCentavos, itens: [{ produtoId, nome, precoUnitarioCentavos }] }`, **antes de baixar estoque**. Depois, pagamento conferido contra o total do servidor;
+  5. baixa atômica (`updateMany` com `estoque >= qtd`), quantidades somadas por produto/insumo e **travadas em ordem de id** (produtos, depois insumos) para não haver deadlock; `count = 0` → 409 `ESTOQUE_INSUFICIENTE` com o nome do produto (e do insumo);
+  6. `numeroDia` por `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` em `ContadorPedido` (dia local; volta junto no rollback, sem buraco);
+  7. pedido com snapshots (nome, preço, endereço, bairro, `tempoEstimadoMin`), itens, `MovimentacaoEstoque` VENDA por item (delta negativo) e `TrabalhoImpressao` PEDIDO/PENDENTE.
+- Status inicial: SITE e WHATSAPP `CONFIRMADO`, SALAO `ABERTO`. Forma de pagamento obrigatória fora do SALAO. Troco só em DINHEIRO e **maior** que o total (senão 400 `TROCO_INVALIDO`).
+- `chaveIdempotencia` (UUID, única em `Pedido`): reenvio devolve o mesmo pedido (200) sem baixar de novo; chave de outro cliente = 409 `CHAVE_EM_USO`.
+- Banco: `CHECK (estoque >= 0)` em `Produto` e `Insumo` (migration `pedidos`) como defesa extra.
+- Eventos `pedido:novo` e `impressao:nova` só **depois do commit**, via `lib/eventos.js` → Socket.IO (`lib/tempoReal.js`) na sala `equipe`. Socket exige access token da equipe em `auth.token` (token de cliente é recusado). Cada socket também entra na sala `usuario:<id>`: desativar o usuário emite o evento interno `usuario:desativado` (depois do commit) e derruba na hora todos os sockets dele; a reconexão é recusada porque o middleware lê o usuário do banco.
+- Site: `POST /cliente/pedidos` (exige telefone; corpo só `{ itens: [{ produtoId, quantidade, observacao }], enderecoId, formaPagamento, totalEsperadoCentavos, trocoParaCentavos?, chaveIdempotencia? }`; nome/telefone vêm do cadastro, endereço precisa ser do cliente, 422 `ENDERECO_INVALIDO`). `GET /cliente/pedidos/ultimo` → `{ pedido | null }`.
+- Checkout do site: confirmar dados (um toque) → pagamento/troco/resumo com taxa → enviar → tela de sucesso (nº, previsão, link wa.me de cancelamento). Em 409 `PRECO_ALTERADO` o site aplica os preços novos ao carrinho (e a taxa, se mudou), mostra o que mudou **dentro da gaveta** (avisos flutuantes ficam atrás do `<dialog>`) e pede para tocar em "Enviar pedido" de novo; a mesma chave de idempotência é reaproveitada (nada foi criado).
+- Recarga forçada do cardápio (após erro de cardápio/preço, ou "Tentar de novo") usa `fetch(..., { cache: 'no-cache' })`: com o `max-age=15` da API, o cache do navegador devolveria o preço antigo e a conciliação desfaria o preço novo. "Repetir último pedido" só põe no carrinho o que está no cardápio agora, com o preço de agora.
+
 ## Tempo estimado
 - Só manual. A atendente digita no PDV; se não digitar, vale o padrão configurado na retaguarda.
 - `tempoEstimadoManualMin` só vale no dia local em que foi definido (`tempoManualDefinidoEm`); nos outros dias vale `tempoEstimadoPadraoMin`.
@@ -103,7 +120,7 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - Access token: JWT HS256 (`JWT_SECRET`), 15 min, `{ sub, papel }`, enviado em `Authorization: Bearer`.
 - Refresh token: opaco (32 bytes), 30 dias, **rotacionado a cada uso**; no banco só `HMAC-SHA256(token, JWT_REFRESH_SECRET)`. Reuso de refresh já revogado revoga todas as sessões do usuário.
 - `autenticar` busca o usuário no banco a cada requisição (papel vem do banco; desativado perde acesso na hora). `exigirPapel('DONO')` para rotas do dono.
-- Desativar atendente e trocar senha revogam todos os refresh tokens dele. Rotas `/usuarios` só alteram ATENDENTE.
+- Desativar atendente e trocar senha revogam todos os refresh tokens dele. Desativar também derruba na hora os sockets dele. Rotas `/usuarios` só alteram ATENDENTE.
 - `/usuarios` não tem excluir (pedidos ficam vinculados ao usuário; usa-se desativar/reativar) nem editar nome/email por enquanto. Decisão do dono, não é lacuna.
 - Access token da equipe leva `aud: "equipe"` (verificado).
 - A API **recusa iniciar** (`server.js`, código 1) se `JWT_SECRET`/`JWT_REFRESH_SECRET`/`JWT_CLIENTE_SECRET` estiverem ausentes, com menos de 32 caracteres ou iguais entre si (`problemasNosSegredos` em `lib/tokens.js`).
@@ -151,7 +168,7 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - Feito na API: schema + migration `init`, seed do cardápio, autenticação (dono/atendentes, `/auth`, `/usuarios`), turno ativo, rotas públicas do site (`GET /publico/cardapio`, `/publico/bairros`, `/publico/config`, sem login, `Cache-Control: public, max-age=15`) e cliente do site (`/cliente/auth/google`, `/cliente/me`, `/cliente/enderecos`).
 - Banco local: PostgreSQL 18, usuário `postgres`. `api/.env` tem `DATABASE_URL` (`restaurante`, migration aplicada e seed rodado), `DATABASE_URL_TEST` (`restaurante_test`) e `JWT_SECRET`/`JWT_REFRESH_SECRET`/`JWT_CLIENTE_SECRET` gerados (64 caracteres, diferentes). `GOOGLE_CLIENT_ID` ainda vazio (login do cliente responde 503 até configurar).
 - Banco de dev tem um DONO de teste (`dono.teste@exemplo.com`, id 1), criado por `npm run criar-dono`; login, `/auth/me` e refresh (com rotação e recusa do refresh antigo) conferidos via curl contra a API rodando.
-- Testes: API 97/97, site 25/25 e shared 4/4 passando, nenhum pulado (`npm test` na raiz roda todos).
+- Testes: API 121/121, site 35/35 e shared 4/4 passando, nenhum pulado (`npm test` na raiz roda todos).
 - `.env.example` declara toda variável lida pela API (garantido por `test/env-example.test.js`).
 - Site (prompt 5): cardápio com abas, modal do produto (quantidade + observação), carrinho em barra + gaveta, estado fechado com prévia e botões desabilitados, atualização a cada 30 s com aviso de item removido/preço alterado. `vite build` sem erro; telas conferidas num Chrome headless (390×844). Logo no cabeçalho e no favicon, com fallback em Dancing Script conferido bloqueando a imagem.
 - Seed cria produtos com `disponivelHoje = true`. No banco de dev (semeado antes dessa regra) os 30 produtos foram ligados com `UPDATE "Produto" SET "disponivelHoje" = true` em 2026-11-15.
@@ -160,7 +177,8 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - Railway: `api/.env.railway` gerado (local, não versionado) com segredos de produção; falta preencher `GOOGLE_CLIENT_ID` e `CORS_ORIGINS` e colar no Raw Editor do serviço da API.
 - Pendência: logo em PNG com fundo transparente (e uma versão quadrada para favicon e ícone do instalador), pedida ao dono. Até chegar, segue o JPEG `shared/assets/logo-cabana-boemia.jpg` (fundo claro, sombra escura no canto inferior direito).
 - Login Google do cliente (API + passo no checkout do site), perfil/telefone e CRUD de endereços feitos. Telas de login, telefone inválido e resumo conferidas no Chrome headless (390×844). Falta configurar o OAuth Client no Google Cloud Console e pôr `GOOGLE_CLIENT_ID` no `api/.env`.
-- Falta: endereço/pagamento no checkout do site, pedidos (criação com baixa de estoque, numeração por dia), PDV, retaguarda, impressão, relatório do dia.
+- Pedidos (branch `feat/pedidos`): criação com baixa atômica, numeração por dia, idempotência, Socket.IO para a equipe, checkout completo do site e repetir último pedido. Fluxo conferido no Chrome headless (confirmar, troco inválido, sucesso com link wa.me, repetir); dados temporários apagados do banco de dev.
+- Falta: PDV, retaguarda, impressão, relatório do dia.
 
 ## FORA DA V1
 - Status do pedido para o cliente.

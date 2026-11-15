@@ -1,4 +1,6 @@
-import { criarApp } from './app.js';
+import http from 'node:http';
+import { criarApp, lerOrigensCors } from './app.js';
+import { criarTempoReal } from './lib/tempoReal.js';
 import { prisma } from './lib/prisma.js';
 import { problemasNosSegredos } from './lib/tokens.js';
 
@@ -19,14 +21,17 @@ if (!process.env.GOOGLE_CLIENT_ID) {
 
 const porta = Number(process.env.PORT) || 3000;
 const app = criarApp();
+const servidor = http.createServer(app);
+const io = criarTempoReal(servidor, { corsOrigins: lerOrigensCors(process.env.CORS_ORIGINS) });
 
-const servidor = app.listen(porta, () => {
+servidor.listen(porta, () => {
   console.log(`API ouvindo na porta ${porta}`);
 });
 
 function encerrar(sinal) {
   console.log(`${sinal} recebido, encerrando...`);
-  servidor.close(async () => {
+  // io.close desconecta os sockets e fecha também o servidor HTTP.
+  io.close(async () => {
     await prisma.$disconnect();
     process.exit(0);
   });

@@ -136,7 +136,9 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - Testes: API 65/65 e site 20/20 passando, nenhum pulado (`npm test` na raiz roda os dois).
 - `.env.example` declara toda variável lida pela API (garantido por `test/env-example.test.js`).
 - Site (prompt 5): cardápio com abas, modal do produto (quantidade + observação), carrinho em barra + gaveta, estado fechado com prévia e botões desabilitados, atualização a cada 30 s com aviso de item removido/preço alterado. `vite build` sem erro; telas conferidas num Chrome headless (390×844). Logo no cabeçalho e no favicon, com fallback em Dancing Script conferido bloqueando a imagem.
-- Seed cria produtos com `disponivelHoje = true`. O banco de dev foi semeado antes dessa regra: lá os 30 produtos seguem com `disponivelHoje = false` até o dono ligar (o seed não sobrescreve).
+- Seed cria produtos com `disponivelHoje = true`. No banco de dev (semeado antes dessa regra) os 30 produtos foram ligados com `UPDATE "Produto" SET "disponivelHoje" = true` em 2026-11-15.
+- Branches `feat/api-base` e `feat/site-cardapio` já integrados na `main` e apagados.
+- Pendência: logo em PNG com fundo transparente (e uma versão quadrada para favicon e ícone do instalador), pedida ao dono. Até chegar, segue o JPEG `shared/assets/logo-cabana-boemia.jpg` (fundo claro, sombra escura no canto inferior direito).
 - Falta: login Google e checkout do site, pedidos (criação com baixa de estoque, numeração por dia), PDV, retaguarda, impressão, relatório do dia.
 
 ## FORA DA V1

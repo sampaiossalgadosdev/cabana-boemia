@@ -165,19 +165,19 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - Logo: `shared/assets/logo-cabana-boemia.jpg` (JPEG 811×344, fundo claro, sem transparência). Fonte única usada pelo **site** (cabeçalho e favicon), pelo **PDV** e pelo **ícone do instalador** do PDV. Não copiar o arquivo para dentro de cada parte: importar de `shared/assets`.
 
 ## Status (2026-11-15)
-- Feito na API: schema + migration `init`, seed do cardápio, autenticação (dono/atendentes, `/auth`, `/usuarios`), turno ativo, rotas públicas do site (`GET /publico/cardapio`, `/publico/bairros`, `/publico/config`, sem login, `Cache-Control: public, max-age=15`) e cliente do site (`/cliente/auth/google`, `/cliente/me`, `/cliente/enderecos`).
+- Feito na API: schema + migration `init`, seed do cardápio, autenticação (dono/atendentes, `/auth`, `/usuarios`), turno ativo, rotas públicas do site (`GET /publico/cardapio`, `/publico/bairros`, `/publico/config`, sem login, `Cache-Control: public, max-age=15`) cliente do site (`/cliente/auth/google`, `/cliente/me`, `/cliente/enderecos`) e pedidos (`POST /cliente/pedidos`, `GET /cliente/pedidos/ultimo`, `criarPedido` para os três canais, Socket.IO da equipe).
 - Banco local: PostgreSQL 18, usuário `postgres`. `api/.env` tem `DATABASE_URL` (`restaurante`, migration aplicada e seed rodado), `DATABASE_URL_TEST` (`restaurante_test`) e `JWT_SECRET`/`JWT_REFRESH_SECRET`/`JWT_CLIENTE_SECRET` gerados (64 caracteres, diferentes). `GOOGLE_CLIENT_ID` ainda vazio (login do cliente responde 503 até configurar).
 - Banco de dev tem um DONO de teste (`dono.teste@exemplo.com`, id 1), criado por `npm run criar-dono`; login, `/auth/me` e refresh (com rotação e recusa do refresh antigo) conferidos via curl contra a API rodando.
 - Testes: API 121/121, site 35/35 e shared 4/4 passando, nenhum pulado (`npm test` na raiz roda todos).
 - `.env.example` declara toda variável lida pela API (garantido por `test/env-example.test.js`).
 - Site (prompt 5): cardápio com abas, modal do produto (quantidade + observação), carrinho em barra + gaveta, estado fechado com prévia e botões desabilitados, atualização a cada 30 s com aviso de item removido/preço alterado. `vite build` sem erro; telas conferidas num Chrome headless (390×844). Logo no cabeçalho e no favicon, com fallback em Dancing Script conferido bloqueando a imagem.
 - Seed cria produtos com `disponivelHoje = true`. No banco de dev (semeado antes dessa regra) os 30 produtos foram ligados com `UPDATE "Produto" SET "disponivelHoje" = true` em 2026-11-15.
-- Branches `feat/api-base`, `feat/site-cardapio` e `feat/cliente-auth-google` já integrados na `main` e apagados.
-- Sessão do cliente de 7 dias sem refresh e limite de 10 endereços: aprovados pelo dono.
+- Branches `feat/api-base`, `feat/site-cardapio`, `feat/cliente-auth-google` e `feat/pedidos` já integrados na `main` e apagados.
+- Aprovados pelo dono: sessão do cliente de 7 dias sem refresh, limite de 10 endereços, `chaveIdempotencia`, `ContadorPedido` + `CHECK (estoque >= 0)`, status inicial (SITE/WHATSAPP `CONFIRMADO`, SALAO `ABERTO`).
 - Railway: `api/.env.railway` gerado (local, não versionado) com segredos de produção; falta preencher `GOOGLE_CLIENT_ID` e `CORS_ORIGINS` e colar no Raw Editor do serviço da API.
 - Pendência: logo em PNG com fundo transparente (e uma versão quadrada para favicon e ícone do instalador), pedida ao dono. Até chegar, segue o JPEG `shared/assets/logo-cabana-boemia.jpg` (fundo claro, sombra escura no canto inferior direito).
 - Login Google do cliente (API + passo no checkout do site), perfil/telefone e CRUD de endereços feitos. Telas de login, telefone inválido e resumo conferidas no Chrome headless (390×844). Falta configurar o OAuth Client no Google Cloud Console e pôr `GOOGLE_CLIENT_ID` no `api/.env`.
-- Pedidos (branch `feat/pedidos`): criação com baixa atômica, numeração por dia, idempotência, Socket.IO para a equipe, checkout completo do site e repetir último pedido. Fluxo conferido no Chrome headless (confirmar, troco inválido, sucesso com link wa.me, repetir); dados temporários apagados do banco de dev.
+- Pedidos feitos: criação com baixa atômica, numeração por dia, idempotência, `PRECO_ALTERADO` no site, canais da equipe sem trava de horário, Socket.IO para a equipe (desativado cai na hora), checkout completo do site e repetir último pedido. Fluxos conferidos no Chrome headless (confirmar, troco inválido, sucesso com link wa.me, repetir, preço alterado no meio do checkout); dados temporários apagados do banco de dev. Migration `pedidos` aplicada no banco de dev.
 - Falta: PDV, retaguarda, impressão, relatório do dia.
 
 ## FORA DA V1

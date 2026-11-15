@@ -122,6 +122,12 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - Helmet com `crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' }` (`app.js`): a API vai servir o site no deploy e o padrão `same-origin` quebra o popup do login Google. Testado em `test/health.test.js`. Quem servir o site (API ou outro host) não pode mandar `same-origin`.
 - Site: token em `localStorage` (`cabana-boemia:cliente:v1`); 401 apaga. Checkout dentro da gaveta do carrinho: login → telefone obrigatório → resumo. "Continuar" desabilitado com a loja fechada.
 
+## Variáveis de produção (Railway)
+- `api/.env.railway`: todas as variáveis da API em produção, no formato do Raw Editor do Railway. **Não versionado** (`.gitignore` ignora `.env.*`, exceto `.env.example`; conferido com `git check-ignore`). Existe só na máquina do dono.
+- Segredos JWT de produção gerados à parte (48 bytes, `base64url`), diferentes dos de dev. `DATABASE_URL="${{Postgres.DATABASE_URL}}"` (referência ao serviço Postgres do Railway), `NODE_ENV="production"`, `PORT="3000"`, `BCRYPT_CUSTO="12"`.
+- Preencher antes do deploy: `GOOGLE_CLIENT_ID` e `CORS_ORIGINS` (domínio do Railway com `https://`, sem barra no fim).
+- `test/env-railway.test.js` falha se alguma variável lida pelo código (`process.env.X`, `segredo('X')`, `env("X")` do `schema.prisma`) faltar no arquivo, se os segredos forem inválidos ou repetirem os de dev, ou se aparecer `DATABASE_URL_TEST`. Sem o arquivo (clone novo/CI), é pulado. A varredura fica em `test/helpers/variaveis.js`, compartilhada com o teste do `.env.example`.
+
 ## Testes
 - `npm test` (raiz) roda os arquivos em série (`--test-concurrency=1`), com `test/setup.js` pré-carregado.
 - Testes de banco usam `DATABASE_URL_TEST` (nome com "test"), resetado por `prisma migrate reset` a cada arquivo; sem a variável, são pulados.
@@ -145,13 +151,13 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - Feito na API: schema + migration `init`, seed do cardápio, autenticação (dono/atendentes, `/auth`, `/usuarios`), turno ativo, rotas públicas do site (`GET /publico/cardapio`, `/publico/bairros`, `/publico/config`, sem login, `Cache-Control: public, max-age=15`) e cliente do site (`/cliente/auth/google`, `/cliente/me`, `/cliente/enderecos`).
 - Banco local: PostgreSQL 18, usuário `postgres`. `api/.env` tem `DATABASE_URL` (`restaurante`, migration aplicada e seed rodado), `DATABASE_URL_TEST` (`restaurante_test`) e `JWT_SECRET`/`JWT_REFRESH_SECRET`/`JWT_CLIENTE_SECRET` gerados (64 caracteres, diferentes). `GOOGLE_CLIENT_ID` ainda vazio (login do cliente responde 503 até configurar).
 - Banco de dev tem um DONO de teste (`dono.teste@exemplo.com`, id 1), criado por `npm run criar-dono`; login, `/auth/me` e refresh (com rotação e recusa do refresh antigo) conferidos via curl contra a API rodando.
-- Testes: API 94/94, site 25/25 e shared 4/4 passando, nenhum pulado (`npm test` na raiz roda todos).
+- Testes: API 97/97, site 25/25 e shared 4/4 passando, nenhum pulado (`npm test` na raiz roda todos).
 - `.env.example` declara toda variável lida pela API (garantido por `test/env-example.test.js`).
 - Site (prompt 5): cardápio com abas, modal do produto (quantidade + observação), carrinho em barra + gaveta, estado fechado com prévia e botões desabilitados, atualização a cada 30 s com aviso de item removido/preço alterado. `vite build` sem erro; telas conferidas num Chrome headless (390×844). Logo no cabeçalho e no favicon, com fallback em Dancing Script conferido bloqueando a imagem.
 - Seed cria produtos com `disponivelHoje = true`. No banco de dev (semeado antes dessa regra) os 30 produtos foram ligados com `UPDATE "Produto" SET "disponivelHoje" = true` em 2026-11-15.
 - Branches `feat/api-base`, `feat/site-cardapio` e `feat/cliente-auth-google` já integrados na `main` e apagados.
 - Sessão do cliente de 7 dias sem refresh e limite de 10 endereços: aprovados pelo dono.
-- Railway: criar `JWT_CLIENTE_SECRET` (a API não sobe sem ele) e `GOOGLE_CLIENT_ID` antes do próximo deploy.
+- Railway: `api/.env.railway` gerado (local, não versionado) com segredos de produção; falta preencher `GOOGLE_CLIENT_ID` e `CORS_ORIGINS` e colar no Raw Editor do serviço da API.
 - Pendência: logo em PNG com fundo transparente (e uma versão quadrada para favicon e ícone do instalador), pedida ao dono. Até chegar, segue o JPEG `shared/assets/logo-cabana-boemia.jpg` (fundo claro, sombra escura no canto inferior direito).
 - Login Google do cliente (API + passo no checkout do site), perfil/telefone e CRUD de endereços feitos. Telas de login, telefone inválido e resumo conferidas no Chrome headless (390×844). Falta configurar o OAuth Client no Google Cloud Console e pôr `GOOGLE_CLIENT_ID` no `api/.env`.
 - Falta: endereço/pagamento no checkout do site, pedidos (criação com baixa de estoque, numeração por dia), PDV, retaguarda, impressão, relatório do dia.

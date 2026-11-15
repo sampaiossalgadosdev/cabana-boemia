@@ -1,4 +1,7 @@
 node_modules/
 .env
+# .env.railway e afins têm segredos; só o .env.example é versionado.
+.env.*
+!.env.example
 dist/
 out/

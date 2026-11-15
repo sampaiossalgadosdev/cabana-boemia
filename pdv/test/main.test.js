@@ -1,0 +1,113 @@
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { criarConfig, validarApiUrl } from '../src/main/config.js';
+import { criarArmazemRefresh } from '../src/main/armazemRefresh.js';
+import { criarHandlers, executar, validarMinutos } from '../src/main/ipc.js';
+
+const pastaTemp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pdv-teste-'));
+
+describe('config (userData/config.json)', () => {
+  test('validarApiUrl normaliza e recusa o que não é http(s)', () => {
+    assert.equal(validarApiUrl(' https://api.exemplo.com/ '), 'https://api.exemplo.com');
+    assert.equal(validarApiUrl('http://localhost:3000'), 'http://localhost:3000');
+    assert.equal(validarApiUrl('https://exemplo.com/api//'), 'https://exemplo.com/api');
+    for (const ruim of ['', 'exemplo.com', 'ftp://x.com', 'javascript:alert(1)', 'https://x.com/?a=1', 'https://u:s@x.com']) {
+      assert.throws(() => validarApiUrl(ruim), undefined, ruim);
+    }
+  });
+
+  test('padrão até salvar; salvo persiste; arquivo corrompido cai no padrão', () => {
+    const caminho = path.join(pastaTemp(), 'config.json');
+    const c1 = criarConfig({ caminho, apiUrlPadrao: null });
+    assert.deepEqual(c1.obter(), { apiUrl: null }, 'produção: sem padrão, pede na primeira execução');
+    c1.definirApiUrl('https://api.exemplo.com/');
+    assert.equal(criarConfig({ caminho, apiUrlPadrao: null }).apiUrl(), 'https://api.exemplo.com');
+
+    fs.writeFileSync(caminho, '{lixo');
+    assert.equal(criarConfig({ caminho, apiUrlPadrao: 'http://localhost:3000' }).apiUrl(), 'http://localhost:3000');
+  });
+});
+
+describe('armazém do refresh (safeStorage)', () => {
+  // Cifra de mentira, só para verificar que nada vai em texto puro.
+  const cifra = (disponivel = true) => ({
+    isAsyncEncryptionAvailable: async () => disponivel,
+    encryptStringAsync: async (s) => Buffer.from(`CIFRADO:${Buffer.from(s).toString('base64')}`),
+    decryptStringAsync: async (b) => ({
+      result: Buffer.from(b.toString().replace('CIFRADO:', ''), 'base64').toString(),
+      shouldReEncrypt: false,
+    }),
+  });
+
+  test('grava cifrado, lê de volta numa instância nova e apaga', async () => {
+    const caminho = path.join(pastaTemp(), 'sessao.bin');
+    const a = criarArmazemRefresh({ caminho, safeStorage: cifra() });
+    await a.guardar('refresh-secreto');
+    assert.ok(!fs.readFileSync(caminho).toString().includes('refresh-secreto'), 'nada em texto puro');
+    assert.equal(await criarArmazemRefresh({ caminho, safeStorage: cifra() }).ler(), 'refresh-secreto');
+    await a.apagar();
+    assert.equal(fs.existsSync(caminho), false);
+    assert.equal(await criarArmazemRefresh({ caminho, safeStorage: cifra() }).ler(), null);
+  });
+
+  test('sem cifragem disponível: só memória, nunca grava no disco', async () => {
+    const caminho = path.join(pastaTemp(), 'sessao.bin');
+    const a = criarArmazemRefresh({ caminho, safeStorage: cifra(false) });
+    await a.guardar('refresh-secreto');
+    assert.equal(await a.ler(), 'refresh-secreto');
+    assert.equal(fs.existsSync(caminho), false);
+  });
+});
+
+describe('handlers IPC', () => {
+  function montar({ logado = false } = {}) {
+    const chamadas = [];
+    const api = {
+      logado: () => logado,
+      requisitar: async (...args) => {
+        chamadas.push(args);
+        return { ok: true };
+      },
+    };
+    const tempoReal = { ligar() {}, desligar() {}, status: () => 'desligado' };
+    const config = { obter: () => ({ apiUrl: 'http://x' }), definirApiUrl: (u) => validarApiUrl(u) };
+    return { h: criarHandlers({ config, api, tempoReal, versao: '0.1.0' }), chamadas };
+  }
+
+  test('finalizar valida id e forma de pagamento antes de chamar a API', async () => {
+    const { h, chamadas } = montar();
+    for (const [id, forma] of [[0, 'PIX'], [1.5, 'PIX'], [3, ''], [3, 'FIADO']]) {
+      const r = await executar(h['pedidos:finalizar'], [id, forma]);
+      assert.equal(r.ok, false);
+      assert.equal(r.erro.codigo, 'VALIDACAO');
+    }
+    assert.equal(chamadas.length, 0);
+    assert.deepEqual(await executar(h['pedidos:finalizar'], [3, 'PIX']), { ok: true, dados: { ok: true } });
+    assert.deepEqual(chamadas[0], ['PATCH', '/equipe/pedidos/3/finalizar', { formaPagamento: 'PIX' }]);
+  });
+
+  test('fila pede só site + WhatsApp de hoje', async () => {
+    const { h, chamadas } = montar();
+    await h['pedidos:fila']();
+    assert.deepEqual(chamadas[0], ['GET', '/equipe/pedidos?dataRef=hoje&canal=SITE,WHATSAPP']);
+  });
+
+  test('tempo: 1 a 240 inteiro; vazio/null volta ao padrão', async () => {
+    assert.equal(validarMinutos(null), null);
+    assert.equal(validarMinutos(''), null);
+    assert.equal(validarMinutos(45), 45);
+    for (const ruim of [0, 241, 12.5, NaN, '30']) assert.throws(() => validarMinutos(ruim));
+    const { h, chamadas } = montar();
+    await h['tempo:definir'](null);
+    assert.deepEqual(chamadas[0], ['PUT', '/equipe/config/tempo-estimado', { minutos: null }]);
+  });
+
+  test('não troca de servidor com sessão aberta', async () => {
+    const { h } = montar({ logado: true });
+    const r = await executar(h['config:definirApiUrl'], ['https://outro.com']);
+    assert.equal(r.ok, false);
+  });
+});

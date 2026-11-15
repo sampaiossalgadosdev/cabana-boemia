@@ -8,7 +8,7 @@ import { EventEmitter } from 'node:events';
 const barramento = new EventEmitter();
 barramento.setMaxListeners(50);
 
-/** @param {'pedido:novo' | 'impressao:nova'} evento */
+/** @param {'pedido:novo' | 'pedido:atualizado' | 'impressao:nova'} evento */
 export function emitirParaEquipe(evento, dados) {
   barramento.emit('equipe', evento, dados);
 }

@@ -127,3 +127,35 @@ export function ultimoDoCliente(clienteId, db = prisma) {
     select: SELECT_PEDIDO,
   });
 }
+
+/**
+ * Pedidos de um dia local, do mais antigo para o mais novo.
+ * @param {{ dataRef: string, canais?: string[], status?: string[] }} filtro
+ */
+export function listarDoDia({ dataRef, canais, status }, db = prisma) {
+  return db.pedido.findMany({
+    where: {
+      dataRef: new Date(`${dataRef}T00:00:00.000Z`),
+      ...(canais?.length ? { canal: { in: canais } } : {}),
+      ...(status?.length ? { status: { in: status } } : {}),
+    },
+    orderBy: [{ numeroDia: 'asc' }],
+    select: SELECT_PEDIDO,
+  });
+}
+
+/**
+ * Finaliza só se ainda estiver aberto (UPDATE condicionado ao status: duas
+ * atendentes finalizando ao mesmo tempo, só uma vence). Devolve o count.
+ */
+export async function finalizarSeAberto(id, { formaPagamento, trocoParaCentavos, finalizadoEm }, statusAbertos, db = prisma) {
+  const { count } = await db.pedido.updateMany({
+    where: { id, status: { in: statusAbertos } },
+    data: { status: 'FINALIZADO', formaPagamento, trocoParaCentavos, finalizadoEm },
+  });
+  return count;
+}
+
+export function buscarStatus(id, db = prisma) {
+  return db.pedido.findUnique({ where: { id }, select: { id: true, status: true } });
+}

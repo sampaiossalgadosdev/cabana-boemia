@@ -15,16 +15,21 @@ const ARQUIVO = path.join(raizApi, '.env.railway');
 const ARQUIVO_DEV = path.join(raizApi, '.env');
 const semArquivo = existsSync(ARQUIVO) ? false : 'api/.env.railway não existe nesta máquina';
 const SEGREDOS = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'JWT_CLIENTE_SECRET'];
+// Lidas pelo código, mas não precisam estar no arquivo: o Railway injeta PORT.
+const OPCIONAIS_EM_PRODUCAO = new Set(['PORT']);
 
 describe('api/.env.railway (produção)', { skip: semArquivo }, () => {
   const prod = () => lerEnv(readFileSync(ARQUIVO, 'utf8'));
 
-  test('declara toda variável de ambiente lida pela API', async () => {
+  test('declara toda variável de ambiente lida pela API (PORT é opcional: o Railway injeta)', async () => {
     const usadas = await variaveisLidasPelaApi();
     assert.ok(usadas.has('DATABASE_URL'), 'a varredura precisa enxergar o env() do schema.prisma');
     assert.ok(usadas.has('JWT_CLIENTE_SECRET'), 'a varredura precisa enxergar os segredos');
+    assert.ok(usadas.has('PORT'), 'PORT continua sendo lida pelo server.js');
     const declaradas = prod();
-    const faltando = [...usadas].filter((v) => !declaradas.has(v)).sort();
+    const faltando = [...usadas]
+      .filter((v) => !declaradas.has(v) && !OPCIONAIS_EM_PRODUCAO.has(v))
+      .sort();
     assert.deepEqual(faltando, [], `faltam no .env.railway: ${faltando.join(', ')}`);
   });
 

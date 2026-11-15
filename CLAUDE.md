@@ -124,7 +124,7 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 
 ## Variáveis de produção (Railway)
 - `api/.env.railway`: todas as variáveis da API em produção, no formato do Raw Editor do Railway. **Não versionado** (`.gitignore` ignora `.env.*`, exceto `.env.example`; conferido com `git check-ignore`). Existe só na máquina do dono.
-- Segredos JWT de produção gerados à parte (48 bytes, `base64url`), diferentes dos de dev. `DATABASE_URL="${{Postgres.DATABASE_URL}}"` (referência ao serviço Postgres do Railway), `NODE_ENV="production"`, `PORT="3000"`, `BCRYPT_CUSTO="12"`.
+- Segredos JWT de produção gerados à parte (48 bytes, `base64url`), diferentes dos de dev. `DATABASE_URL="${{Postgres.DATABASE_URL}}"` (referência ao serviço Postgres do Railway), `NODE_ENV="production"`, `BCRYPT_CUSTO="12"`. **Sem `PORT`**: o Railway injeta a porta (o teste trata `PORT` como opcional em produção).
 - Preencher antes do deploy: `GOOGLE_CLIENT_ID` e `CORS_ORIGINS` (domínio do Railway com `https://`, sem barra no fim).
 - `test/env-railway.test.js` falha se alguma variável lida pelo código (`process.env.X`, `segredo('X')`, `env("X")` do `schema.prisma`) faltar no arquivo, se os segredos forem inválidos ou repetirem os de dev, ou se aparecer `DATABASE_URL_TEST`. Sem o arquivo (clone novo/CI), é pulado. A varredura fica em `test/helpers/variaveis.js`, compartilhada com o teste do `.env.example`.
 

@@ -14,6 +14,7 @@ import { criarAgente } from './agente-impressao/agente.js';
 import { criarPing } from './agente-impressao/conexao.js';
 import { criarImpressoraArquivo, criarImpressoraWindows } from './agente-impressao/impressoras.js';
 import { carregarSpooler } from './agente-impressao/winspool.js';
+import { criarRegistro } from './registro.js';
 
 const DEV = !app.isPackaged;
 const URL_DEV_RENDERER = process.env.ELECTRON_RENDERER_URL;
@@ -60,9 +61,14 @@ function iniciar() {
       },
     });
 
+    // Log do agente de impressão em userData/logs (impressao.log + 5 antigos de 1 MB).
+    const logImpressao = criarRegistro({ pasta: path.join(dados, 'logs'), nome: 'impressao', espelho: DEV ? console : null });
+    logImpressao.info(`[pdv] versão ${app.getVersion()} iniciada`);
+
     // Agente de impressão: só imprime neste computador se a impressora (ou o
     // modo teste) estiver configurada na tela "Impressora".
     agente = criarAgente({
+      log: logImpressao,
       api,
       ping: criarPing({ apiUrl: config.apiUrl }),
       configuracao: config.impressao,
@@ -110,7 +116,8 @@ function iniciar() {
     session.defaultSession.setPermissionRequestHandler((_wc, _perm, responder) => responder(false));
 
     // Abre com o Windows (só no app instalado: em dev registraria o electron.exe).
-    if (!DEV) app.setLoginItemSettings({ openAtLogin: true });
+    // Nome fixo da entrada em HKCU\...\Run: o desinstalador apaga por ele (recursos/installer.nsh).
+    if (!DEV) app.setLoginItemSettings({ openAtLogin: true, name: 'CabanaBoemiaPDV' });
 
     Menu.setApplicationMenu(null);
     janela = criarJanela();

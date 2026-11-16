@@ -10,8 +10,9 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
-    "dist": "electron-vite build && electron-builder --win",
-    "test": "node --test \"test/**/*.test.js\""
+    "dist": "node scripts/gerar-icone.mjs && electron-vite build && electron-builder --win",
+    "test": "node --test \"test/**/*.test.js\"",
+    "icone": "node scripts/gerar-icone.mjs"
   },
   "devDependencies": {
     "@restaurante/shared": "^0.1.0",
@@ -27,5 +28,6 @@
     "@point-of-sale/receipt-printer-encoder": "4.0.1",
     "koffi": "3.3.8",
     "socket.io-client": "4.8.4"
-  }
+  },
+  "author": "Cabana Boemia"
 }

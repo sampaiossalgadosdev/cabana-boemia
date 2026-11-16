@@ -70,7 +70,8 @@ export function criarConfig({ caminho, apiUrlPadrao }) {
   }
 
   return {
-    obter: () => ({ apiUrl: servidor() }),
+    // `impressaoConfigurada`: a primeira execução também pede a impressora (ou "não imprime").
+    obter: () => ({ apiUrl: servidor(), impressaoConfigurada: salvo.impressao !== undefined }),
     servidor,
     /** Base das rotas da API (`<servidor>/api`); null se não configurado. */
     apiUrl: () => baseDaApi(servidor()),

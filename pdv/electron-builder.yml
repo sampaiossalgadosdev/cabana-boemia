@@ -1,18 +1,32 @@
-# Instalador Windows do PDV (npm run dist -w pdv → pdv/dist).
+# Instalador Windows do PDV: npm run dist -w pdv → pdv/dist/Cabana Boemia PDV Setup <versão>.exe
 appId: br.com.cabanaboemia.pdv
 productName: Cabana Boemia PDV
 directories:
   output: dist
-  buildResources: build
+  # recursos/icon.png é gerado da logo (shared/assets) por scripts/gerar-icone.mjs antes do build.
+  buildResources: recursos
 files:
   - out/**
   - package.json
 asar: true
+# koffi: o binário nativo (@koromix/koffi-win32-x64) sai fora do asar (o electron-builder
+# detecta o .node; deixado explícito para não depender da detecção).
+asarUnpack:
+  - node_modules/@koromix/**
 win:
-  target: nsis
-  # Ícone: pendente a versão quadrada da logo (shared/assets). Até lá, ícone padrão do Electron.
+  target:
+    - target: nsis
+      arch: x64
+  icon: recursos/icon.png
 nsis:
+  # Instalação de um clique, só para o usuário do Windows (sem pedir administrador).
   oneClick: true
   perMachine: false
-  createDesktopShortcut: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
   shortcutName: Cabana Boemia PDV
+  # Abre ao terminar: na primeira abertura o app se registra para abrir com o Windows.
+  runAfterFinish: true
+  uninstallDisplayName: Cabana Boemia PDV
+  # Desinstalar também tira a entrada "abrir com o Windows" (recursos/installer.nsh).
+  include: recursos/installer.nsh

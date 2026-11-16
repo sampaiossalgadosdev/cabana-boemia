@@ -22,7 +22,13 @@ npm run dev:site         # http://localhost:5173 (repassa /api para a 3000)
 npm run dev:retaguarda   # http://localhost:5174/admin/
 npm run dev:pdv
 npm test                 # todos os workspaces
+npm run seed:demo        # dados de demonstração do dia (roteiro em DEMO.md)
+npm run dist -w pdv      # instalador do PDV → pdv/dist/Cabana Boemia PDV Setup <versão>.exe
 ```
+
+### PDV (balcão)
+
+O instalador (`npm run dist -w pdv`, no Windows) instala só para o usuário, sem pedir administrador, cria atalho na área de trabalho e abre o PDV ao terminar; a partir daí ele abre sozinho com o Windows. Na primeira abertura pede o servidor (`https://<domínio>`, sem `/api`) e a impressora térmica (lista do Windows e largura do papel 80/58 mm). O log da impressão fica em `%APPDATA%\Cabana Boemia PDV\logs\impressao.log`. O instalador não é assinado: na primeira vez o Windows SmartScreen avisa "editor desconhecido" (Mais informações › Executar assim mesmo).
 
 Build de produção local (o mesmo que o Railway roda):
 

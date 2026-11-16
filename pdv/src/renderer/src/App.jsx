@@ -2,16 +2,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { chamar, pdv } from './lib/pdv.js';
 import { Logo } from './componentes/Logo.jsx';
 import { TelaConfiguracao } from './telas/TelaConfiguracao.jsx';
+import { TelaImpressoraInicial } from './telas/TelaImpressoraInicial.jsx';
 import { TelaLogin } from './telas/TelaLogin.jsx';
 import { TelaPrincipal } from './telas/TelaPrincipal.jsx';
 
 /**
- * Telas: carregando → configurar (sem servidor) → login → principal.
+ * Telas: carregando → configurar (sem servidor) → impressora (primeira execução) → login → principal.
  * Ao abrir, tenta a sessão salva (refresh cifrado no main).
  */
 export function App() {
   const [tela, setTela] = useState('carregando');
   const [apiUrl, setApiUrl] = useState(null);
+  const [impressaoConfigurada, setImpressaoConfigurada] = useState(true);
   const [usuario, setUsuario] = useState(null);
   const [aviso, setAviso] = useState('');
   const [erroInicio, setErroInicio] = useState('');
@@ -22,7 +24,9 @@ export function App() {
     try {
       const config = await chamar(pdv.config.obter());
       setApiUrl(config.apiUrl);
+      setImpressaoConfigurada(config.impressaoConfigurada);
       if (!config.apiUrl) return setTela('configurar');
+      if (!config.impressaoConfigurada) return setTela('impressora');
       const u = await chamar(pdv.sessao.restaurar());
       if (u) {
         setUsuario(u);
@@ -82,9 +86,20 @@ export function App() {
         apiUrl={apiUrl}
         aoSalvar={(url) => {
           setApiUrl(url);
-          setTela('login');
+          setTela(impressaoConfigurada ? 'login' : 'impressora');
         }}
         aoVoltar={apiUrl ? () => setTela('login') : null}
+      />
+    );
+  }
+
+  if (tela === 'impressora') {
+    return (
+      <TelaImpressoraInicial
+        aoConcluir={() => {
+          setImpressaoConfigurada(true);
+          setTela('login');
+        }}
       />
     );
   }

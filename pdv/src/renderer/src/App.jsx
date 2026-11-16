@@ -13,6 +13,7 @@ import { TelaPrincipal } from './telas/TelaPrincipal.jsx';
 export function App() {
   const [tela, setTela] = useState('carregando');
   const [apiUrl, setApiUrl] = useState(null);
+  const [apiUrlSugerido, setApiUrlSugerido] = useState('');
   const [impressaoConfigurada, setImpressaoConfigurada] = useState(true);
   const [usuario, setUsuario] = useState(null);
   const [aviso, setAviso] = useState('');
@@ -24,6 +25,7 @@ export function App() {
     try {
       const config = await chamar(pdv.config.obter());
       setApiUrl(config.apiUrl);
+      setApiUrlSugerido(config.apiUrlSugerido ?? '');
       setImpressaoConfigurada(config.impressaoConfigurada);
       if (!config.apiUrl) return setTela('configurar');
       if (!config.impressaoConfigurada) return setTela('impressora');
@@ -84,6 +86,7 @@ export function App() {
     return (
       <TelaConfiguracao
         apiUrl={apiUrl}
+        sugestao={apiUrlSugerido}
         aoSalvar={(url) => {
           setApiUrl(url);
           setTela(impressaoConfigurada ? 'login' : 'impressora');

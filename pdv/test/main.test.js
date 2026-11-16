@@ -24,17 +24,26 @@ describe('config (userData/config.json)', () => {
   test('padrão até salvar; salvo persiste; arquivo corrompido cai no padrão', () => {
     const caminho = path.join(pastaTemp(), 'config.json');
     const c1 = criarConfig({ caminho, apiUrlPadrao: null });
-    assert.deepEqual(c1.obter(), { apiUrl: null, impressaoConfigurada: false }, 'produção: sem padrão, pede na primeira execução');
+    assert.deepEqual(c1.obter(), { apiUrl: null, apiUrlSugerido: null, impressaoConfigurada: false }, 'produção: sem padrão, pede na primeira execução');
     assert.equal(c1.apiUrl(), null);
     c1.definirApiUrl('https://api.exemplo.com/');
     const c2 = criarConfig({ caminho, apiUrlPadrao: null });
-    assert.deepEqual(c2.obter(), { apiUrl: 'https://api.exemplo.com', impressaoConfigurada: false }, 'a tela mostra o endereço digitado');
+    assert.deepEqual(c2.obter(), { apiUrl: 'https://api.exemplo.com', apiUrlSugerido: null, impressaoConfigurada: false }, 'a tela mostra o endereço digitado');
     c2.definirImpressao({ modo: 'desligado' });
     assert.equal(criarConfig({ caminho, apiUrlPadrao: null }).obter().impressaoConfigurada, true, '"não imprime" também conta como configurado');
     assert.equal(c2.apiUrl(), 'https://api.exemplo.com/api', 'as rotas ficam sob /api');
 
     fs.writeFileSync(caminho, '{lixo');
     assert.equal(criarConfig({ caminho, apiUrlPadrao: 'http://localhost:3000' }).apiUrl(), 'http://localhost:3000/api');
+  });
+
+  test('sugestão de produção: só preenche a tela, não vira servidor sem salvar', () => {
+    const caminho = path.join(pastaTemp(), 'config.json');
+    const c = criarConfig({ caminho, apiUrlPadrao: null, apiUrlSugerido: 'https://cabana.managerpix.com.br' });
+    assert.deepEqual(c.obter(), { apiUrl: null, apiUrlSugerido: 'https://cabana.managerpix.com.br', impressaoConfigurada: false });
+    assert.equal(c.apiUrl(), null, 'a primeira tela continua aparecendo');
+    c.definirApiUrl('https://outro.exemplo.com');
+    assert.equal(c.apiUrl(), 'https://outro.exemplo.com/api', 'editável: vale o que foi salvo');
   });
 });
 

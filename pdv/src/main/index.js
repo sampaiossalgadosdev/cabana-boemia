@@ -17,6 +17,8 @@ import { carregarSpooler } from './agente-impressao/winspool.js';
 import { criarRegistro } from './registro.js';
 
 const DEV = !app.isPackaged;
+/** Servidor de produção: já vem preenchido (editável) na primeira execução do app instalado. */
+const SERVIDOR_PRODUCAO = 'https://cabana.managerpix.com.br';
 const URL_DEV_RENDERER = process.env.ELECTRON_RENDERER_URL;
 
 // Uma instância só: o atalho/inicialização abre a janela que já existe.
@@ -47,6 +49,7 @@ function iniciar() {
       caminho: path.join(dados, 'config.json'),
       // Produção: sem padrão; a tela de configuração pede a URL na primeira execução.
       apiUrlPadrao: DEV ? 'http://localhost:3000' : null,
+      apiUrlSugerido: DEV ? null : SERVIDOR_PRODUCAO,
     });
 
     let tempoReal;

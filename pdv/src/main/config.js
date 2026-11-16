@@ -37,11 +37,13 @@ export function validarApiUrl(valor) {
 export const baseDaApi = (servidor) => (servidor ? `${servidor}${PREFIXO_API}` : null);
 
 /**
- * @param {{ caminho: string, apiUrlPadrao: string | null }} opcoes
+ * @param {{ caminho: string, apiUrlPadrao: string | null, apiUrlSugerido?: string | null }} opcoes
+ *   `apiUrlSugerido`: endereço que já vem preenchido (editável) na tela de
+ *   primeira execução; não é usado sem a pessoa salvar.
  *   `apiUrlPadrao`: localhost em desenvolvimento; null em produção (a tela
  *   de configuração pede a URL na primeira execução).
  */
-export function criarConfig({ caminho, apiUrlPadrao }) {
+export function criarConfig({ caminho, apiUrlPadrao, apiUrlSugerido = null }) {
   let salvo = {};
   try {
     salvo = JSON.parse(fs.readFileSync(caminho, 'utf8')) ?? {};
@@ -71,7 +73,7 @@ export function criarConfig({ caminho, apiUrlPadrao }) {
 
   return {
     // `impressaoConfigurada`: a primeira execução também pede a impressora (ou "não imprime").
-    obter: () => ({ apiUrl: servidor(), impressaoConfigurada: salvo.impressao !== undefined }),
+    obter: () => ({ apiUrl: servidor(), apiUrlSugerido, impressaoConfigurada: salvo.impressao !== undefined }),
     servidor,
     /** Base das rotas da API (`<servidor>/api`); null se não configurado. */
     apiUrl: () => baseDaApi(servidor()),

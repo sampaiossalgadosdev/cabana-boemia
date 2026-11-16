@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { chamar, pdv } from '../lib/pdv.js';
 import { Logo } from '../componentes/Logo.jsx';
 
-/** Endereço da API. Na primeira execução do app instalado, é a primeira tela. */
-export function TelaConfiguracao({ apiUrl, aoSalvar, aoVoltar }) {
-  const [url, setUrl] = useState(apiUrl ?? '');
+/**
+ * Endereço do servidor. Na primeira execução do app instalado é a primeira tela,
+ * já preenchida com o servidor de produção (`sugestao`), editável.
+ */
+export function TelaConfiguracao({ apiUrl, sugestao = '', aoSalvar, aoVoltar }) {
+  const [url, setUrl] = useState(apiUrl ?? sugestao ?? '');
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -26,10 +29,10 @@ export function TelaConfiguracao({ apiUrl, aoSalvar, aoVoltar }) {
       <form className="cartao-login" onSubmit={salvar}>
         <Logo className="cartao-login__logo" />
         <h1 className="cartao-login__titulo">Servidor do PDV</h1>
-        <p className="cartao-login__texto">Informe o endereço da API do Cabana Boemia.</p>
+        <p className="cartao-login__texto">Endereço do servidor do Cabana Boemia. Confira e salve.</p>
         <label className="campo">
-          <span>Endereço da API</span>
-          <input type="url" required autoFocus placeholder="https://…up.railway.app" value={url}
+          <span>Endereço do servidor</span>
+          <input type="url" required autoFocus placeholder="https://cabana.managerpix.com.br" value={url}
             onChange={(e) => setUrl(e.target.value)} />
         </label>
         {erro && <p className="erro" role="alert">{erro}</p>}

@@ -57,7 +57,9 @@ describe('comandas do salão: abrir, lançar aos poucos, remover, fechar', { ski
     await prisma.produto.update({ where: { nome: 'Prato por kg' }, data: { precoCentavos: 5990, ativo: true } });
     for (const prod of await prisma.produto.findMany()) p[prod.nome] = prod;
     for (const i of await prisma.insumo.findMany()) insumo[i.nome] = i;
-    await criarAtendente({ nome: 'Bia', email: 'bia@teste.com', senha: 'senha-da-bia' });
+    const bia = await criarAtendente({ nome: 'Bia', email: 'bia@teste.com', senha: 'senha-da-bia' });
+    // Fechar comanda exige caixa aberto (as regras do caixa estão em caixa.test.js).
+    await prisma.caixa.create({ data: { abertoPorId: bia.id, valorInicialCentavos: 0 } });
 
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
     criarTempoReal(servidor);

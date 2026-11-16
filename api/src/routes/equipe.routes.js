@@ -21,6 +21,10 @@ export function criarEquipeRoutes({ relogio } = {}) {
   r.patch('/pedidos/:id/finalizar', assincrono(c.finalizarPedido));
   r.patch('/pedidos/:id/cancelar', assincrono(c.cancelarPedido));
   r.post('/pedidos/:id/reimprimir', assincrono(c.reimprimirPedido));
+  r.get('/caixa/atual', assincrono(c.caixaAtual));
+  r.post('/caixa/abrir', assincrono(c.abrirCaixa));
+  r.post('/caixa/movimentos', assincrono(c.movimentoCaixa));
+  r.post('/caixa/fechar', assincrono(c.fecharCaixa));
   r.get('/comandas', assincrono(c.listarComandas));
   r.post('/comandas', assincrono(c.abrirComanda));
   r.get('/comandas/:id', assincrono(c.obterComanda));

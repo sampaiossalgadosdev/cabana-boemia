@@ -1,0 +1,125 @@
+/* ───────── Caixa: botão na barra, abrir caixa, painel e pendentes ───────── */
+
+.caixa-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: #e8f3e9;
+  color: var(--cor-ok);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.caixa-status .conexao__ponto {
+  background: currentColor;
+}
+.caixa-status:focus-visible {
+  outline: 3px solid var(--cor-dourado);
+  outline-offset: 2px;
+}
+.caixa-status--fechado {
+  background: #efe9e2;
+  color: var(--cor-texto-suave);
+  cursor: default;
+}
+.caixa-status--esquecido {
+  background: var(--cor-aviso-fundo);
+  color: var(--cor-laranja);
+}
+.caixa-status--esquecido .conexao__ponto {
+  animation: piscar 1s ease-in-out infinite;
+}
+
+.abrir-caixa {
+  display: grid;
+  place-items: center;
+  min-height: calc(100vh - var(--altura-barra) - 80px);
+}
+.abrir-caixa__cartao {
+  display: grid;
+  gap: 16px;
+  width: min(460px, 100%);
+  padding: 28px;
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+}
+.abrir-caixa__cartao h2 {
+  margin: 0;
+  font-size: 28px;
+}
+.abrir-caixa__nota {
+  font-size: 14px;
+}
+
+.painel-caixa {
+  width: min(680px, calc(100vw - 32px));
+}
+.painel-caixa .segmentado {
+  justify-self: start;
+}
+.painel-caixa__form {
+  display: grid;
+  gap: 12px;
+}
+.painel-caixa__movimentos {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.painel-caixa__movimentos li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--cor-borda);
+}
+
+.pendentes {
+  display: grid;
+  gap: 10px;
+}
+.pendentes .aviso {
+  margin: 0;
+}
+.pendentes__lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.pendente {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 2px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+}
+.pendente__topo {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pendente__nome {
+  font-weight: 700;
+}
+.pendente__acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.pendente .erro {
+  margin: 0;
+}

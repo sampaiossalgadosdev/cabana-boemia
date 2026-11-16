@@ -12,6 +12,7 @@ import * as impressaoRepo from '../repositories/impressao.repository.js';
 import * as pedidoRepo from '../repositories/pedido.repository.js';
 import * as configRepo from '../repositories/configuracao.repository.js';
 import { pedidoPublico } from './pedido.service.js';
+import { resumoParaCupom } from './caixa.service.js';
 
 /** Quantos trabalhos por busca (o agente busca de novo enquanto vier cheio). */
 export const LIMITE_PENDENTES = 50;
@@ -39,8 +40,16 @@ const trabalhoPublico = (t) => ({
   criadoEm: t.criadoEm,
   impressoEm: t.impressoEm,
   pedidoId: t.pedidoId,
+  caixaId: t.caixaId,
   ...(t.pedido ? { pedido: pedidoPublico(t.pedido) } : {}),
 });
+
+/** FECHAMENTO não tem pedido: leva o resumo do caixa (sem esperado nem diferença). */
+async function comResumoDoCaixa(t) {
+  const publico = trabalhoPublico(t);
+  if (t.caixaId) publico.caixa = await resumoParaCupom(t.caixaId);
+  return publico;
+}
 
 /** @returns {{ restaurante: { nome: string }, limite: number, trabalhos: object[] }} */
 export async function listarPendentes(agora = new Date()) {
@@ -51,7 +60,7 @@ export async function listarPendentes(agora = new Date()) {
   return {
     restaurante: { nome: config?.nomeRestaurante ?? 'Cabana Boemia' },
     limite: LIMITE_PENDENTES,
-    trabalhos: trabalhos.map(trabalhoPublico),
+    trabalhos: await Promise.all(trabalhos.map(comResumoDoCaixa)),
   };
 }
 

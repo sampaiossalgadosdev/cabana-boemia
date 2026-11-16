@@ -6,7 +6,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 /** Eventos main → renderer que a página pode escutar. */
-const EVENTOS = ['pedido:novo', 'pedido:atualizado', 'socket:status', 'sessao:expirou', 'impressao:status'];
+const EVENTOS = ['pedido:novo', 'pedido:atualizado', 'socket:status', 'sessao:expirou', 'impressao:status', 'caixa:atualizado'];
 
 const chamar = (canal, ...args) => ipcRenderer.invoke(canal, ...args);
 
@@ -26,6 +26,21 @@ contextBridge.exposeInMainWorld('pdv', {
     cancelar: (id) => chamar('pedidos:cancelar', Number(id)),
     criar: (dados) => chamar('pedidos:criar', dados),
     reimprimir: (id) => chamar('pedidos:reimprimir', Number(id)),
+  },
+  caixa: {
+    atual: () => chamar('caixa:atual'),
+    abrir: (valorInicialCentavos) => chamar('caixa:abrir', Number(valorInicialCentavos)),
+    movimento: (dados) =>
+      chamar('caixa:movimento', {
+        tipo: String(dados?.tipo ?? ''),
+        valorCentavos: Number(dados?.valorCentavos),
+        motivo: String(dados?.motivo ?? ''),
+      }),
+    fechar: (dados) =>
+      chamar('caixa:fechar', {
+        valorContadoCentavos: Number(dados?.valorContadoCentavos),
+        observacao: String(dados?.observacao ?? ''),
+      }),
   },
   comandas: {
     listar: () => chamar('comandas:listar'),

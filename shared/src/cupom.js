@@ -15,7 +15,7 @@ import { formatarTelefone } from './telefone.js';
 import { agruparItens } from './itens.js';
 
 export const LARGURAS = [48, 32];
-export const TIPOS_CUPOM = ['PEDIDO', 'CANCELAMENTO', 'CONTA'];
+export const TIPOS_CUPOM = ['PEDIDO', 'CANCELAMENTO', 'CONTA', 'FECHAMENTO'];
 
 const FUSO = 'America/Sao_Paulo';
 const NOME_CANAL = { SITE: 'Site', WHATSAPP: 'WhatsApp', SALAO: 'Salão' };
@@ -202,9 +202,53 @@ function cabecalho(m, restaurante, titulo, pedido) {
   m.centro(origem(pedido)).separador();
 }
 
+const hora = (instante) => formatarDataHora(instante).slice(11);
+
 /**
- * @param {{ id: number, tipo: 'PEDIDO' | 'CANCELAMENTO' | 'CONTA', criadoEm: string | Date, pedido: object }} trabalho
- *   `pedido` no formato público da API (itens com nome, quantidade, totais em centavos).
+ * Resumo do fechamento de caixa. NUNCA mostra o esperado nem a diferença
+ * (fechamento cego; só o dono vê na retaguarda). Sai depois que o contado já
+ * foi gravado, então os totais por forma não revelam nada a tempo.
+ */
+function cupomFechamento(m, trabalho, restaurante) {
+  const c = trabalho.caixa;
+  m.grande(restaurante.toUpperCase()).separador('=');
+  m.grande('FECHAMENTO DE CAIXA').separador();
+  m.valor('Abertura', formatarDataHora(c.abertoEm));
+  m.valor('Aberto por', c.abertoPor?.nome ?? '-');
+  m.valor('Fechamento', formatarDataHora(c.fechadoEm));
+  m.valor('Fechado por', c.fechadoPor?.nome ?? '-');
+  m.separador();
+  m.valor('Fundo de troco', formatarDinheiro(c.valorInicialCentavos));
+  for (const [tipo, titulo] of [['SUPRIMENTO', 'Suprimentos'], ['SANGRIA', 'Sangrias']]) {
+    const lista = c.movimentos.filter((mv) => mv.tipo === tipo);
+    if (!lista.length) continue;
+    m.texto(`${titulo}:`, { negrito: true });
+    for (const mv of lista) m.valor(`${hora(mv.criadoEm)} ${mv.motivo}`, formatarDinheiro(mv.valorCentavos));
+  }
+  m.separador();
+  m.texto('Vendas por forma de pagamento', { negrito: true });
+  // Dinheiro primeiro: é o que foi contado na gaveta.
+  const ordem = ['DINHEIRO', 'PIX', 'DEBITO', 'CREDITO'];
+  const totais = [...(c.totaisPorForma ?? [])].sort((a, b) => ordem.indexOf(a.forma) - ordem.indexOf(b.forma));
+  if (!totais.length) m.texto('Nenhuma venda');
+  for (const t of totais) {
+    m.valor(`${NOME_PAGAMENTO[t.forma] ?? t.forma} (${t.quantidade})`, formatarDinheiro(t.totalCentavos));
+  }
+  const qtd = totais.reduce((s, t) => s + t.quantidade, 0);
+  const total = totais.reduce((s, t) => s + t.totalCentavos, 0);
+  m.valor(`Total vendido (${qtd})`, formatarDinheiro(total), { negrito: true });
+  m.separador();
+  m.valor('DINHEIRO CONTADO', formatarDinheiro(c.valorContadoCentavos), { negrito: true });
+  if (c.observacao) m.texto(c.observacao, { primeiraLinha: 'Obs: ', recuo: 5 });
+  m.separador();
+  m.centro(`Emitido em ${formatarDataHora(trabalho.criadoEm)}`);
+  return m.linhas;
+}
+
+/**
+ * @param {{ id: number, tipo: 'PEDIDO' | 'CANCELAMENTO' | 'CONTA' | 'FECHAMENTO', criadoEm: string | Date, pedido?: object, caixa?: object }} trabalho
+ *   `pedido` no formato público da API (itens com nome, quantidade, totais em centavos);
+ *   FECHAMENTO traz `caixa` (resumo sem esperado nem diferença) no lugar do pedido.
  * @param {{ colunas?: 48 | 32, restaurante?: string }} [opcoes]
  * @returns {{ texto: string, negrito?: boolean, grande?: boolean }[]}
  */
@@ -213,6 +257,8 @@ export function montarCupom(trabalho, { colunas = 48, restaurante = 'Cabana Boem
   if (!TIPOS_CUPOM.includes(trabalho?.tipo)) throw new Error(`Tipo de cupom inválido: ${trabalho?.tipo}`);
   const { pedido, tipo } = trabalho;
   const m = criarMontador(colunas);
+
+  if (tipo === 'FECHAMENTO') return cupomFechamento(m, trabalho, restaurante);
 
   if (tipo === 'CANCELAMENTO') {
     cabecalho(m, restaurante, 'PEDIDO CANCELADO', pedido);

@@ -94,6 +94,36 @@ export function fechamentoParaApi(d) {
   return { formaPagamento: d.formaPagamento, imprimirConta: d.imprimirConta === true };
 }
 
+/** Teto de sanidade para valores do caixa (R$ 100.000,00), igual ao da API. */
+export const VALOR_CAIXA_MAX = 10_000_000;
+export const TIPOS_MOVIMENTO_CAIXA = ['SANGRIA', 'SUPRIMENTO'];
+
+function centavosCaixa(valor, { minimo = 0, nome = 'o valor' } = {}) {
+  if (!Number.isInteger(valor) || valor < minimo || valor > VALOR_CAIXA_MAX) throw new ErroEntrada(`Informe ${nome}`);
+  return valor;
+}
+
+export const aberturaCaixaParaApi = (valor) => ({
+  valorInicialCentavos: centavosCaixa(valor, { nome: 'o valor inicial' }),
+});
+
+export function movimentoCaixaParaApi(d) {
+  if (!TIPOS_MOVIMENTO_CAIXA.includes(d?.tipo)) throw new ErroEntrada('Escolha sangria ou suprimento');
+  return {
+    tipo: d.tipo,
+    valorCentavos: centavosCaixa(d.valorCentavos, { minimo: 1 }),
+    motivo: texto(d.motivo, 'o motivo', 140).trim(),
+  };
+}
+
+/** Fechamento cego: só o contado e a observação (nada de esperado vindo do renderer). */
+export function fechamentoCaixaParaApi(d) {
+  return {
+    valorContadoCentavos: centavosCaixa(d?.valorContadoCentavos, { nome: 'o valor contado' }),
+    observacao: opcional(d?.observacao, 500),
+  };
+}
+
 export function validarMinutos(valor) {
   if (valor === null || valor === undefined || valor === '') return null;
   if (!Number.isInteger(valor) || valor < TEMPO_MIN || valor > TEMPO_MAX) {
@@ -162,6 +192,14 @@ export function criarHandlers({ config, api, tempoReal, agente, listarImpressora
     'pedidos:reimprimir': async (id) => api.requisitar('POST', `/equipe/pedidos/${idValido(id, 'pedido')}/reimprimir`),
 
     'pedidos:criar': async (dados) => api.requisitar('POST', '/equipe/pedidos', pedidoParaApi(dados)),
+
+    'caixa:atual': async () => api.requisitar('GET', '/equipe/caixa/atual'),
+
+    'caixa:abrir': async (valor) => api.requisitar('POST', '/equipe/caixa/abrir', aberturaCaixaParaApi(valor)),
+
+    'caixa:movimento': async (dados) => api.requisitar('POST', '/equipe/caixa/movimentos', movimentoCaixaParaApi(dados)),
+
+    'caixa:fechar': async (dados) => api.requisitar('POST', '/equipe/caixa/fechar', fechamentoCaixaParaApi(dados)),
 
     'comandas:listar': async () => api.requisitar('GET', '/equipe/comandas'),
 

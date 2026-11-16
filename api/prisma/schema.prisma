@@ -54,6 +54,12 @@ enum TipoTrabalhoImpressao {
   PEDIDO
   CANCELAMENTO
   CONTA
+  FECHAMENTO
+}
+
+enum TipoMovimentoCaixa {
+  SANGRIA
+  SUPRIMENTO
 }
 
 enum StatusTrabalhoImpressao {
@@ -74,9 +80,12 @@ model Usuario {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  refreshTokens  RefreshToken[]
-  pedidosCriados Pedido[]
-  movimentacoes  MovimentacaoEstoque[]
+  refreshTokens   RefreshToken[]
+  pedidosCriados  Pedido[]
+  movimentacoes   MovimentacaoEstoque[]
+  caixasAbertos   Caixa[]               @relation("CaixaAbertoPor")
+  caixasFechados  Caixa[]               @relation("CaixaFechadoPor")
+  movimentosCaixa MovimentoCaixa[]
 }
 
 model RefreshToken {
@@ -278,8 +287,10 @@ model Pedido {
   atualizadoEm        DateTime        @updatedAt
   finalizadoEm        DateTime?
   canceladoEm         DateTime?
+  caixaId             Int? // caixa em que foi FINALIZADO (gravado na finalização)
 
   cliente    Cliente?            @relation(fields: [clienteId], references: [id])
+  caixa      Caixa?              @relation(fields: [caixaId], references: [id], onDelete: Restrict)
   criadoPor  Usuario?            @relation(fields: [criadoPorId], references: [id])
   itens      ItemPedido[]
   impressoes TrabalhoImpressao[]
@@ -288,6 +299,7 @@ model Pedido {
   @@index([status])
   @@index([clienteId, criadoEm])
   @@index([criadoEm])
+  @@index([caixaId])
 }
 
 model ItemPedido {
@@ -320,9 +332,11 @@ model ContadorPedido {
 
 // ───────────── Impressão ─────────────
 
+/// Dono: um pedido (PEDIDO, CANCELAMENTO, CONTA) ou um caixa (FECHAMENTO); exatamente um (CHECK).
 model TrabalhoImpressao {
   id         Int                     @id @default(autoincrement())
-  pedidoId   Int
+  pedidoId   Int?
+  caixaId    Int?
   tipo       TipoTrabalhoImpressao
   status     StatusTrabalhoImpressao @default(PENDENTE)
   tentativas Int                     @default(0)
@@ -330,10 +344,54 @@ model TrabalhoImpressao {
   criadoEm   DateTime                @default(now())
   impressoEm DateTime?
 
-  pedido Pedido @relation(fields: [pedidoId], references: [id])
+  pedido Pedido? @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+  caixa  Caixa?  @relation(fields: [caixaId], references: [id], onDelete: Restrict)
 
   @@index([status, criadoEm])
   @@index([pedidoId])
+  @@index([caixaId])
+}
+
+// ───────── Caixa ─────────
+
+/// Caixa do balcão (dinheiro de salão, delivery e site). Só um aberto por vez:
+/// índice único parcial "Caixa_um_aberto" (WHERE "fechadoEm" IS NULL), só na
+/// migration `caixa` (o Prisma não declara índice parcial). Esperado e diferença
+/// são calculados e gravados no fechamento (cego para a equipe; só o DONO vê).
+model Caixa {
+  id                   Int       @id @default(autoincrement())
+  abertoPorId          Int
+  abertoEm             DateTime  @default(now())
+  valorInicialCentavos Int // fundo de troco
+  fechadoPorId         Int?
+  fechadoEm            DateTime?
+  valorContadoCentavos Int?
+  esperadoCentavos     Int?
+  diferencaCentavos    Int? // contado − esperado
+  observacao           String?
+
+  abertoPor  Usuario             @relation("CaixaAbertoPor", fields: [abertoPorId], references: [id])
+  fechadoPor Usuario?            @relation("CaixaFechadoPor", fields: [fechadoPorId], references: [id], onDelete: Restrict)
+  movimentos MovimentoCaixa[]
+  pedidos    Pedido[]
+  impressoes TrabalhoImpressao[]
+
+  @@index([abertoEm])
+}
+
+model MovimentoCaixa {
+  id            Int                @id @default(autoincrement())
+  caixaId       Int
+  tipo          TipoMovimentoCaixa
+  valorCentavos Int // > 0 (CHECK); o sinal vem do tipo
+  motivo        String
+  usuarioId     Int
+  criadoEm      DateTime           @default(now())
+
+  caixa   Caixa   @relation(fields: [caixaId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@index([caixaId])
 }
 
 // ───────────── Configuração (linha única) ─────────────

@@ -69,3 +69,29 @@ export const contaSalao = {
     ],
   },
 };
+
+export const fechamentoCaixa = {
+  id: 9004,
+  tipo: 'FECHAMENTO',
+  criadoEm: '2026-11-16T02:31:00.000Z', // 23:31 em São Paulo
+  pedidoId: null,
+  caixaId: 7,
+  caixa: {
+    id: 7,
+    abertoEm: '2026-11-15T13:58:00.000Z',
+    abertoPor: { id: 2, nome: 'Ana' },
+    valorInicialCentavos: 10000,
+    fechadoEm: '2026-11-16T02:30:00.000Z',
+    fechadoPor: { id: 3, nome: 'Bia' },
+    valorContadoCentavos: 14500,
+    observacao: 'Faltou uma moeda de R$ 0,50',
+    movimentos: [
+      { id: 1, tipo: 'SUPRIMENTO', valorCentavos: 2000, motivo: 'Troco do banco', criadoEm: '2026-11-15T15:10:00.000Z', usuario: { id: 2, nome: 'Ana' } },
+      { id: 2, tipo: 'SANGRIA', valorCentavos: 5000, motivo: 'Depósito', criadoEm: '2026-11-15T19:45:00.000Z', usuario: { id: 3, nome: 'Bia' } },
+    ],
+    totaisPorForma: [
+      { forma: 'PIX', quantidade: 1, totalCentavos: 4590 },
+      { forma: 'DINHEIRO', quantidade: 3, totalCentavos: 7537 },
+    ],
+  },
+};

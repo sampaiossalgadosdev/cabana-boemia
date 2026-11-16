@@ -78,6 +78,32 @@ function criarServidorFalso() {
       });
       return id;
     },
+    /** Trabalho FECHAMENTO: sem pedido, com o resumo do caixa. */
+    novoFechamento() {
+      const id = proximoId++;
+      trabalhos.set(id, {
+        id,
+        tipo: 'FECHAMENTO',
+        status: 'PENDENTE',
+        tentativas: 0,
+        criadoEm: '2026-11-16T02:31:00.000Z',
+        pedidoId: null,
+        caixaId: 7,
+        caixa: {
+          id: 7,
+          abertoEm: '2026-11-15T13:58:00.000Z',
+          abertoPor: { id: 2, nome: 'Ana' },
+          valorInicialCentavos: 10000,
+          fechadoEm: '2026-11-16T02:30:00.000Z',
+          fechadoPor: { id: 2, nome: 'Ana' },
+          valorContadoCentavos: 14500,
+          observacao: null,
+          movimentos: [],
+          totaisPorForma: [{ forma: 'DINHEIRO', quantidade: 2, totalCentavos: 4500 }],
+        },
+      });
+      return id;
+    },
     ping: async () => {
       if (fora) throw semConexao();
     },
@@ -113,9 +139,11 @@ function criarServidorFalso() {
 /** Impressora falsa: guarda os ids impressos; pode ficar "sem papel". */
 function criarImpressoraFalsa() {
   const impressos = [];
+  const documentos = [];
   let problema = null;
   return {
     impressos,
+    documentos,
     semPapel: () => {
       problema = new ErroImpressora('sem-papel', 'Sem papel');
     },
@@ -130,8 +158,9 @@ function criarImpressoraFalsa() {
       await esperar(2);
       if (problema) throw problema;
       assert.ok(doc.bytes instanceof Uint8Array && doc.bytes.length > 0, 'bytes ESC/POS');
-      assert.match(doc.texto, /PEDIDO #/);
+      assert.match(doc.texto, /PEDIDO #|FECHAMENTO DE CAIXA/);
       impressos.push(doc.trabalhoId);
+      documentos.push(doc.nomeDocumento);
       this.aoImprimir?.(doc.trabalhoId);
     },
   };
@@ -197,6 +226,17 @@ describe('agente de impressão', () => {
     assert.deepEqual(servidor.confirmacoes, ids, 'confirmados uma vez cada');
     assert.ok([...servidor.trabalhos.values()].every((t) => t.status === 'IMPRESSO'));
     assert.equal(ultimo().pendentes, 0);
+  });
+
+  test('FECHAMENTO de caixa (sem pedido) imprime na ordem e confirma, com nome de documento do caixa', async () => {
+    const servidor = criarServidorFalso();
+    const impressora = criarImpressoraFalsa();
+    const { agente } = montarAgente({ servidor, impressora });
+    const ids = [servidor.novo(), servidor.novoFechamento()];
+    agente.ligar();
+    await esperarAte(() => servidor.confirmacoes.length === 2, 'confirmar os 2');
+    assert.deepEqual(impressora.impressos, ids);
+    assert.deepEqual(impressora.documentos, [`pedido-1_pedido_trabalho-${ids[0]}`, `caixa-7_fechamento_trabalho-${ids[1]}`]);
   });
 
   test('avisos simultâneos não duplicam (um ciclo de cada vez)', async () => {

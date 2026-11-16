@@ -5,6 +5,7 @@ import { criarUsuarioRoutes } from './usuario.routes.js';
 import { criarPublicoRoutes } from './publico.routes.js';
 import { criarClienteRoutes } from './cliente.routes.js';
 import { criarEquipeRoutes } from './equipe.routes.js';
+import { criarRetaguardaRoutes } from './retaguarda.routes.js';
 
 /**
  * Rotas montadas por app: cada criarApp() tem seu próprio rate limiter
@@ -19,5 +20,6 @@ export function criarRotas(opcoes = {}) {
   routes.use('/publico', criarPublicoRoutes(opcoes));
   routes.use('/cliente', criarClienteRoutes(opcoes));
   routes.use('/equipe', criarEquipeRoutes(opcoes));
+  routes.use('/retaguarda', criarRetaguardaRoutes(opcoes));
   return routes;
 }

@@ -76,7 +76,9 @@ describe('rotas da equipe (PDV) e socket', { skip: semBancoDeTeste }, () => {
     await prisma.insumo.updateMany({ data: { estoque: 50 } });
     centro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
     await criarDono({ nome: 'Dono', email: 'dono@teste.com', senha: 'senha-do-dono' });
-    await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
+    const anaCaixa = await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
+    // Finalizar exige caixa aberto (as regras do caixa estão em caixa.test.js).
+    await prisma.caixa.create({ data: { abertoPorId: anaCaixa.id, valorInicialCentavos: 0 } });
 
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
     criarTempoReal(servidor);

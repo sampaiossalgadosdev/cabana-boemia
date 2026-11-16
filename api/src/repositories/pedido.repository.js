@@ -109,7 +109,7 @@ export function criarMovimentacoes(dados, db = prisma) {
 }
 
 export function criarTrabalhoImpressao(dados, db = prisma) {
-  return db.trabalhoImpressao.create({ data: dados, select: { id: true, pedidoId: true, tipo: true, status: true } });
+  return db.trabalhoImpressao.create({ data: dados, select: { id: true, pedidoId: true, caixaId: true, tipo: true, status: true } });
 }
 
 export function buscarPorId(id, db = prisma) {
@@ -148,10 +148,10 @@ export function listarDoDia({ dataRef, canais, status }, db = prisma) {
  * Finaliza só se ainda estiver aberto (UPDATE condicionado ao status: duas
  * atendentes finalizando ao mesmo tempo, só uma vence). Devolve o count.
  */
-export async function finalizarSeAberto(id, { formaPagamento, trocoParaCentavos, finalizadoEm }, statusAbertos, db = prisma) {
+export async function finalizarSeAberto(id, { formaPagamento, trocoParaCentavos, finalizadoEm, caixaId }, statusAbertos, db = prisma) {
   const { count } = await db.pedido.updateMany({
     where: { id, status: { in: statusAbertos } },
-    data: { status: 'FINALIZADO', formaPagamento, trocoParaCentavos, finalizadoEm },
+    data: { status: 'FINALIZADO', formaPagamento, trocoParaCentavos, finalizadoEm, caixaId },
   });
   return count;
 }

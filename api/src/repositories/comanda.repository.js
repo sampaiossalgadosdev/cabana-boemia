@@ -53,10 +53,10 @@ export function vendasDoItem(itemPedidoId, tx) {
   });
 }
 
-export function fechar(id, { formaPagamento, finalizadoEm }, tx) {
+export function fechar(id, { formaPagamento, finalizadoEm, caixaId }, tx) {
   return tx.pedido.update({
     where: { id },
-    data: { status: 'FINALIZADO', formaPagamento, trocoParaCentavos: null, finalizadoEm },
+    data: { status: 'FINALIZADO', formaPagamento, trocoParaCentavos: null, finalizadoEm, caixaId },
   });
 }
 

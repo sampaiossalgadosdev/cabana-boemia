@@ -10,6 +10,7 @@ const SELECT_TRABALHO = {
   criadoEm: true,
   impressoEm: true,
   pedidoId: true,
+  caixaId: true,
 };
 
 /** Pendentes criados a partir de `desde`, do mais antigo para o mais novo (ordem de impressão). */

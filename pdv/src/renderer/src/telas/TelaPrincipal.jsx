@@ -3,6 +3,7 @@ import { chamar, pdv } from '../lib/pdv.js';
 import { BarraSuperior } from '../componentes/BarraSuperior.jsx';
 import { FilaPedidos } from '../componentes/FilaPedidos.jsx';
 import { NovoDelivery } from '../componentes/delivery/NovoDelivery.jsx';
+import { Salao } from '../componentes/salao/Salao.jsx';
 
 const AVISO_MS = 6000;
 
@@ -69,12 +70,7 @@ export function TelaPrincipal({ usuario, aoSair }) {
             }}
           />
         )}
-        {aba === 'salao' && (
-          <section className="em-breve">
-            <h2>Salão</h2>
-            <p>Comandas do salão chegam numa próxima etapa.</p>
-          </section>
-        )}
+        {aba === 'salao' && <Salao statusConexao={status} />}
       </main>
     </div>
   );

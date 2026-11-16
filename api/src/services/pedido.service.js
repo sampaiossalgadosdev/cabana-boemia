@@ -34,7 +34,7 @@ const STATUS_INICIAL = { SITE: 'CONFIRMADO', WHATSAPP: 'CONFIRMADO', SALAO: 'ABE
 /** Status de pedido "ainda aberto" (na fila; pode ser finalizado ou cancelado). */
 export const STATUS_ABERTOS = ['ABERTO', 'CONFIRMADO'];
 
-const OPCOES_TRANSACAO = { maxWait: 10_000, timeout: 15_000 };
+export const OPCOES_TRANSACAO = { maxWait: 10_000, timeout: 15_000 };
 
 // ───────── Funções puras (testáveis sem banco) ─────────
 
@@ -220,6 +220,67 @@ export function pedidoPublico(p) {
   };
 }
 
+// ───────── Itens e estoque (pedido inteiro ou item avulso da comanda) ─────────
+
+/**
+ * Grava os itens (snapshot de nome e preço) e uma MovimentacaoEstoque VENDA
+ * por baixa (delta negativo). O estoque já foi baixado por `baixarEstoque`.
+ * @returns {Promise<number[]>} ids dos itens criados
+ */
+export async function gravarItens(tx, pedidoId, linhas, usuarioId = null) {
+  const ids = [];
+  const movimentacoes = [];
+  for (const l of linhas) {
+    const { id: itemPedidoId } = await pedidoRepo.criarItem(
+      {
+        pedidoId,
+        produtoId: l.produto.id,
+        nomeSnapshot: l.produto.nome,
+        precoUnitarioCentavos: l.precoUnitarioCentavos,
+        quantidade: l.quantidade,
+        pesoGramas: l.pesoGramas,
+        totalCentavos: l.totalCentavos,
+        observacao: l.observacao,
+      },
+      tx,
+    );
+    ids.push(itemPedidoId);
+    if (l.pesoGramas != null) continue; // por kg não controla estoque
+    const base = { tipo: 'VENDA', itemPedidoId, usuarioId };
+    if (l.produto.controlaEstoque) {
+      movimentacoes.push({ ...base, produtoId: l.produto.id, quantidade: -l.quantidade });
+    }
+    for (const pi of l.produto.insumos) {
+      movimentacoes.push({ ...base, insumoId: pi.insumoId, quantidade: -(pi.quantidade * l.quantidade) });
+    }
+  }
+  if (movimentacoes.length) await pedidoRepo.criarMovimentacoes(movimentacoes, tx);
+  return ids;
+}
+
+/**
+ * Devolve EXATAMENTE o que as vendas baixaram (somado, em ordem de id, como
+ * a baixa) e grava um ESTORNO por VENDA (delta oposto).
+ * @param {{ produtoId: number|null, insumoId: number|null, quantidade: number, itemPedidoId: number }[]} vendas
+ */
+export async function estornarVendas(tx, vendas, usuarioId = null) {
+  if (!vendas.length) return;
+  const devolver = somarDevolucoes(vendas);
+  for (const p of devolver.produtos) await pedidoRepo.devolverEstoqueProduto(p.id, p.quantidade, tx);
+  for (const i of devolver.insumos) await pedidoRepo.devolverEstoqueInsumo(i.id, i.quantidade, tx);
+  await pedidoRepo.criarMovimentacoes(
+    vendas.map((v) => ({
+      tipo: 'ESTORNO',
+      produtoId: v.produtoId,
+      insumoId: v.insumoId,
+      quantidade: -v.quantidade,
+      itemPedidoId: v.itemPedidoId,
+      usuarioId,
+    })),
+    tx,
+  );
+}
+
 // ───────── Criação ─────────
 
 /**
@@ -375,31 +436,7 @@ async function criarNaTransacao(tx, d) {
   );
 
   // 8. Itens (snapshot de nome e preço) + histórico de estoque por item.
-  const movimentacoes = [];
-  for (const l of valores.linhas) {
-    const { id: itemPedidoId } = await pedidoRepo.criarItem(
-      {
-        pedidoId,
-        produtoId: l.produto.id,
-        nomeSnapshot: l.produto.nome,
-        precoUnitarioCentavos: l.precoUnitarioCentavos,
-        quantidade: l.quantidade,
-        pesoGramas: l.pesoGramas,
-        totalCentavos: l.totalCentavos,
-        observacao: l.observacao,
-      },
-      tx,
-    );
-    if (l.pesoGramas != null) continue;
-    const base = { tipo: 'VENDA', itemPedidoId, usuarioId: d.usuarioId };
-    if (l.produto.controlaEstoque) {
-      movimentacoes.push({ ...base, produtoId: l.produto.id, quantidade: -l.quantidade });
-    }
-    for (const pi of l.produto.insumos) {
-      movimentacoes.push({ ...base, insumoId: pi.insumoId, quantidade: -(pi.quantidade * l.quantidade) });
-    }
-  }
-  if (movimentacoes.length) await pedidoRepo.criarMovimentacoes(movimentacoes, tx);
+  await gravarItens(tx, pedidoId, valores.linhas, d.usuarioId);
 
   // 9. Fila de impressão.
   const trabalho = await pedidoRepo.criarTrabalhoImpressao({ pedidoId, tipo: 'PEDIDO', status: 'PENDENTE' }, tx);
@@ -492,7 +529,8 @@ export function somarDevolucoes(vendas) {
  * Cancela um pedido aberto numa transação: muda o status (UPDATE condicionado;
  * já encerrado = 409), devolve EXATAMENTE o que foi baixado na venda (as
  * movimentações VENDA dos itens, não a receita atual), grava ESTORNO por
- * movimentação e cria o TrabalhoImpressao CANCELAMENTO. Eventos depois do commit.
+ * movimentação e cria o TrabalhoImpressao CANCELAMENTO. Comanda do salão não
+ * imprime cancelamento (nada dela foi impresso). Eventos depois do commit.
  */
 export async function cancelarPedido(id, { usuarioId = null, agora = new Date() } = {}) {
   const { pedido, trabalho } = await prisma.$transaction(async (tx) => {
@@ -504,33 +542,18 @@ export async function cancelarPedido(id, { usuarioId = null, agora = new Date() 
       throw new ErroHttp(409, `Pedido já está ${situacao}`, { codigo: 'PEDIDO_ENCERRADO' });
     }
 
-    const vendas = await pedidoRepo.vendasDoPedido(id, tx);
-    const devolver = somarDevolucoes(vendas);
-    for (const p of devolver.produtos) await pedidoRepo.devolverEstoqueProduto(p.id, p.quantidade, tx);
-    for (const i of devolver.insumos) await pedidoRepo.devolverEstoqueInsumo(i.id, i.quantidade, tx);
-    if (vendas.length) {
-      await pedidoRepo.criarMovimentacoes(
-        vendas.map((v) => ({
-          tipo: 'ESTORNO',
-          produtoId: v.produtoId,
-          insumoId: v.insumoId,
-          quantidade: -v.quantidade,
-          itemPedidoId: v.itemPedidoId,
-          usuarioId,
-        })),
-        tx,
-      );
-    }
+    await estornarVendas(tx, await pedidoRepo.vendasDoPedido(id, tx), usuarioId);
 
-    const trabalho = await pedidoRepo.criarTrabalhoImpressao(
-      { pedidoId: id, tipo: 'CANCELAMENTO', status: 'PENDENTE' },
-      tx,
-    );
-    return { pedido: await pedidoRepo.buscarPorId(id, tx), trabalho };
+    const pedido = await pedidoRepo.buscarPorId(id, tx);
+    const trabalho =
+      pedido.canal === 'SALAO'
+        ? null
+        : await pedidoRepo.criarTrabalhoImpressao({ pedidoId: id, tipo: 'CANCELAMENTO', status: 'PENDENTE' }, tx);
+    return { pedido, trabalho };
   }, OPCOES_TRANSACAO);
 
   const publico = pedidoPublico(pedido);
   emitirParaEquipe('pedido:atualizado', publico);
-  emitirParaEquipe('impressao:nova', trabalho);
+  if (trabalho) emitirParaEquipe('impressao:nova', trabalho);
   return publico;
 }

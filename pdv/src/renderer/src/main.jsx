@@ -5,6 +5,7 @@ import './estilos/tokens.css';
 import './estilos/app.css';
 import './estilos/delivery.css';
 import './estilos/impressao.css';
+import './estilos/salao.css';
 
 createRoot(document.getElementById('raiz')).render(
   <StrictMode>

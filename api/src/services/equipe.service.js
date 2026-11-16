@@ -176,6 +176,7 @@ export function saldoDisponivel(produto) {
  * Grade do lançamento: produtos do turno pedido, ou do ativo, ou (loja
  * fechada) do da próxima abertura. Esgotado vem marcado (a grade desabilita);
  * fora de "disponível hoje" vem marcado mas pode ser lançado (só o site bloqueia).
+ * `porKg`: produtos por quilo do turno (preço do quilo), para o salão.
  * @param {{ turnoId?: number }} filtro
  */
 export async function cardapioDaEquipe({ turnoId } = {}, agora = new Date()) {
@@ -196,7 +197,7 @@ export async function cardapioDaEquipe({ turnoId } = {}, agora = new Date()) {
     turnoAtivo: ativo,
     turnos: turnos.map((t) => ({ id: t.id, nome: t.nome })),
   };
-  if (!turno) return { ...base, categorias: [] };
+  if (!turno) return { ...base, categorias: [], porKg: [] };
 
   const categorias = [];
   for (const p of await equipeRepo.listarProdutosDoTurno(turno.id)) {
@@ -215,5 +216,7 @@ export async function cardapioDaEquipe({ turnoId } = {}, agora = new Date()) {
       saldo: saldoDisponivel(p),
     });
   }
-  return { ...base, categorias };
+  // "Prato por kg" do salão: botão próprio com teclado de gramas (a grade é só UNIDADE).
+  const porKg = await equipeRepo.listarPorKgDoTurno(turno.id);
+  return { ...base, categorias, porKg };
 }

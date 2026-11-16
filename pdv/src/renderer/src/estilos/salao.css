@@ -1,0 +1,209 @@
+/* ───────── Salão: grade de comandas, comanda aberta, teclado de peso ───────── */
+
+.salao {
+  display: grid;
+  gap: 16px;
+}
+.salao .fila__cabecalho {
+  flex-wrap: wrap;
+}
+.salao__busca {
+  flex: 1 1 260px;
+  max-width: 420px;
+  min-height: 46px;
+  margin-left: auto;
+  padding: 0 14px;
+  border: 2px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+  font: inherit;
+  font-size: 17px;
+}
+.salao__busca:focus-visible {
+  outline: 3px solid var(--cor-dourado);
+  outline-offset: 1px;
+}
+
+.nova-comanda {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto auto;
+  align-items: end;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+}
+.nova-comanda .botao {
+  min-height: 54px;
+}
+.nova-comanda__erro {
+  grid-column: 1 / -1;
+}
+
+.salao__grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.cartao-comanda {
+  display: grid;
+  gap: 6px;
+  min-height: 140px;
+  padding: 16px;
+  border: 2px solid var(--cor-borda);
+  border-left: 6px solid var(--cor-dourado);
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+  color: var(--cor-texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cartao-comanda:hover {
+  border-color: var(--cor-vermelho);
+}
+.cartao-comanda:focus-visible,
+.botao-kg:focus-visible,
+.tecla:focus-visible {
+  outline: 3px solid var(--cor-dourado);
+  outline-offset: 2px;
+}
+.cartao-comanda__nome {
+  font-size: 20px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.cartao-comanda__info {
+  color: var(--cor-texto-suave);
+}
+.cartao-comanda__total {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--cor-vermelho-escuro);
+}
+.cartao-comanda__rodape {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--cor-texto-suave);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Comanda aberta: grade à esquerda, itens à direita. */
+.comanda {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 16px;
+  align-items: start;
+}
+.comanda__grade .grade__topo .botao {
+  margin-left: 0;
+}
+.comanda__grade .grade__topo .segmentado {
+  margin-left: auto;
+}
+.comanda__kg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.botao-kg {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 280px;
+  min-height: 110px;
+  padding: 18px 22px;
+  border: 0;
+  border-radius: var(--raio);
+  background: var(--cor-vermelho);
+  box-shadow: var(--sombra);
+  color: var(--cor-branco);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.botao-kg:hover {
+  background: var(--cor-vermelho-escuro);
+}
+.botao-kg:active {
+  transform: scale(0.99);
+}
+.botao-kg__nome {
+  font-size: 26px;
+  font-weight: 800;
+}
+.botao-kg__preco {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--cor-creme);
+}
+.comanda__cabecalho h2 {
+  margin: 0;
+  font-size: 24px;
+  overflow-wrap: anywhere;
+}
+.comanda__confirmar .botao {
+  min-height: 36px;
+}
+.comanda__total {
+  padding-top: 8px;
+  border-top: 2px solid var(--cor-borda);
+  font-size: 22px;
+}
+.item__qtd {
+  min-width: 2.5em;
+  font-weight: 700;
+}
+
+/* Teclado de peso */
+.teclado-peso {
+  width: min(440px, calc(100vw - 32px));
+}
+.teclado-peso__visor {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-preto);
+  color: var(--cor-branco);
+}
+.teclado-peso__gramas {
+  font-size: 40px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.teclado-peso__valor {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--cor-dourado);
+}
+.teclado-peso__teclas {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.tecla {
+  min-height: 64px;
+  border: 2px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+  color: var(--cor-texto);
+  font: 700 26px/1 var(--fonte-base);
+  cursor: pointer;
+}
+.tecla:active:not(:disabled) {
+  background: var(--cor-borda);
+}
+.tecla--acao {
+  background: #efe9e2;
+}
+
+.fechar-conta__total {
+  font-size: 24px;
+  color: var(--cor-vermelho-escuro);
+}

@@ -147,6 +147,44 @@ describe('handlers IPC', () => {
     }
   });
 
+  test('comandas: rotas fixas e só os campos aceitos (sem preço injetado)', async () => {
+    const { h, chamadas } = montar();
+    await h['comandas:listar']();
+    await h['comandas:abrir']({ nomeCliente: '  Maria ', mesaRotulo: '', canal: 'SITE' });
+    await h['comandas:lancarItem'](5, { produtoId: 2, pesoGramas: 487, quantidade: 9, precoCentavos: 1 });
+    await h['comandas:lancarItem'](5, { produtoId: 3, observacao: '  ' });
+    await h['comandas:removerItem'](5, 11);
+    await h['comandas:fechar'](5, { formaPagamento: 'PIX', imprimirConta: 'sim', status: 'ABERTO' });
+    assert.deepEqual(chamadas, [
+      ['GET', '/equipe/comandas'],
+      ['POST', '/equipe/comandas', { nomeCliente: 'Maria', mesaRotulo: null }],
+      ['POST', '/equipe/comandas/5/itens', { produtoId: 2, pesoGramas: 487 }],
+      ['POST', '/equipe/comandas/5/itens', { produtoId: 3, quantidade: 1 }],
+      ['DELETE', '/equipe/comandas/5/itens/11'],
+      ['POST', '/equipe/comandas/5/fechar', { formaPagamento: 'PIX', imprimirConta: false }],
+    ]);
+  });
+
+  test('comandas: recusa id, peso, nome e forma inválidos antes de chamar a API', async () => {
+    const { h, chamadas } = montar();
+    const ruins = [
+      ['comandas:abrir', [{ nomeCliente: '   ' }]],
+      ['comandas:lancarItem', [0, { produtoId: 1 }]],
+      ['comandas:lancarItem', [1, { produtoId: 1, pesoGramas: 0 }]],
+      ['comandas:lancarItem', [1, { produtoId: 1, pesoGramas: 5001 }]],
+      ['comandas:lancarItem', [1, { produtoId: 1, pesoGramas: 12.5 }]],
+      ['comandas:removerItem', [1, 'x']],
+      ['comandas:fechar', [1, {}]],
+      ['comandas:fechar', [1, { formaPagamento: 'FIADO' }]],
+    ];
+    for (const [canal, args] of ruins) {
+      const r = await executar(h[canal], args);
+      assert.equal(r.ok, false, `${canal} ${JSON.stringify(args)}`);
+      assert.equal(r.erro.codigo, 'VALIDACAO');
+    }
+    assert.equal(chamadas.length, 0);
+  });
+
   test('cancelar valida o id; busca de cliente vai codificada na URL', async () => {
     const { h, chamadas } = montar();
     assert.equal((await executar(h['pedidos:cancelar'], ['1'])).ok, false);

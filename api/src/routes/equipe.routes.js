@@ -21,6 +21,12 @@ export function criarEquipeRoutes({ relogio } = {}) {
   r.patch('/pedidos/:id/finalizar', assincrono(c.finalizarPedido));
   r.patch('/pedidos/:id/cancelar', assincrono(c.cancelarPedido));
   r.post('/pedidos/:id/reimprimir', assincrono(c.reimprimirPedido));
+  r.get('/comandas', assincrono(c.listarComandas));
+  r.post('/comandas', assincrono(c.abrirComanda));
+  r.get('/comandas/:id', assincrono(c.obterComanda));
+  r.post('/comandas/:id/itens', assincrono(c.lancarItemComanda));
+  r.delete('/comandas/:id/itens/:itemId', assincrono(c.removerItemComanda));
+  r.post('/comandas/:id/fechar', assincrono(c.fecharComanda));
   r.get('/impressoes/pendentes', assincrono(c.impressoesPendentes));
   r.post('/impressoes/:id/confirmar', assincrono(c.confirmarImpressao));
   r.post('/impressoes/:id/falha', assincrono(c.falhaImpressao));

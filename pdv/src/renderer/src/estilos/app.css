@@ -298,12 +298,6 @@ input:focus-visible {
   padding: 20px;
 }
 
-.em-breve {
-  padding: 40px;
-  text-align: center;
-  color: var(--cor-texto-suave);
-}
-
 .fila__cabecalho {
   display: flex;
   align-items: center;

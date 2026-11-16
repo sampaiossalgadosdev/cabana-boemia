@@ -85,12 +85,18 @@ describe('cupom.js', () => {
     }
   });
 
-  test('CONTA: mesa, peso, sem bloco de cliente nem pagamento', () => {
+  test('CONTA: nome da comanda, mesa, peso e forma de pagamento; sem telefone nem taxa', () => {
     const texto = cupomParaTexto(montarCupom(contaSalao, { colunas: 48 }), 48);
     assert.match(texto, /Salão - Mesa 4/);
+    assert.match(texto, /Cliente: Carlos/);
     assert.match(texto, /0,455 kg Prato por kg +R\$ 27,25/);
     assert.match(texto, /R\$ 59,90\/kg/);
-    assert.doesNotMatch(texto, /Cliente:|Pagamento|Taxa de entrega/);
+    assert.match(texto, /Pagamento +Débito/);
+    assert.match(texto, /4x Refrigerante Lata +R\$ 20,00/, 'toques separados agrupados na conta');
+    assert.match(texto, /R\$ 5,00 cada/);
+    assert.match(texto, /1x Refrigerante Lata +R\$ 5,00\n.*OBS: bem gelado/, 'com observação fica em linha própria');
+    assert.match(texto, /TOTAL +R\$ 63,95/);
+    assert.doesNotMatch(texto, /Tel:|Taxa de entrega|Troco/);
     assert.match(texto, /Não é documento fiscal/);
   });
 

@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     "./telefone": "./src/telefone.js",
-    "./cupom": "./src/cupom.js"
+    "./cupom": "./src/cupom.js",
+    "./itens": "./src/itens.js"
   },
   "scripts": {
     "dev": "echo \"[shared] dev ainda nao configurado\"",

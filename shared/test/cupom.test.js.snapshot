@@ -72,13 +72,20 @@ exports[`cupom.js > snapshot CONTA (salão, por kg) em 32 colunas 1`] = `
            PEDIDO #3
          Salão - Mesa 4
 --------------------------------
+Cliente: Carlos
+--------------------------------
 0,455 kg Prato por kg   R$ 27,25
          R$ 59,90/kg
 2x Suco de laranja      R$ 11,70
    R$ 5,85 cada
    OBS: sem gelo
+4x Refrigerante Lata    R$ 20,00
+   R$ 5,00 cada
+1x Refrigerante Lata     R$ 5,00
+   OBS: bem gelado
 --------------------------------
-TOTAL                   R$ 38,95
+TOTAL                   R$ 63,95
+Pagamento                 Débito
 --------------------------------
   Emitida em 15/11/2026 12:05
      Não é documento fiscal
@@ -92,13 +99,20 @@ exports[`cupom.js > snapshot CONTA (salão, por kg) em 48 colunas 1`] = `
                    PEDIDO #3
                  Salão - Mesa 4
 ------------------------------------------------
+Cliente: Carlos
+------------------------------------------------
 0,455 kg Prato por kg                   R$ 27,25
          R$ 59,90/kg
 2x Suco de laranja                      R$ 11,70
    R$ 5,85 cada
    OBS: sem gelo
+4x Refrigerante Lata                    R$ 20,00
+   R$ 5,00 cada
+1x Refrigerante Lata                     R$ 5,00
+   OBS: bem gelado
 ------------------------------------------------
-TOTAL                                   R$ 38,95
+TOTAL                                   R$ 63,95
+Pagamento                                 Débito
 ------------------------------------------------
           Emitida em 15/11/2026 12:05
              Não é documento fiscal

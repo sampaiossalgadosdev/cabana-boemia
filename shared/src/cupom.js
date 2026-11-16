@@ -12,6 +12,7 @@
  * dupla ocupa duas colunas por caractere).
  */
 import { formatarTelefone } from './telefone.js';
+import { agruparItens } from './itens.js';
 
 export const LARGURAS = [48, 32];
 export const TIPOS_CUPOM = ['PEDIDO', 'CANCELAMENTO', 'CONTA'];
@@ -162,8 +163,8 @@ function blocoCliente(m, pedido) {
   m.separador();
 }
 
-function blocoItens(m, pedido, { observacoes = true } = {}) {
-  for (const item of pedido.itens) {
+function blocoItens(m, pedido, { observacoes = true, itens = pedido.itens } = {}) {
+  for (const item of itens) {
     const qtd = item.pesoGramas ? `${formatarPeso(item.pesoGramas)} ` : `${item.quantidade}x `;
     const linhas = colunasLR(item.nome, formatarDinheiro(item.totalCentavos), m.colunas - qtd.length);
     linhas.forEach((l, i) => m.linhas.push({ texto: (i === 0 ? qtd : ' '.repeat(qtd.length)) + l }));
@@ -227,8 +228,13 @@ export function montarCupom(trabalho, { colunas = 48, restaurante = 'Cabana Boem
 
   if (tipo === 'CONTA') {
     cabecalho(m, restaurante, 'CONTA', pedido);
-    blocoItens(m, pedido);
+    // Comanda do salão: o nome é o que a atendente usa para entregar a conta.
+    m.texto(pedido.nomeCliente, { negrito: true, primeiraLinha: 'Cliente: ', recuo: 9 });
+    m.separador();
+    // Um ItemPedido por toque no banco; na conta, "4x Refrigerante Lata".
+    blocoItens(m, pedido, { itens: agruparItens(pedido.itens) });
     blocoTotais(m, pedido);
+    blocoPagamento(m, pedido);
     m.separador();
     m.centro(`Emitida em ${formatarDataHora(trabalho.criadoEm)}`);
     m.centro('Não é documento fiscal');

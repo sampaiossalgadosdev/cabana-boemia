@@ -131,6 +131,25 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - `PATCH /equipe/pedidos/:id/cancelar` (`pedidoService.cancelarPedido`): uma transação faz UPDATE condicionado ao status aberto (já cancelado/finalizado = 409 `PEDIDO_ENCERRADO`; concorrentes: só um vence), devolve **exatamente as movimentações VENDA** dos itens não cancelados do pedido (não a receita atual, que pode ter mudado), somadas e em ordem de id (produtos, depois insumos, como a baixa), grava uma `MovimentacaoEstoque` ESTORNO por VENDA (delta oposto, `usuarioId` de quem cancelou), marca `canceladoEm` e cria `TrabalhoImpressao` CANCELAMENTO/PENDENTE. Itens continuam no pedido (para o cupom). Depois do commit: `pedido:atualizado` e `impressao:nova`. Futuro cancelamento de item deve marcar `ItemPedido.canceladoEm` e estornar o item (o cancelamento do pedido já ignora itens cancelados).
 - `STATUS_ABERTOS` (`ABERTO`, `CONFIRMADO`) mora em `pedido.service`. Schemas zod compartilhados site/equipe em `controllers/esquemas.js`.
 
+## Salão (comandas)
+- Comanda = `Pedido` canal `SALAO`, status `ABERTO` enquanto o cliente come, com o **nome do cliente** (`nomeCliente`) e mesa opcional. Recebe itens aos poucos; cada item **baixa o estoque no lançamento** (mesma regra atômica), remover devolve, fechar não mexe no estoque.
+- API (`services/comanda.service.js`, rotas em `/equipe`):
+  - `GET /comandas`: todas as abertas do salão, **de qualquer dia** (cliente que fica depois da meia-noite continua na grade), da mais antiga para a mais nova. `GET /comandas/:id` (pedido que não é do salão = 404).
+  - `POST /comandas { nomeCliente (1–60), mesaRotulo? (até 10) }`: 201, sem itens, total 0, com `numeroDia` (mesmo contador do delivery). **Não imprime.** Emite `pedido:novo`.
+  - `POST /comandas/:id/itens { produtoId, quantidade? (1–20, padrão 1), pesoGramas? (1–5000), observacao? }`: 201 com a comanda inteira. Revalida produto (ativo/categoria ativa, como os canais da equipe), preço só do banco (`POR_KG` = round(preço do quilo × g / 1000); sem peso = 400 `PESO_OBRIGATORIO`; peso em produto por unidade = 400), baixa com `baixarEstoque`, grava com `gravarItens` (VENDA por item) e recalcula subtotal/total (soma dos itens não cancelados).
+  - `DELETE /comandas/:id/itens/:itemId`: marca `ItemPedido.canceladoEm` e devolve **exatamente as VENDA daquele item** (`estornarVendas`, ESTORNO por VENDA); já removido = 409 `ITEM_JA_REMOVIDO`; item de outra comanda = 404.
+  - `POST /comandas/:id/fechar { formaPagamento, imprimirConta? }`: forma obrigatória (400 `VALIDACAO`); → `FINALIZADO` + `finalizadoEm`; `TrabalhoImpressao` `CONTA` **só com `imprimirConta: true`**. Sem itens = 409 `COMANDA_VAZIA`.
+  - Comanda fechada/cancelada: lançar, remover e fechar = 409 `PEDIDO_ENCERRADO`.
+  - Concorrência: toda alteração começa com `SELECT ... FOR UPDATE` na linha do pedido (ordem pedido → produtos → insumos, a mesma do cancelamento): fechar espera um lançamento em andamento e vice-versa; nunca entra item em comanda fechada.
+  - Eventos depois do commit: `pedido:atualizado` a cada mudança, `impressao:nova` na CONTA.
+- Excluir comanda vazia (engano) usa `PATCH /equipe/pedidos/:id/cancelar`; **cancelamento de pedido do salão não cria cupom** de cancelamento (nada dele foi impresso).
+- `GET /equipe/cardapio` devolve também `porKg: [{ id, nome, precoCentavos }]` (produtos `POR_KG` ativos do turno) para o botão "Prato por kg". O "Prato por kg" nasce no seed com preço 0 e inativo: **some do PDV até o dono definir o preço do quilo** (o PDV avisa no turno Almoço).
+- Cupom `CONTA`: nome da comanda (`Cliente:`), mesa, itens (peso + preço/kg), total e forma de pagamento.
+- **Um `ItemPedido` por toque no banco** (remover/estornar item a item); a **exibição agrupa** (tela da comanda e cupom `CONTA`): mesmo produto, mesmo preço, sem observação e sem peso viram uma linha ("4x Refrigerante Lata"), na ordem do primeiro lançamento. Função pura `agruparItens` em `shared/src/itens.js` (`@restaurante/shared/itens`, testada). Na tela, o × da linha agrupada remove **uma unidade por vez** (o item mais recente da linha, `idParaRemover`), com confirmação.
+- PDV (`componentes/salao/`, lógica pura em `renderer/src/lib/salao.js`, testada): aba Salão = grade de cartões (nome, mesa, total parcial, nº de itens, tempo aberta, atualiza a cada 30 s), busca pelo nome ou mesa **sem acento** (filtro local; Enter com um resultado abre; abrir limpa a busca), "+ Nova comanda" (pré-preenche com a busca). Dentro da comanda: botão grande "Prato por kg" → teclado numérico de gramas (toque ou teclado físico, Enter lança, Esc fecha, prévia do valor), abas de turno/categoria com os produtos (esgotado desabilitado, "restam N"), cada toque lança 1 na hora (lançamentos **em fila, um por vez**, para a tela mostrar sempre o estado mais novo), lista de itens com remover (confirmação), "Fechar conta" (forma + "Imprimir conta" desmarcado por padrão) ou "Excluir comanda vazia". Esc volta para a grade. Segue `pedido:novo`/`pedido:atualizado` e recarrega ao (re)conectar e a cada 5 min.
+- IPC: `comandas:listar|obter|abrir|lancarItem|removerItem|fechar`, corpo montado só com os campos aceitos (`comandaParaApi`, `itemComandaParaApi`, `fechamentoParaApi`).
+- Fora do escopo: integração com balança, divisão de conta.
+
 ## Impressão
 - Térmica USB 80mm/58mm no computador do balcão, via agente embutido no Electron.
 - Fila de `TrabalhoImpressao` no servidor.
@@ -208,7 +227,7 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - Feito na API: schema + migration `init`, seed do cardápio, autenticação (dono/atendentes, `/auth`, `/usuarios`), turno ativo, rotas públicas do site (`GET /publico/cardapio`, `/publico/bairros`, `/publico/config`, sem login, `Cache-Control: public, max-age=15`) cliente do site (`/cliente/auth/google`, `/cliente/me`, `/cliente/enderecos`) e pedidos (`POST /cliente/pedidos`, `GET /cliente/pedidos/ultimo`, `criarPedido` para os três canais, Socket.IO da equipe).
 - Banco local: PostgreSQL 18, usuário `postgres`. `api/.env` tem `DATABASE_URL` (`restaurante`, migration aplicada e seed rodado), `DATABASE_URL_TEST` (`restaurante_test`) e `JWT_SECRET`/`JWT_REFRESH_SECRET`/`JWT_CLIENTE_SECRET` gerados (64 caracteres, diferentes). `GOOGLE_CLIENT_ID` ainda vazio (login do cliente responde 503 até configurar).
 - Banco de dev tem um DONO de teste (`dono.teste@exemplo.com`, id 1), criado por `npm run criar-dono`; login, `/auth/me` e refresh (com rotação e recusa do refresh antigo) conferidos via curl contra a API rodando.
-- Testes: API 166/166, PDV 61/61, site 35/35 e shared 18/18 passando, nenhum pulado (`npm test` na raiz roda todos).
+- Testes: API 185/185, PDV 68/68, site 35/35 e shared 18/18 passando, nenhum pulado (`npm test` na raiz roda todos).
 - `.env.example` declara toda variável lida pela API (garantido por `test/env-example.test.js`).
 - Site (prompt 5): cardápio com abas, modal do produto (quantidade + observação), carrinho em barra + gaveta, estado fechado com prévia e botões desabilitados, atualização a cada 30 s com aviso de item removido/preço alterado. `vite build` sem erro; telas conferidas num Chrome headless (390×844). Logo no cabeçalho e no favicon, com fallback em Dancing Script conferido bloqueando a imagem.
 - Seed cria produtos com `disponivelHoje = true`. No banco de dev (semeado antes dessa regra) os 30 produtos foram ligados com `UPDATE "Produto" SET "disponivelHoje" = true` em 2026-11-15.
@@ -225,7 +244,8 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
   - Testar na térmica física **antes da demo**: impressão real (acentos na tabela escolhida, negrito, fonte grande, corte) e o aviso de "sem papel" (depende do driver informar; senão aparece "erro").
   - Instalador (Prompt 15): incluir o binário do koffi (`@koromix/koffi-win32-x64`, fora do asar) no pacote do electron-builder.
   - Só um PDV pode ter a impressão ligada (dois imprimiriam cada cupom duas vezes). Se houver um segundo computador no futuro, implementar reserva do trabalho no servidor (o agente reserva o id antes de imprimir) antes de ligar a impressão nele.
-- Falta: salão, retaguarda, relatório do dia.
+- Salão (branch `feat/salao-comandas`, ainda não integrada): comandas na API e no PDV. Conferido no Electron real via CDP com a API de dev (almoço com 3 clientes: prato 487 g = R$ 29,17, bebidas e X-Bacon baixando estoque na hora, remover devolvendo, busca "joao"/"mar", fechar com/sem conta, 409 em comanda fechada). Dados temporários apagados (banco de dev voltou a estoques 0 e "Prato por kg" com preço 0/inativo).
+- Falta: retaguarda, relatório do dia.
 
 ## FORA DA V1
 - Status do pedido para o cliente.

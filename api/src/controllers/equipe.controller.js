@@ -4,7 +4,8 @@ import * as pedidoService from '../services/pedido.service.js';
 import { CANAIS, FORMAS_PAGAMENTO } from '../services/pedido.service.js';
 import * as equipeService from '../services/equipe.service.js';
 import * as impressaoService from '../services/impressao.service.js';
-import { enderecoSchema, itemPedidoSchema, telefone, trocoSoEmDinheiro } from './esquemas.js';
+import * as comandaService from '../services/comanda.service.js';
+import { enderecoSchema, itemPedidoSchema, opcional, telefone, trocoSoEmDinheiro } from './esquemas.js';
 
 const buscaSchema = z.object({
   busca: z
@@ -51,6 +52,39 @@ const listarSchema = z.object({
 });
 
 const idSchema = z.object({ id: z.coerce.number().int().positive() });
+
+// ───────── Comandas do salão ─────────
+
+/** Peso máximo de um prato (gramas): 5 kg já é erro de digitação. */
+export const PESO_MAX_GRAMAS = 5000;
+
+const comandaNovaSchema = z.object({
+  nomeCliente: z.string({ error: 'Informe o nome do cliente' }).trim().min(1, 'Informe o nome do cliente').max(60),
+  mesaRotulo: opcional(10),
+});
+
+/** Item da comanda. Sem preço: sai do banco. `pesoGramas` só para produto POR_KG. */
+const itemComandaSchema = z.object({
+  produtoId: z.number({ error: 'Item inválido' }).int().positive(),
+  quantidade: z.number({ error: 'Quantidade inválida' }).int().min(1).max(20).default(1),
+  pesoGramas: z
+    .number({ error: 'Peso inválido' })
+    .int('Use gramas inteiros')
+    .min(1, 'Informe o peso')
+    .max(PESO_MAX_GRAMAS, `Máximo ${PESO_MAX_GRAMAS} g`)
+    .nullish(),
+  observacao: opcional(140),
+});
+
+const itemIdSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  itemId: z.coerce.number().int().positive(),
+});
+
+const fecharComandaSchema = z.object({
+  formaPagamento: z.enum(FORMAS_PAGAMENTO, { error: 'Escolha a forma de pagamento' }),
+  imprimirConta: z.boolean().default(false),
+});
 
 const falhaSchema = z.object({ erro: z.string().max(2000).optional() });
 
@@ -134,6 +168,37 @@ export function criarEquipeController(relogio = () => new Date()) {
     async definirTempo(req, res) {
       const { minutos } = validar(tempoSchema, req.body ?? {});
       res.json(await equipeService.definirTempoEstimado(minutos, relogio()));
+    },
+
+    async listarComandas(req, res) {
+      res.json({ comandas: await comandaService.listarAbertas() });
+    },
+
+    async obterComanda(req, res) {
+      const { id } = validar(idSchema, req.params);
+      res.json({ comanda: await comandaService.buscarComanda(id) });
+    },
+
+    async abrirComanda(req, res) {
+      const dados = validar(comandaNovaSchema, req.body ?? {});
+      res.status(201).json({ comanda: await comandaService.abrirComanda(dados, { usuarioId: req.usuario.id, agora: relogio() }) });
+    },
+
+    async lancarItemComanda(req, res) {
+      const { id } = validar(idSchema, req.params);
+      const item = validar(itemComandaSchema, req.body ?? {});
+      res.status(201).json({ comanda: await comandaService.lancarItem(id, item, { usuarioId: req.usuario.id }) });
+    },
+
+    async removerItemComanda(req, res) {
+      const { id, itemId } = validar(itemIdSchema, req.params);
+      res.json({ comanda: await comandaService.removerItem(id, itemId, { usuarioId: req.usuario.id, agora: relogio() }) });
+    },
+
+    async fecharComanda(req, res) {
+      const { id } = validar(idSchema, req.params);
+      const dados = validar(fecharComandaSchema, req.body ?? {});
+      res.json(await comandaService.fecharComanda(id, dados, { agora: relogio() }));
     },
 
     async impressoesPendentes(req, res) {

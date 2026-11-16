@@ -75,3 +75,17 @@ export function listarProdutosDoTurno(turnoId, db = prisma) {
     orderBy: [{ categoria: { ordem: 'asc' } }, { ordem: 'asc' }, { nome: 'asc' }],
   });
 }
+
+/** Produtos por quilo do turno (o "Prato por kg" do salão): ativos, de categoria ativa. */
+export function listarPorKgDoTurno(turnoId, db = prisma) {
+  return db.produto.findMany({
+    where: {
+      ativo: true,
+      tipoPreco: 'POR_KG',
+      categoria: { ativo: true },
+      turnos: { some: { turnoId } },
+    },
+    select: { id: true, nome: true, precoCentavos: true },
+    orderBy: [{ categoria: { ordem: 'asc' } }, { ordem: 'asc' }, { nome: 'asc' }],
+  });
+}

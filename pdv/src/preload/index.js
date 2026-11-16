@@ -27,6 +27,19 @@ contextBridge.exposeInMainWorld('pdv', {
     criar: (dados) => chamar('pedidos:criar', dados),
     reimprimir: (id) => chamar('pedidos:reimprimir', Number(id)),
   },
+  comandas: {
+    listar: () => chamar('comandas:listar'),
+    obter: (id) => chamar('comandas:obter', Number(id)),
+    abrir: (dados) =>
+      chamar('comandas:abrir', { nomeCliente: String(dados?.nomeCliente ?? ''), mesaRotulo: String(dados?.mesaRotulo ?? '') }),
+    lancarItem: (id, item) => chamar('comandas:lancarItem', Number(id), item),
+    removerItem: (id, itemId) => chamar('comandas:removerItem', Number(id), Number(itemId)),
+    fechar: (id, dados) =>
+      chamar('comandas:fechar', Number(id), {
+        formaPagamento: String(dados?.formaPagamento ?? ''),
+        imprimirConta: dados?.imprimirConta === true,
+      }),
+  },
   cardapio: {
     obter: (turnoId) => chamar('cardapio:obter', turnoId == null ? null : Number(turnoId)),
   },

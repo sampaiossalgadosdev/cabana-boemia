@@ -61,6 +61,39 @@ export function pedidoParaApi(d) {
   };
 }
 
+/** Peso máximo aceito pela API para o prato por kg (gramas). */
+export const PESO_MAX_GRAMAS = 5000;
+
+/** Comanda nova: só nome e mesa. */
+export function comandaParaApi(d) {
+  return {
+    nomeCliente: texto(d?.nomeCliente, 'o nome do cliente', 60).trim(),
+    mesaRotulo: opcional(d?.mesaRotulo, 10),
+  };
+}
+
+/** Item da comanda: produto e quantidade, ou peso (por kg). Nunca preço. */
+export function itemComandaParaApi(d) {
+  if (!d || typeof d !== 'object') throw new ErroEntrada('Item inválido');
+  const item = { produtoId: idValido(d.produtoId, 'produto') };
+  if (d.pesoGramas != null) {
+    if (!Number.isInteger(d.pesoGramas) || d.pesoGramas <= 0 || d.pesoGramas > PESO_MAX_GRAMAS) {
+      throw new ErroEntrada(`Peso inválido (1 a ${PESO_MAX_GRAMAS} g)`);
+    }
+    item.pesoGramas = d.pesoGramas;
+  } else {
+    item.quantidade = Number.isInteger(d.quantidade) ? d.quantidade : 1;
+  }
+  const observacao = opcional(d.observacao, 140);
+  if (observacao) item.observacao = observacao;
+  return item;
+}
+
+export function fechamentoParaApi(d) {
+  if (!FORMAS_PAGAMENTO.includes(d?.formaPagamento)) throw new ErroEntrada('Escolha a forma de pagamento');
+  return { formaPagamento: d.formaPagamento, imprimirConta: d.imprimirConta === true };
+}
+
 export function validarMinutos(valor) {
   if (valor === null || valor === undefined || valor === '') return null;
   if (!Number.isInteger(valor) || valor < TEMPO_MIN || valor > TEMPO_MAX) {
@@ -129,6 +162,21 @@ export function criarHandlers({ config, api, tempoReal, agente, listarImpressora
     'pedidos:reimprimir': async (id) => api.requisitar('POST', `/equipe/pedidos/${idValido(id, 'pedido')}/reimprimir`),
 
     'pedidos:criar': async (dados) => api.requisitar('POST', '/equipe/pedidos', pedidoParaApi(dados)),
+
+    'comandas:listar': async () => api.requisitar('GET', '/equipe/comandas'),
+
+    'comandas:obter': async (id) => api.requisitar('GET', `/equipe/comandas/${idValido(id, 'comanda')}`),
+
+    'comandas:abrir': async (dados) => api.requisitar('POST', '/equipe/comandas', comandaParaApi(dados)),
+
+    'comandas:lancarItem': async (id, item) =>
+      api.requisitar('POST', `/equipe/comandas/${idValido(id, 'comanda')}/itens`, itemComandaParaApi(item)),
+
+    'comandas:removerItem': async (id, itemId) =>
+      api.requisitar('DELETE', `/equipe/comandas/${idValido(id, 'comanda')}/itens/${idValido(itemId, 'item')}`),
+
+    'comandas:fechar': async (id, dados) =>
+      api.requisitar('POST', `/equipe/comandas/${idValido(id, 'comanda')}/fechar`, fechamentoParaApi(dados)),
 
     'cardapio:obter': async (turnoId) =>
       api.requisitar('GET', turnoId == null ? '/equipe/cardapio' : `/equipe/cardapio?turnoId=${idValido(turnoId, 'turno')}`),

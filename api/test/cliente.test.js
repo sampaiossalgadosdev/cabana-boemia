@@ -89,7 +89,7 @@ describe('cliente do site: login Google, perfil e endereços', { skip: semBancoD
       obterCertificados: async () => ({ [KID]: pem(chaveGoogle) }),
     });
     servidor = await ouvir(criarApp({ log: false, verificarIdTokenGoogle }));
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
 
     const login = await api('POST', '/auth/login', {
       corpo: { email: 'dono@teste.com', senha: 'senha-do-dono' },

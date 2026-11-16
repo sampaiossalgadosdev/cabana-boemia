@@ -87,7 +87,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
     servidor = http.createServer(app);
     criarTempoReal(servidor);
     await new Promise((resolve) => servidor.listen(0, resolve));
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
 
     tokenDono = (await api('POST', '/auth/login', { corpo: { email: 'dono@teste.com', senha: 'senha-do-dono' } }))
       .corpo.accessToken;
@@ -481,7 +481,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
   });
 
   test('Socket.IO: a sala da equipe recebe pedido:novo e impressao:nova; token de cliente é recusado', async () => {
-    const socket = conectarSocket(base, { auth: { token: tokenDono }, transports: ['websocket'], forceNew: true });
+    const socket = conectarSocket(new URL(base).origin, { path: '/api/socket.io', auth: { token: tokenDono }, transports: ['websocket'], forceNew: true });
     try {
       await new Promise((resolve, reject) => {
         socket.once('connect', resolve);
@@ -507,7 +507,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
 
     const c = await novoCliente();
     for (const token of [c.token, 'lixo', undefined]) {
-      const intruso = conectarSocket(base, { auth: { token }, transports: ['websocket'], forceNew: true });
+      const intruso = conectarSocket(new URL(base).origin, { path: '/api/socket.io', auth: { token }, transports: ['websocket'], forceNew: true });
       try {
         const erro = await new Promise((resolve, reject) => {
           intruso.once('connect', () => reject(new Error('conectou sem ser da equipe')));

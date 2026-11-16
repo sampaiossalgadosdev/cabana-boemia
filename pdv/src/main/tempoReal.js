@@ -42,7 +42,11 @@ export function criarTempoReal({ io, apiUrl, accessToken, renovar, aoStatus, aoE
   function ligar() {
     desligar();
     mudar('reconectando');
-    const s = io(apiUrl(), {
+    // A base da API é `<servidor>/api`: o Socket.IO fica em `<servidor>/api/socket.io`
+    // (passar a URL com caminho faria o cliente tratar "/api" como namespace).
+    const base = new URL(apiUrl());
+    const s = io(base.origin, {
+      path: `${base.pathname.replace(/\/+$/, '')}/socket.io`,
       transports: ['websocket'],
       reconnectionDelay: 1_000,
       reconnectionDelayMax: 10_000,

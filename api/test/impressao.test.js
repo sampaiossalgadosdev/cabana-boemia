@@ -60,7 +60,7 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
     criarTempoReal(servidor);
     await new Promise((resolve) => servidor.listen(0, resolve));
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
     const login = await api('POST', '/auth/login', { corpo: { email: 'ana@teste.com', senha: 'senha-da-ana' }, semToken: true });
     token = login.corpo.accessToken;
   });
@@ -189,7 +189,7 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
     const original = (await pendentes()).trabalhos.find((t) => t.pedidoId === pedido.id);
     await api('POST', `/equipe/impressoes/${original.id}/confirmar`);
 
-    const socket = conectarSocket(base, { auth: { token }, transports: ['websocket'], forceNew: true, reconnection: false });
+    const socket = conectarSocket(new URL(base).origin, { path: '/api/socket.io', auth: { token }, transports: ['websocket'], forceNew: true, reconnection: false });
     await new Promise((resolve, reject) => {
       socket.once('connect', resolve);
       socket.once('connect_error', reject);

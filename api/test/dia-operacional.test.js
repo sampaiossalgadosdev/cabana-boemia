@@ -87,7 +87,7 @@ describe('dia operacional no banco (numeroDia, pedidos do dia, caixas)', { skip:
     await criarDono({ nome: 'Dono', email: 'dono@teste.com', senha: 'senha-do-dono' });
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
     await new Promise((resolve) => servidor.listen(0, resolve));
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
     const login = async (email, senha) =>
       (
         await (

@@ -148,7 +148,7 @@ describe('relatório do dia operacional', { skip: semBancoDeTeste }, () => {
 
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
     await new Promise((resolve) => servidor.listen(0, resolve));
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
     const login = async (email, senha) =>
       (await api('POST', '/auth/login', { corpo: { email, senha }, tk: null })).corpo.accessToken;
     tkDono = await login('dono@teste.com', 'senha-do-dono');

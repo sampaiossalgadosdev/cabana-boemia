@@ -1,4 +1,6 @@
-const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+// Rotas da API sob /api. Em produção a API serve esta página (mesmo domínio,
+// VITE_API_URL vazio); em dev, o proxy do Vite repassa /api para a API local.
+const BASE = `${(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')}/api`;
 
 /** Erro HTTP da API: `status` e `codigo` vêm de `{ erro: { mensagem, codigo, detalhes } }`. */
 export class ErroApi extends Error {

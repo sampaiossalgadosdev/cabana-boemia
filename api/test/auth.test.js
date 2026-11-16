@@ -45,7 +45,7 @@ describe('autenticação e usuários', { skip: semBancoDeTeste }, () => {
     await criarDono(DONO);
 
     servidor = await iniciarApp();
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
     tokenDono = (await login(DONO.email, DONO.senha)).corpo.accessToken;
   });
 
@@ -234,7 +234,7 @@ describe('autenticação e usuários', { skip: semBancoDeTeste }, () => {
 
   test('rate limit bloqueia o login após o limite de tentativas erradas', async () => {
     const s = await iniciarApp({ limiteLogin: 3 });
-    const url = `http://127.0.0.1:${s.address().port}/auth/login`;
+    const url = `http://127.0.0.1:${s.address().port}/api/auth/login`;
     const tentar = (senha) =>
       fetch(url, {
         method: 'POST',

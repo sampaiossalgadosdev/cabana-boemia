@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { criarConfig, validarApiUrl } from '../src/main/config.js';
+import { criarTempoReal } from '../src/main/tempoReal.js';
 import { criarArmazemRefresh } from '../src/main/armazemRefresh.js';
 import { criarHandlers, executar, validarMinutos } from '../src/main/ipc.js';
 
@@ -13,7 +14,8 @@ describe('config (userData/config.json)', () => {
   test('validarApiUrl normaliza e recusa o que não é http(s)', () => {
     assert.equal(validarApiUrl(' https://api.exemplo.com/ '), 'https://api.exemplo.com');
     assert.equal(validarApiUrl('http://localhost:3000'), 'http://localhost:3000');
-    assert.equal(validarApiUrl('https://exemplo.com/api//'), 'https://exemplo.com/api');
+    assert.equal(validarApiUrl('https://exemplo.com/api//'), 'https://exemplo.com', 'o /api é do PDV, não da pessoa');
+    assert.equal(validarApiUrl('https://exemplo.com/sub/API'), 'https://exemplo.com/sub');
     for (const ruim of ['', 'exemplo.com', 'ftp://x.com', 'javascript:alert(1)', 'https://x.com/?a=1', 'https://u:s@x.com']) {
       assert.throws(() => validarApiUrl(ruim), undefined, ruim);
     }
@@ -23,11 +25,14 @@ describe('config (userData/config.json)', () => {
     const caminho = path.join(pastaTemp(), 'config.json');
     const c1 = criarConfig({ caminho, apiUrlPadrao: null });
     assert.deepEqual(c1.obter(), { apiUrl: null }, 'produção: sem padrão, pede na primeira execução');
+    assert.equal(c1.apiUrl(), null);
     c1.definirApiUrl('https://api.exemplo.com/');
-    assert.equal(criarConfig({ caminho, apiUrlPadrao: null }).apiUrl(), 'https://api.exemplo.com');
+    const c2 = criarConfig({ caminho, apiUrlPadrao: null });
+    assert.deepEqual(c2.obter(), { apiUrl: 'https://api.exemplo.com' }, 'a tela mostra o endereço digitado');
+    assert.equal(c2.apiUrl(), 'https://api.exemplo.com/api', 'as rotas ficam sob /api');
 
     fs.writeFileSync(caminho, '{lixo');
-    assert.equal(criarConfig({ caminho, apiUrlPadrao: 'http://localhost:3000' }).apiUrl(), 'http://localhost:3000');
+    assert.equal(criarConfig({ caminho, apiUrlPadrao: 'http://localhost:3000' }).apiUrl(), 'http://localhost:3000/api');
   });
 });
 
@@ -325,5 +330,26 @@ describe('cardapio:atualizado (retaguarda → PDV)', () => {
     const preload = fs.readFileSync(new URL('../src/preload/index.js', import.meta.url), 'utf8');
     const lista = preload.match(/const EVENTOS = \[([\s\S]*?)\];/)[1];
     assert.match(lista, /'cardapio:atualizado'/);
+  });
+});
+
+describe('tempo real: endereço do socket', () => {
+  test('conecta na origem do servidor com path /api/socket.io (não usa /api como namespace)', () => {
+    const chamadas = [];
+    const socketFalso = { on() {}, connect() {}, disconnect() {}, removeAllListeners() {}, close() {} };
+    const io = (url, opcoes) => {
+      chamadas.push({ url, path: opcoes.path });
+      return socketFalso;
+    };
+    const t = criarTempoReal({
+      io,
+      apiUrl: () => 'https://cabana.up.railway.app/api',
+      accessToken: async () => 't',
+      renovar: async () => 't',
+      aoStatus() {},
+      aoEvento() {},
+    });
+    t.ligar();
+    assert.deepEqual(chamadas, [{ url: 'https://cabana.up.railway.app', path: '/api/socket.io' }]);
   });
 });

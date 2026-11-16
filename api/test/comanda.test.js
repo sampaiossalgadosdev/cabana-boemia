@@ -64,7 +64,7 @@ describe('comandas do salão: abrir, lançar aos poucos, remover, fechar', { ski
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
     criarTempoReal(servidor);
     await new Promise((resolve) => servidor.listen(0, resolve));
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
     token = (await api('POST', '/auth/login', { corpo: { email: 'bia@teste.com', senha: 'senha-da-bia' }, tk: null }))
       .corpo.accessToken;
   });
@@ -384,7 +384,7 @@ describe('comandas do salão: abrir, lançar aos poucos, remover, fechar', { ski
   });
 
   test('eventos: abrir emite pedido:novo; lançar emite pedido:atualizado para a equipe', async () => {
-    const socket = conectarSocket(base, { auth: { token }, transports: ['websocket'], forceNew: true, reconnection: false });
+    const socket = conectarSocket(new URL(base).origin, { path: '/api/socket.io', auth: { token }, transports: ['websocket'], forceNew: true, reconnection: false });
     await new Promise((resolve, reject) => {
       socket.once('connect', resolve);
       socket.once('connect_error', reject);

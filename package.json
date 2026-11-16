@@ -11,9 +11,11 @@
     "shared"
   ],
   "engines": {
-    "node": ">=24"
+    "node": "24.x"
   },
   "scripts": {
+    "build": "npm run build -w site && npm run build -w retaguarda && node scripts/copiar-builds.mjs && npm run prisma:generate -w api",
+    "start": "npm run start:producao -w api",
     "dev:api": "npm run dev -w api",
     "dev:site": "npm run dev -w site",
     "dev:retaguarda": "npm run dev -w retaguarda",

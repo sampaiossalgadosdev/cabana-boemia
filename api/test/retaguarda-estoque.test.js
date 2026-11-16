@@ -48,7 +48,7 @@ describe('retaguarda: estoque (entrada, ajuste, histórico)', { skip: semBancoDe
 
     servidor = http.createServer(criarApp({ log: false }));
     await new Promise((resolve) => servidor.listen(0, resolve));
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
     const r = await fetch(`${base}/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

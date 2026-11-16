@@ -4,6 +4,7 @@ import { aoEmitirParaEquipe, aoEventoInterno } from './eventos.js';
 import { buscarPorId } from '../repositories/usuario.repository.js';
 
 export const SALA_EQUIPE = 'equipe';
+export const CAMINHO_SOCKET = '/api/socket.io';
 /** Sala só com as conexões de um usuário (para derrubá-las ao desativar). */
 export const salaDoUsuario = (id) => `usuario:${id}`;
 
@@ -16,6 +17,8 @@ export const salaDoUsuario = (id) => `usuario:${id}`;
  */
 export function criarTempoReal(servidorHttp, { corsOrigins = [] } = {}) {
   const io = new Server(servidorHttp, {
+    // Tudo da API fica sob /api (o site ocupa /). O PDV conecta com o mesmo path.
+    path: CAMINHO_SOCKET,
     cors: {
       // Mesma regra da API: sem Origin (PDV Electron) passa; do navegador, só as listadas.
       origin(origin, callback) {

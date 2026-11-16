@@ -11,7 +11,7 @@ describe('API base', () => {
     await new Promise((resolve) => {
       servidor = app.listen(0, resolve);
     });
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
   });
 
   after(() => new Promise((resolve) => servidor.close(resolve)));

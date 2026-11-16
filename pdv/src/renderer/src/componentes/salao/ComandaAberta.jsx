@@ -39,6 +39,9 @@ export function ComandaAberta({ comanda, agora, aoMudar, aoFechada, aoVoltar }) 
     carregarCardapio(turnoId);
   }, [turnoId, carregarCardapio]);
 
+  // A retaguarda mudou produtos, preços, estoque ou turnos: recarrega a grade.
+  useEffect(() => pdv.aoEvento('cardapio:atualizado', () => carregarCardapio(turnoId)), [turnoId, carregarCardapio]);
+
   const categorias = cardapio?.categorias ?? [];
   useEffect(() => {
     if (!categorias.some((c) => c.id === categoriaId)) setCategoriaId(categorias[0]?.id ?? null);

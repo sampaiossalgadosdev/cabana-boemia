@@ -6,7 +6,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 /** Eventos main → renderer que a página pode escutar. */
-const EVENTOS = ['pedido:novo', 'pedido:atualizado', 'socket:status', 'sessao:expirou', 'impressao:status', 'caixa:atualizado'];
+const EVENTOS = [
+  'pedido:novo',
+  'pedido:atualizado',
+  'socket:status',
+  'sessao:expirou',
+  'impressao:status',
+  'caixa:atualizado',
+  'cardapio:atualizado', // a retaguarda mudou produtos, turnos, bairros, estoque ou configuração
+];
 
 const chamar = (canal, ...args) => ipcRenderer.invoke(canal, ...args);
 

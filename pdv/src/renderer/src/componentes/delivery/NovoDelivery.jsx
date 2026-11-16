@@ -58,6 +58,16 @@ export function NovoDelivery({ aoConcluir, aoSair }) {
     if (passo === 1) carregarCardapio(turnoId);
   }, [passo, turnoId, carregarCardapio]);
 
+  // A retaguarda mudou algo: recarrega a grade (se estiver nela) e as taxas dos bairros.
+  useEffect(
+    () =>
+      pdv.aoEvento('cardapio:atualizado', () => {
+        if (passo === 1) carregarCardapio(turnoId);
+        chamar(pdv.bairros.listar()).then((r) => setBairros(r.bairros), () => {});
+      }),
+    [passo, turnoId, carregarCardapio],
+  );
+
   const escolherCliente = useCallback((c) => {
     setCliente(c);
     const ativo = c?.enderecos.find((e) => e.bairro.ativo);

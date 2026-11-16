@@ -961,3 +961,70 @@ a.botao--texto {
   box-shadow: var(--sombra);
   font-weight: 600;
 }
+
+/* ───────── Páginas legais (/privacidade, /termos) ───────── */
+
+.rodape-legal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding-top: 24px;
+  padding-bottom: 8px;
+  font-size: 14px;
+  color: var(--cor-texto-suave);
+}
+
+.rodape-legal a,
+.legal__texto a:not(.botao) {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.legal__texto a:not(.botao) {
+  color: var(--cor-vermelho-escuro);
+}
+
+.legal__inicio {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.legal__texto {
+  padding-top: 8px;
+  padding-bottom: 40px;
+}
+
+.legal__texto h2 {
+  margin: 20px 0 4px;
+  font-size: 24px;
+}
+
+.legal__texto h3 {
+  margin: 24px 0 6px;
+  font-size: 18px;
+}
+
+.legal__texto p,
+.legal__texto li {
+  max-width: 68ch;
+}
+
+.legal__texto ul {
+  padding-left: 20px;
+}
+
+.legal__texto li + li {
+  margin-top: 6px;
+}
+
+.legal__data {
+  margin-top: 0;
+  font-size: 14px;
+  color: var(--cor-texto-suave);
+}
+
+.legal__voltar {
+  margin-top: 32px;
+}

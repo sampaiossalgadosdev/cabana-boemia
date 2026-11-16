@@ -249,6 +249,7 @@ model MovimentacaoEstoque {
   quantidade   Int // delta com sinal: VENDA negativo, ESTORNO/ENTRADA positivo, AJUSTE ±
   itemPedidoId Int?
   usuarioId    Int?
+  motivo       String?          @db.VarChar(200) // ENTRADA/AJUSTE da retaguarda (obrigatório no AJUSTE)
   criadoEm     DateTime         @default(now())
 
   produto    Produto?    @relation(fields: [produtoId], references: [id])

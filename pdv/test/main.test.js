@@ -317,3 +317,13 @@ describe('handlers IPC', () => {
     assert.deepEqual(agente.eventos, ['ligar', 'desligar']);
   });
 });
+
+describe('cardapio:atualizado (retaguarda → PDV)', () => {
+  test('o main escuta o evento da API e o preload o libera para a página', async () => {
+    const { EVENTOS_EQUIPE } = await import('../src/main/tempoReal.js');
+    assert.ok(EVENTOS_EQUIPE.includes('cardapio:atualizado'));
+    const preload = fs.readFileSync(new URL('../src/preload/index.js', import.meta.url), 'utf8');
+    const lista = preload.match(/const EVENTOS = \[([\s\S]*?)\];/)[1];
+    assert.match(lista, /'cardapio:atualizado'/);
+  });
+});

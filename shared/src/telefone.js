@@ -16,6 +16,9 @@ const DDDS = new Set([
   91, 92, 93, 94, 95, 96, 97, 98, 99,
 ]);
 
+/** DDD (2 dígitos) em uso no Brasil. */
+export const dddValido = (ddd) => DDDS.has(Number(ddd));
+
 export const MENSAGEM_TELEFONE_INVALIDO = 'Telefone inválido. Informe DDD + 9 dígitos, ex.: (43) 99999-0000';
 
 /**

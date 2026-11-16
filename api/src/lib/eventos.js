@@ -8,9 +8,19 @@ import { EventEmitter } from 'node:events';
 const barramento = new EventEmitter();
 barramento.setMaxListeners(50);
 
-/** @param {'pedido:novo' | 'pedido:atualizado' | 'impressao:nova'} evento */
+/** @param {'pedido:novo' | 'pedido:atualizado' | 'impressao:nova' | 'caixa:atualizado' | 'cardapio:atualizado'} evento */
 export function emitirParaEquipe(evento, dados) {
   barramento.emit('equipe', evento, dados);
+}
+
+/**
+ * A retaguarda mudou algo que o PDV mostra (produtos, categorias, cardápio do
+ * dia, turnos, bairros, estoque, configuração): o PDV recarrega o que estiver
+ * na tela. Chamar SÓ depois do commit.
+ * @param {'produtos' | 'categorias' | 'cardapio-do-dia' | 'turnos' | 'bairros' | 'estoque' | 'config'} origem
+ */
+export function avisarCardapioAtualizado(origem) {
+  emitirParaEquipe('cardapio:atualizado', { origem });
 }
 
 /** @returns {() => void} função para parar de escutar */

@@ -1,0 +1,35 @@
+/* Identidade visual da Cabana Boemia (CLAUDE.md › Identidade visual). */
+:root {
+  --cor-vermelho: #c8102e;
+  --cor-vermelho-escuro: #9e0b22;
+  --cor-dourado: #c9a646;
+  --cor-preto: #111111;
+  --cor-creme: #fbf3e8;
+  --cor-laranja: #d9541e;
+  --cor-branco: #ffffff;
+
+  /* Usos */
+  --cor-fundo: var(--cor-creme);
+  --cor-superficie: var(--cor-branco);
+  --cor-texto: var(--cor-preto);
+  --cor-texto-suave: #5e5249;
+  --cor-borda: #eaded0;
+  --cor-borda-forte: #d8c8b4;
+  --cor-acao: var(--cor-vermelho);
+  --cor-acao-hover: var(--cor-vermelho-escuro);
+  --cor-menu: var(--cor-vermelho-escuro);
+  --cor-menu-texto: #f6e6d6;
+  --cor-ok: #1f7a43;
+  --cor-ok-fundo: #e3f2e8;
+  --cor-alerta-fundo: #fbe0e3; /* vermelho clarinho: abaixo do mínimo */
+  --cor-aviso-fundo: #fbe5da; /* laranja clarinho */
+  --cor-desabilitado: #d9d2c9;
+
+  --fonte-marca: 'Dancing Script', cursive;
+  --fonte-base: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --raio: 12px;
+  --raio-pequeno: 8px;
+  --sombra: 0 1px 2px rgb(17 17 17 / 6%), 0 4px 14px rgb(17 17 17 / 6%);
+  --largura-menu: 232px;
+}

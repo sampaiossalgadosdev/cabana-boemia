@@ -10,6 +10,9 @@
  * que não é < 1440 → fechado.
  */
 import { partesLocais, localParaUtc } from '../lib/fuso.js';
+import { prisma } from '../lib/prisma.js';
+import { ErroHttp } from '../lib/erros.js';
+import { avisarCardapioAtualizado } from '../lib/eventos.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 
 const DIA = 1440;
@@ -88,4 +91,80 @@ export async function turnoAtivo(agora = new Date(), db) {
 /** Próxima abertura depois de `agora`, lendo os turnos ativos do banco. */
 export async function proximaAbertura(agora = new Date(), db) {
   return calcularProximaAbertura(await turnoRepo.listarAtivosComHorarios(db), agora);
+}
+
+// ───────── Retaguarda: horários ─────────
+
+const SEMANA = 7 * DIA;
+export const NOMES_DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+/** Trechos [ini, fim) em minutos da semana (domingo 00:00 = 0); quem passa de sábado volta ao domingo. */
+function trechosNaSemana(h) {
+  const { ini, fim } = intervalo(h);
+  const a = h.diaSemana * DIA + ini;
+  const b = h.diaSemana * DIA + fim;
+  return b <= SEMANA ? [[a, b]] : [[a, SEMANA], [0, b - SEMANA]];
+}
+
+/**
+ * Função pura: primeiro par de horários que se cruza (do mesmo turno ou de
+ * turnos diferentes), ou null. Só um turno pode estar ativo por vez.
+ * @param {{ turno: { id: number, nome: string }, horario: { diaSemana: number, inicio: string, fim: string } }[]} lista
+ */
+export function acharSobreposicao(lista) {
+  const trechos = lista.flatMap((item) => trechosNaSemana(item.horario).map(([a, b]) => ({ a, b, item })));
+  for (let i = 0; i < trechos.length; i++) {
+    for (let j = i + 1; j < trechos.length; j++) {
+      const x = trechos[i];
+      const y = trechos[j];
+      if (x.item !== y.item && x.a < y.b && y.a < x.b) return [x.item, y.item];
+    }
+  }
+  return null;
+}
+
+const descrever = ({ turno, horario: h }) => `${turno.nome} (${NOMES_DIAS[h.diaSemana]} ${h.inicio}–${h.fim})`;
+
+/** Todos os turnos com horários (inclusive inativos). */
+export function listarTurnos() {
+  return turnoRepo.listarComHorarios();
+}
+
+/**
+ * Troca todos os horários do turno. Recusa (422 HORARIO_SOBREPOSTO) horário
+ * que cruza outro do mesmo turno ou de outro turno ativo. Os turnos ficam
+ * travados durante a checagem (duas edições ao mesmo tempo não se cruzam).
+ * @param {number} turnoId
+ * @param {{ diaSemana: number, inicio: string, fim: string }[]} horarios (já validados: HH:MM, 0–6, inicio ≠ fim)
+ */
+export async function definirHorarios(turnoId, horarios) {
+  await prisma.$transaction(async (tx) => {
+    await turnoRepo.travarTurnos(tx);
+    const turnos = await turnoRepo.listarComHorarios(tx);
+    const turno = turnos.find((t) => t.id === turnoId);
+    if (!turno) throw new ErroHttp(404, 'Turno não encontrado', { codigo: 'NAO_ENCONTRADO' });
+
+    const lista = [
+      ...horarios.map((horario) => ({ turno, horario })),
+      ...turnos
+        .filter((t) => t.id !== turnoId && t.ativo)
+        .flatMap((t) => t.horarios.map((horario) => ({ turno: t, horario }))),
+    ];
+    const conflito = acharSobreposicao(lista);
+    if (conflito) {
+      throw new ErroHttp(422, `Horários se cruzam: ${descrever(conflito[0])} e ${descrever(conflito[1])}.`, {
+        codigo: 'HORARIO_SOBREPOSTO',
+        detalhes: conflito.map(({ turno: t, horario: h }) => ({
+          turnoId: t.id,
+          turno: t.nome,
+          diaSemana: h.diaSemana,
+          inicio: h.inicio,
+          fim: h.fim,
+        })),
+      });
+    }
+    await turnoRepo.substituirHorarios(turnoId, horarios, tx);
+  });
+  avisarCardapioAtualizado('turnos');
+  return (await turnoRepo.listarComHorarios()).find((t) => t.id === turnoId);
 }

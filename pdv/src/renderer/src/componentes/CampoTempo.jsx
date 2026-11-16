@@ -29,9 +29,12 @@ export function CampoTempo() {
         .catch(() => {});
     carregar();
     const id = setInterval(carregar, RECARREGAR_MS);
+    // O dono pode ter mudado o tempo padrão na retaguarda (placeholder).
+    const parar = pdv.aoEvento('cardapio:atualizado', ({ origem } = {}) => origem === 'config' && carregar());
     return () => {
       ativo = false;
       clearInterval(id);
+      parar();
     };
   }, [aplicar]);
 

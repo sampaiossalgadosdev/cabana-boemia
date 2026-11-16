@@ -74,7 +74,7 @@ export function trabalhoDeTeste(agora = new Date()) {
  *   aoStatus?: (status: object) => void,
  *   tempos?: Partial<typeof TEMPOS_AGENTE & import('./conexao.js').TEMPOS_CONEXAO>,
  *   timers?: { setTimeout: typeof setTimeout, clearTimeout: typeof clearTimeout },
- *   log?: Pick<Console, 'error' | 'warn'>,
+ *   log?: Pick<Console, 'error' | 'warn'> & Partial<Pick<Console, 'info'>>,
  * }} opcoes
  */
 export function criarAgente({
@@ -107,8 +107,20 @@ export function criarAgente({
 
   let estado = { modo: cfg.modo, impressora: cfg.impressora, conexao: null, estado: 'desligado', mensagem: '', pendentes: 0 };
 
+  const info = (...args) => log.info?.(...args);
+
   function publicar(mudancas = {}) {
+    const antes = estado;
     estado = { ...estado, ...mudancas, pendentes: fila.tamanho() + fila.paraConfirmar().length };
+    // Só as mudanças vão para o log (o status é publicado várias vezes por minuto).
+    if (estado.conexao !== antes.conexao && estado.conexao) {
+      (estado.conexao === 'offline' ? log.warn : info)(`[impressão] API ${estado.conexao}`);
+    }
+    if (estado.estado !== antes.estado || (estado.estado !== 'ok' && estado.mensagem !== antes.mensagem)) {
+      const texto = `[impressão] impressora: ${estado.estado}${estado.mensagem ? ` (${estado.mensagem})` : ''}`;
+      if (['erro', 'sem-papel', 'offline'].includes(estado.estado)) log.warn(texto);
+      else info(texto);
+    }
     aoStatus(estado);
   }
 
@@ -169,6 +181,7 @@ export function criarAgente({
     try {
       await api.requisitar('POST', `/equipe/impressoes/${id}/confirmar`);
       fila.marcarConfirmado(id);
+      info(`[impressão] trabalho ${id} confirmado na API`);
       return true;
     } catch (err) {
       if (err?.status === 404) {
@@ -231,6 +244,7 @@ export function criarAgente({
         await s.imprimir(doc);
       } catch (err) {
         const e = err instanceof ErroImpressora ? err : new ErroImpressora('erro', err?.message ?? 'Erro na impressora');
+        log.warn(`[impressão] ${doc.nomeDocumento} não saiu: ${e.estado} (${e.message}); tenta de novo depois`);
         publicar({ estado: e.estado, mensagem: e.message });
         await reportarFalha(trab.id, e.message);
         agendarRetentativa();
@@ -238,6 +252,7 @@ export function criarAgente({
       }
 
       fila.marcarImpresso(trab.id);
+      info(`[impressão] ${doc.nomeDocumento} impresso`);
       falhasImpressora = 0;
       timers.clearTimeout(timerRetentativa);
       publicar({ estado: 'ok', mensagem: cfg.modo === 'arquivo' ? 'Modo teste (arquivo .txt)' : 'Impressora OK' });
@@ -260,7 +275,8 @@ export function criarAgente({
       if (estado.conexao !== 'online') publicar({ conexao: 'online' });
       if (r?.restaurante?.nome) restaurante = r.restaurante.nome;
       const trabalhos = Array.isArray(r?.trabalhos) ? r.trabalhos : [];
-      fila.adicionar(trabalhos);
+      const novos = fila.adicionar(trabalhos);
+      if (novos) info(`[impressão] ${novos} trabalho(s) novo(s) da API (${trabalhos.length} pendente(s))`);
       publicar();
       if (!(await processarFila())) return;
       // Veio cheio: pode haver mais depois do limite.
@@ -331,6 +347,7 @@ export function criarAgente({
   function iniciar() {
     cfg = configuracao();
     ativo = sessao && cfg.modo !== 'desligado';
+    if (sessao) info(`[impressão] ${ativo ? 'ligado' : 'desligado'}: modo ${cfg.modo}${cfg.impressora ? `, "${cfg.impressora}"` : ''}, ${cfg.largura} colunas, ${cfg.tabela}`);
     if (!ativo) {
       publicar({ modo: cfg.modo, impressora: cfg.impressora, conexao: null, estado: 'desligado', mensagem: '' });
       return;
@@ -387,7 +404,9 @@ export function criarAgente({
       if (!s) throw new Error(estado.mensagem || 'Impressora indisponível');
       try {
         await s.imprimir(documento(trabalhoDeTeste()));
+        info(`[impressão] cupom de teste enviado (${cfg.modo}${cfg.impressora ? `, "${cfg.impressora}"` : ''})`);
       } catch (err) {
+        log.warn(`[impressão] cupom de teste falhou: ${err.message}`);
         if (err instanceof ErroImpressora) publicar({ estado: err.estado, mensagem: err.message });
         throw err;
       }

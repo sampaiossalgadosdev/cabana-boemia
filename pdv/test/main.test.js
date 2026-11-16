@@ -24,11 +24,13 @@ describe('config (userData/config.json)', () => {
   test('padrão até salvar; salvo persiste; arquivo corrompido cai no padrão', () => {
     const caminho = path.join(pastaTemp(), 'config.json');
     const c1 = criarConfig({ caminho, apiUrlPadrao: null });
-    assert.deepEqual(c1.obter(), { apiUrl: null }, 'produção: sem padrão, pede na primeira execução');
+    assert.deepEqual(c1.obter(), { apiUrl: null, impressaoConfigurada: false }, 'produção: sem padrão, pede na primeira execução');
     assert.equal(c1.apiUrl(), null);
     c1.definirApiUrl('https://api.exemplo.com/');
     const c2 = criarConfig({ caminho, apiUrlPadrao: null });
-    assert.deepEqual(c2.obter(), { apiUrl: 'https://api.exemplo.com' }, 'a tela mostra o endereço digitado');
+    assert.deepEqual(c2.obter(), { apiUrl: 'https://api.exemplo.com', impressaoConfigurada: false }, 'a tela mostra o endereço digitado');
+    c2.definirImpressao({ modo: 'desligado' });
+    assert.equal(criarConfig({ caminho, apiUrlPadrao: null }).obter().impressaoConfigurada, true, '"não imprime" também conta como configurado');
     assert.equal(c2.apiUrl(), 'https://api.exemplo.com/api', 'as rotas ficam sob /api');
 
     fs.writeFileSync(caminho, '{lixo');

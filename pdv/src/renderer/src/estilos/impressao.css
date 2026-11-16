@@ -127,3 +127,27 @@
 .painel .aviso-sucesso {
   margin: 0;
 }
+
+/* Primeira execução: impressora (mesmos campos do painel, num cartão mais largo). */
+.cartao-login--largo {
+  width: min(640px, 100%);
+}
+.cartao-login--largo .campo select {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-branco);
+  font: inherit;
+}
+.cartao-login--largo .campo select:disabled {
+  opacity: 0.6;
+}
+.cartao-login__acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.cartao-login__depois {
+  justify-self: center;
+}

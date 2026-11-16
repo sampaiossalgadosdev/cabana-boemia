@@ -8,3 +8,6 @@ out/
 
 # Builds copiados para a API pelo npm run build da raiz.
 api/public/
+
+# Ícone gerado da logo pelo npm run dist -w pdv.
+pdv/recursos/icon.png

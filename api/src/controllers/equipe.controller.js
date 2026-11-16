@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { validar } from '../lib/validar.js';
+import { horaVirada } from '../services/diaOperacional.service.js';
 import * as pedidoService from '../services/pedido.service.js';
 import { CANAIS, FORMAS_PAGAMENTO } from '../services/pedido.service.js';
 import * as equipeService from '../services/equipe.service.js';
@@ -197,7 +198,9 @@ export function criarEquipeController(relogio = () => new Date()) {
     },
 
     async caixaAtual(req, res) {
-      res.json({ caixa: await caixaService.caixaAtual() });
+      // horaViradaDia: o PDV usa para saber se o caixa é "de outro dia" (dia operacional).
+      const [caixa, horaViradaDia] = await Promise.all([caixaService.caixaAtual(), horaVirada()]);
+      res.json({ caixa, horaViradaDia });
     },
 
     async abrirCaixa(req, res) {

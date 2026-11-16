@@ -25,6 +25,13 @@ export const IconeCardapioDia = (p) => (
   </Svg>
 );
 
+export const IconeRelatorio = (p) => (
+  <Svg {...p}>
+    <path d="M4 20h16" />
+    <path d="M7 16v-5M12 16V6M17 16v-8" />
+  </Svg>
+);
+
 export const IconeProdutos = (p) => (
   <Svg {...p}>
     <path d="M4 11h16a8 8 0 0 1-16 0Z" />

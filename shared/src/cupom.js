@@ -15,7 +15,7 @@ import { formatarTelefone } from './telefone.js';
 import { agruparItens } from './itens.js';
 
 export const LARGURAS = [48, 32];
-export const TIPOS_CUPOM = ['PEDIDO', 'CANCELAMENTO', 'CONTA', 'FECHAMENTO'];
+export const TIPOS_CUPOM = ['PEDIDO', 'CANCELAMENTO', 'CONTA', 'FECHAMENTO', 'RELATORIO_DIA'];
 
 const FUSO = 'America/Sao_Paulo';
 const NOME_CANAL = { SITE: 'Site', WHATSAPP: 'WhatsApp', SALAO: 'Salão' };
@@ -245,10 +245,59 @@ function cupomFechamento(m, trabalho, restaurante) {
   return m.linhas;
 }
 
+const DIAS_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+/** "2026-11-13" → "13/11/2026 (sexta)". */
+function formatarDia(dia) {
+  const [a, m, d] = dia.split('-').map(Number);
+  return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${a} (${DIAS_SEMANA[new Date(Date.UTC(a, m - 1, d)).getUTCDay()]})`;
+}
+
 /**
- * @param {{ id: number, tipo: 'PEDIDO' | 'CANCELAMENTO' | 'CONTA' | 'FECHAMENTO', criadoEm: string | Date, pedido?: object, caixa?: object }} trabalho
+ * Resumo do dia OPERACIONAL (vira às horaViradaDia): totais, formas, canais,
+ * mais vendidos e cancelados. Sem nada do caixa (esperado/diferença).
+ */
+function cupomRelatorioDia(m, trabalho, restaurante) {
+  const r = trabalho.relatorio;
+  const hh = `${String(r.horaViradaDia).padStart(2, '0')}:00`;
+  m.grande(restaurante.toUpperCase()).separador('=');
+  m.grande('RESUMO DO DIA').separador();
+  m.centro(formatarDia(r.data), { negrito: true });
+  m.centro(`Expediente das ${hh} às ${hh} do dia seguinte`);
+  m.separador();
+  m.valor('Pedidos finalizados', String(r.quantidadePedidos));
+  m.valor('TOTAL VENDIDO', formatarDinheiro(r.totalCentavos), { negrito: true });
+  m.valor('Ticket médio', formatarDinheiro(r.ticketMedioCentavos));
+  m.valor('Taxas de entrega', formatarDinheiro(r.taxaEntregaCentavos));
+  m.separador();
+  m.texto('Por forma de pagamento', { negrito: true });
+  for (const f of r.porFormaPagamento) {
+    m.valor(`${NOME_PAGAMENTO[f.forma] ?? f.forma} (${f.quantidade})`, formatarDinheiro(f.totalCentavos));
+  }
+  m.texto('Por canal', { negrito: true });
+  for (const c of r.porCanal) {
+    m.valor(`${NOME_CANAL[c.canal] ?? c.canal} (${c.quantidade})`, formatarDinheiro(c.totalCentavos));
+  }
+  m.separador();
+  m.texto('Mais vendidos', { negrito: true });
+  if (!r.topPorQuantidade.length) m.texto('Nenhuma venda');
+  for (const p of r.topPorQuantidade) {
+    const peso = p.pesoGramas ? ` (${formatarPeso(p.pesoGramas)})` : '';
+    m.valor(`${p.quantidade}x ${p.nome}${peso}`, formatarDinheiro(p.totalCentavos));
+  }
+  m.separador();
+  m.valor(`Pedidos cancelados (${r.cancelados.quantidade})`, formatarDinheiro(r.cancelados.totalCentavos));
+  m.valor(`Itens removidos (${r.itensRemovidos.quantidade})`, formatarDinheiro(r.itensRemovidos.totalCentavos));
+  m.separador();
+  m.centro(`Emitido em ${formatarDataHora(trabalho.criadoEm)}`);
+  return m.linhas;
+}
+
+/**
+ * @param {{ id: number, tipo: 'PEDIDO' | 'CANCELAMENTO' | 'CONTA' | 'FECHAMENTO' | 'RELATORIO_DIA', criadoEm: string | Date, pedido?: object, caixa?: object, relatorio?: object }} trabalho
  *   `pedido` no formato público da API (itens com nome, quantidade, totais em centavos);
- *   FECHAMENTO traz `caixa` (resumo sem esperado nem diferença) no lugar do pedido.
+ *   FECHAMENTO traz `caixa` (resumo sem esperado nem diferença) no lugar do pedido;
+ *   RELATORIO_DIA traz `relatorio` (GET /retaguarda/relatorios/dia).
  * @param {{ colunas?: 48 | 32, restaurante?: string }} [opcoes]
  * @returns {{ texto: string, negrito?: boolean, grande?: boolean }[]}
  */
@@ -259,6 +308,7 @@ export function montarCupom(trabalho, { colunas = 48, restaurante = 'Cabana Boem
   const m = criarMontador(colunas);
 
   if (tipo === 'FECHAMENTO') return cupomFechamento(m, trabalho, restaurante);
+  if (tipo === 'RELATORIO_DIA') return cupomRelatorioDia(m, trabalho, restaurante);
 
   if (tipo === 'CANCELAMENTO') {
     cabecalho(m, restaurante, 'PEDIDO CANCELADO', pedido);

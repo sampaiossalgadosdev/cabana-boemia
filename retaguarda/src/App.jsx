@@ -11,12 +11,14 @@ import {
   IconeEstoque,
   IconeMenu,
   IconeProdutos,
+  IconeRelatorio,
   IconeRelogio,
   IconeSair,
 } from './componentes/Icones.jsx';
 import { TelaLogin } from './telas/TelaLogin.jsx';
 import { TelaCardapioDoDia } from './telas/TelaCardapioDoDia.jsx';
 import { TelaProdutos } from './telas/TelaProdutos.jsx';
+import { TelaRelatorio } from './telas/TelaRelatorio.jsx';
 import { TelaCategorias } from './telas/TelaCategorias.jsx';
 import { TelaEstoque } from './telas/TelaEstoque.jsx';
 import { TelaTurnos } from './telas/TelaTurnos.jsx';
@@ -26,6 +28,7 @@ import { TelaConfiguracoes } from './telas/TelaConfiguracoes.jsx';
 
 const ICONES = {
   'cardapio-do-dia': IconeCardapioDia,
+  relatorio: IconeRelatorio,
   produtos: IconeProdutos,
   categorias: IconeCategorias,
   estoque: IconeEstoque,
@@ -37,6 +40,7 @@ const ICONES = {
 
 const COMPONENTES = {
   'cardapio-do-dia': TelaCardapioDoDia,
+  relatorio: TelaRelatorio,
   produtos: TelaProdutos,
   categorias: TelaCategorias,
   estoque: TelaEstoque,

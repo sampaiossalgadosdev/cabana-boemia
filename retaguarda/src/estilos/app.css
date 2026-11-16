@@ -958,3 +958,230 @@ textarea.entrada {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* ───────── Relatório do dia ───────── */
+
+.seletor-dia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.seletor-dia .entrada {
+  width: auto;
+}
+
+.seletor-dia .botao--icone {
+  width: 40px;
+  min-height: 40px;
+  font-size: 20px;
+}
+
+.numeros {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.numero {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  box-shadow: var(--sombra);
+}
+
+.numero--destaque {
+  border-top: 3px solid var(--cor-dourado);
+}
+
+.numero__rotulo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cor-texto-suave);
+}
+
+.numero__valor {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.numero--destaque .numero__valor {
+  color: var(--cor-vermelho-escuro);
+}
+
+.nota-cancelados {
+  margin: 10px 2px 16px;
+}
+
+.grade-relatorio {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.grade-relatorio .cartao + .cartao {
+  margin-top: 0;
+}
+
+/* Barras horizontais: uma série (valor por forma), uma cor; valor escrito ao lado. */
+.barras {
+  list-style: none;
+  margin: 0;
+  padding: 12px 16px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.barra {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.barra__rotulo {
+  font-weight: 600;
+}
+
+.barra__trilho {
+  height: 22px;
+  border-left: 1px solid var(--cor-borda-forte); /* linha de base */
+}
+
+.barra__marca {
+  display: block;
+  height: 100%;
+  background: var(--cor-vermelho-escuro);
+  border-radius: 0 4px 4px 0;
+  transition: width 0.3s ease;
+}
+
+.barra:hover .barra__marca {
+  background: var(--cor-vermelho);
+}
+
+.barra__valor {
+  min-width: 96px;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.barra__valor small {
+  display: block;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--cor-texto-suave);
+}
+
+.abas--pequenas {
+  margin: 0;
+}
+
+.abas--pequenas .aba {
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+.titulo-secao {
+  margin: 28px 0 12px;
+  font-size: 20px;
+}
+
+.caixa-dia__corpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px 24px;
+  padding: 16px;
+}
+
+.contas {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.contas div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.contas dt {
+  color: var(--cor-texto-suave);
+}
+
+.contas dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.contas__total {
+  padding-top: 6px;
+  border-top: 1px solid var(--cor-borda);
+}
+
+.contas__total dd {
+  font-weight: 700;
+}
+
+.contas__falta dt,
+.contas__falta dd {
+  color: var(--cor-vermelho);
+  font-weight: 700;
+}
+
+.movimentos h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cor-texto-suave);
+}
+
+.movimentos ul {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.movimentos li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--cor-borda);
+}
+
+.movimentos li strong {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.movimentos p {
+  margin: 0 0 12px;
+}
+
+@media (max-width: 860px) {
+  .numeros {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grade-relatorio,
+  .caixa-dia__corpo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .numero__valor {
+    font-size: 20px;
+  }
+}

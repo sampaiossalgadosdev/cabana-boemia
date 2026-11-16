@@ -95,3 +95,44 @@ export const fechamentoCaixa = {
     ],
   },
 };
+
+/** Resumo do dia operacional sexta 13/11 (mesmos números do teste da API). */
+export const relatorioDia = {
+  id: 9005,
+  tipo: 'RELATORIO_DIA',
+  criadoEm: '2026-11-14T13:05:00.000Z', // 10:05 em São Paulo
+  pedidoId: null,
+  caixaId: null,
+  dataRelatorio: '2026-11-13',
+  relatorio: {
+    data: '2026-11-13',
+    horaViradaDia: 4,
+    totalCentavos: 11517,
+    quantidadePedidos: 3,
+    ticketMedioCentavos: 3839,
+    subtotalCentavos: 10517,
+    taxaEntregaCentavos: 1000,
+    porFormaPagamento: [
+      { forma: 'DINHEIRO', quantidade: 1, totalCentavos: 2700 },
+      { forma: 'PIX', quantidade: 1, totalCentavos: 4200 },
+      { forma: 'DEBITO', quantidade: 1, totalCentavos: 4617 },
+      { forma: 'CREDITO', quantidade: 0, totalCentavos: 0 },
+    ],
+    porCanal: [
+      { canal: 'SITE', quantidade: 1, totalCentavos: 4200 },
+      { canal: 'WHATSAPP', quantidade: 1, totalCentavos: 2700 },
+      { canal: 'SALAO', quantidade: 1, totalCentavos: 4617 },
+    ],
+    topPorQuantidade: [
+      { produtoId: 6, nome: 'X-Bacon', quantidade: 2, pesoGramas: null, totalCentavos: 3200 },
+      { produtoId: 26, nome: 'Refrigerante Lata', quantidade: 2, pesoGramas: null, totalCentavos: 1000 },
+      { produtoId: 31, nome: 'Prato por kg', quantidade: 1, pesoGramas: 487, totalCentavos: 2917 },
+      { produtoId: 4, nome: 'X-Salada', quantidade: 1, pesoGramas: null, totalCentavos: 1300 },
+      { produtoId: 3, nome: 'X-Burguer', quantidade: 1, pesoGramas: null, totalCentavos: 1200 },
+      { produtoId: 27, nome: 'Coca-Cola 1L', quantidade: 1, pesoGramas: null, totalCentavos: 900 },
+    ],
+    topPorValor: [],
+    cancelados: { quantidade: 1, totalCentavos: 5500 },
+    itensRemovidos: { quantidade: 1, totalCentavos: 500 },
+  },
+};

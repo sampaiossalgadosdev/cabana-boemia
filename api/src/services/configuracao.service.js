@@ -6,12 +6,13 @@ import { dddValido } from '@restaurante/shared/telefone';
 import { avisarCardapioAtualizado } from '../lib/eventos.js';
 import * as configRepo from '../repositories/configuracao.repository.js';
 
-const PADRAO = { nomeRestaurante: 'Cabana Boemia', whatsappNumero: '', tempoEstimadoPadraoMin: 40 };
+const PADRAO = { nomeRestaurante: 'Cabana Boemia', whatsappNumero: '', tempoEstimadoPadraoMin: 40, horaViradaDia: 4 };
 
 const publica = (c) => ({
   nomeRestaurante: c.nomeRestaurante,
   whatsappNumero: c.whatsappNumero,
   tempoEstimadoPadraoMin: c.tempoEstimadoPadraoMin,
+  horaViradaDia: c.horaViradaDia,
 });
 
 /**
@@ -32,7 +33,7 @@ export async function obter() {
   return publica((await configRepo.buscar()) ?? PADRAO);
 }
 
-/** @param {{ nomeRestaurante: string, whatsappNumero: string, tempoEstimadoPadraoMin: number }} dados (já validados) */
+/** @param {{ nomeRestaurante: string, whatsappNumero: string, tempoEstimadoPadraoMin: number, horaViradaDia: number }} dados (já validados) */
 export async function atualizar(dados) {
   const config = await configRepo.atualizarGerais(dados);
   avisarCardapioAtualizado('config');

@@ -18,6 +18,8 @@ export function criarRetaguardaRoutes({ relogio } = {}) {
   });
   r.use(autenticar, exigirPapel('DONO'));
   r.get('/caixas', assincrono(c.caixas));
+  r.get('/relatorios/dia', assincrono(c.relatorioDia));
+  r.post('/relatorios/dia/imprimir', assincrono(c.imprimirRelatorioDia));
 
   r.get('/categorias', assincrono(c.listarCategorias));
   r.post('/categorias', assincrono(c.criarCategoria));

@@ -9,7 +9,8 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { ErroHttp } from '../lib/erros.js';
-import { diaLocal } from '../lib/fuso.js';
+import { diaOperacional, paraCampoData } from '../lib/fuso.js';
+import { horaViradaDe } from './diaOperacional.service.js';
 import { emitirParaEquipe } from '../lib/eventos.js';
 import * as pedidoRepo from '../repositories/pedido.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
@@ -405,16 +406,17 @@ async function criarNaTransacao(tx, d) {
   // 5. Baixa atômica do estoque (409 com o nome do que acabou).
   await baixarEstoque(tx, necessidadesDeEstoque(valores.linhas));
 
-  // 6. Número do dia (dia local), atômico e sem buraco em caso de rollback.
-  const dia = diaLocal(d.agora);
+  // 6. Número do dia (dia OPERACIONAL: vira às horaViradaDia, não à meia-noite),
+  //    atômico e sem buraco em caso de rollback.
+  const config = await pedidoRepo.buscarConfiguracao(tx);
+  const dia = diaOperacional(d.agora, horaViradaDe(config));
   const numeroDia = await pedidoRepo.proximoNumeroDoDia(dia, tx);
 
   // 7. Pedido com snapshots.
-  const config = await pedidoRepo.buscarConfiguracao(tx);
   const { id: pedidoId } = await pedidoRepo.criarPedido(
     {
       numeroDia,
-      dataRef: new Date(`${dia}T00:00:00.000Z`),
+      dataRef: paraCampoData(dia),
       canal: d.canal,
       status: STATUS_INICIAL[d.canal],
       clienteId: d.cliente?.id ?? null,

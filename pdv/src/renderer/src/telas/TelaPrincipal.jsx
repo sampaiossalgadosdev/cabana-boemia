@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CAIXA_FECHADO_EVENTO, chamar, pdv } from '../lib/pdv.js';
+import { definirHoraVirada } from '../lib/caixa.js';
 import { BarraSuperior } from '../componentes/BarraSuperior.jsx';
 import { FilaPedidos } from '../componentes/FilaPedidos.jsx';
 import { NovoDelivery } from '../componentes/delivery/NovoDelivery.jsx';
@@ -21,7 +22,9 @@ export function TelaPrincipal({ usuario, aoSair }) {
 
   const carregarCaixa = useCallback(async () => {
     try {
-      setCaixa((await chamar(pdv.caixa.atual())).caixa);
+      const r = await chamar(pdv.caixa.atual());
+      definirHoraVirada(r.horaViradaDia);
+      setCaixa(r.caixa);
     } catch {
       // Sem rede: mantém o que sabia; a API recusa finalizar se o caixa estiver fechado.
     }

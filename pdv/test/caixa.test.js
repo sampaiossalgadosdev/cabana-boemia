@@ -4,6 +4,7 @@ import {
   abertoAntesDeHoje,
   acoesDoPendente,
   avisoCaixaEsquecido,
+  diaOperacional,
   descreverPendente,
   lerValorCaixa,
   removerPendente,
@@ -21,12 +22,19 @@ describe('caixa no PDV', () => {
     assert.equal(lerValorCaixa('100000,01').erro, 'Valor alto demais');
   });
 
-  test('caixa esquecido: aviso só se aberto num dia local anterior', () => {
+  test('caixa esquecido: aviso só se aberto num dia OPERACIONAL anterior (vira às 04:00)', () => {
     const agora = new Date('2026-11-15T13:00:00-03:00');
-    assert.equal(abertoAntesDeHoje('2026-11-15T00:30:00-03:00', agora), false);
+    assert.equal(abertoAntesDeHoje('2026-11-15T04:00:00-03:00', agora), false);
+    // 00:30 do dia 15 ainda é o expediente do dia 14.
+    assert.equal(abertoAntesDeHoje('2026-11-15T00:30:00-03:00', agora), true);
     assert.equal(abertoAntesDeHoje('2026-11-14T23:50:00-03:00', agora), true);
-    // 01:00 UTC do dia 15 ainda é dia 14 em São Paulo.
-    assert.equal(abertoAntesDeHoje('2026-11-15T01:00:00Z', agora), true);
+    // Aberto às 19:00 e agora é 00:30 do dia seguinte: mesmo expediente, NÃO é "de outro dia".
+    assert.equal(abertoAntesDeHoje('2026-11-14T19:00:00-03:00', new Date('2026-11-15T00:30:00-03:00')), false);
+    assert.equal(abertoAntesDeHoje('2026-11-14T19:00:00-03:00', new Date('2026-11-15T04:00:00-03:00')), true);
+    // Virada 0 = dia civil.
+    assert.equal(abertoAntesDeHoje('2026-11-14T23:50:00-03:00', new Date('2026-11-15T00:30:00-03:00'), 0), true);
+    assert.equal(diaOperacional('2026-11-15T03:59:00-03:00'), '2026-11-14');
+    assert.equal(diaOperacional('2026-11-15T04:00:00-03:00'), '2026-11-15');
     assert.equal(avisoCaixaEsquecido({ abertoEm: '2026-11-14T19:02:00-03:00' }, agora), 'Caixa aberto desde 14/11 às 19:02');
     assert.equal(avisoCaixaEsquecido({ abertoEm: '2026-11-15T10:00:00-03:00' }, agora), null);
     assert.equal(avisoCaixaEsquecido(null, agora), null);

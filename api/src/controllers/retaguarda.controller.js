@@ -9,6 +9,7 @@ import * as bairroService from '../services/bairro.service.js';
 import * as estoqueService from '../services/estoque.service.js';
 import * as configuracaoService from '../services/configuracao.service.js';
 import * as turnoService from '../services/turno.service.js';
+import * as relatorioService from '../services/relatorio.service.js';
 
 // ───────── Schemas ─────────
 
@@ -157,7 +158,14 @@ const configSchema = z.object({
     .int('Use minutos inteiros')
     .min(1, 'Entre 1 e 240 minutos')
     .max(240, 'Entre 1 e 240 minutos'),
+  horaViradaDia: z
+    .number({ error: 'Hora inválida' })
+    .int('Use uma hora cheia')
+    .min(0, 'Entre 0 e 12 horas')
+    .max(12, 'Entre 0 e 12 horas'),
 });
+
+const imprimirSchema = z.object({ data: caixasSchema.shape.data });
 
 const alvoDe = (d) => (d.produtoId ? { produtoId: d.produtoId } : { insumoId: d.insumoId });
 const id = (req) => validar(idSchema, req.params).id;
@@ -263,6 +271,16 @@ export function criarRetaguardaController(relogio = () => new Date()) {
         throw new ErroHttp(400, 'Filtre por produto ou por insumo', { codigo: 'VALIDACAO' });
       }
       res.json(await estoqueService.movimentacoes(filtro));
+    },
+
+    // Relatório do dia (operacional)
+    async relatorioDia(req, res) {
+      const { data } = validar(caixasSchema, req.query);
+      res.json(await relatorioService.relatorioDoDia(data, relogio()));
+    },
+    async imprimirRelatorioDia(req, res) {
+      const { data } = validar(imprimirSchema, req.body ?? {});
+      res.status(201).json(await relatorioService.imprimirRelatorio(data, relogio()));
     },
 
     // Configurações

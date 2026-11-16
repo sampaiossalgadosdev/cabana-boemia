@@ -17,7 +17,8 @@
  */
 import { prisma } from '../lib/prisma.js';
 import { ErroHttp } from '../lib/erros.js';
-import { diaLocal } from '../lib/fuso.js';
+import { diaOperacional, paraCampoData } from '../lib/fuso.js';
+import { horaVirada } from './diaOperacional.service.js';
 import { emitirParaEquipe } from '../lib/eventos.js';
 import * as pedidoRepo from '../repositories/pedido.repository.js';
 import * as comandaRepo from '../repositories/comanda.repository.js';
@@ -57,12 +58,12 @@ function avisar(comanda) {
 /** @param {{ nomeCliente: string, mesaRotulo?: string | null }} dados */
 export async function abrirComanda({ nomeCliente, mesaRotulo = null }, { usuarioId = null, agora = new Date() } = {}) {
   const pedido = await prisma.$transaction(async (tx) => {
-    const dia = diaLocal(agora);
+    const dia = diaOperacional(agora, await horaVirada(tx));
     const numeroDia = await pedidoRepo.proximoNumeroDoDia(dia, tx);
     const { id } = await pedidoRepo.criarPedido(
       {
         numeroDia,
-        dataRef: new Date(`${dia}T00:00:00.000Z`),
+        dataRef: paraCampoData(dia),
         canal: 'SALAO',
         status: 'ABERTO',
         nomeCliente,

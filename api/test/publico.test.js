@@ -149,19 +149,23 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
     }
   });
 
-  test('tempoEstimadoMin: manual definido hoje vale; de ontem, vale o padrão', async () => {
+  test('tempoEstimadoMin: manual vale no dia OPERACIONAL em que foi definido (vira às 04:00)', async () => {
+    // Sábado 20:00. Definido sábado 04:00: mesmo dia operacional.
     await prisma.configuracao.update({
       where: { id: 1 },
-      data: { tempoEstimadoManualMin: 70, tempoManualDefinidoEm: local('2026-11-14T00:10') },
+      data: { tempoEstimadoManualMin: 70, tempoManualDefinidoEm: local('2026-11-14T04:00') },
     });
     assert.equal((await get('/publico/cardapio')).corpo.tempoEstimadoMin, 70);
 
-    // 23:50 de sexta (local) já é sábado em UTC, mas é "ontem" no restaurante.
-    await prisma.configuracao.update({
-      where: { id: 1 },
-      data: { tempoManualDefinidoEm: local('2026-11-13T23:50') },
-    });
+    // Sábado 00:10 ainda é o expediente de sexta: para sábado 20:00, vale o padrão.
+    await prisma.configuracao.update({ where: { id: 1 }, data: { tempoManualDefinidoEm: local('2026-11-14T00:10') } });
     assert.equal((await get('/publico/cardapio')).corpo.tempoEstimadoMin, 40);
+
+    // Definido sexta 23:00 e consultado sábado 00:30: mesmo expediente, continua valendo.
+    agora = local('2026-11-14T00:30');
+    await prisma.configuracao.update({ where: { id: 1 }, data: { tempoManualDefinidoEm: local('2026-11-13T23:00') } });
+    assert.equal((await get('/publico/cardapio')).corpo.tempoEstimadoMin, 70);
+    agora = SABADO_20H;
   });
 
   test('cache-control curto e sem autenticação', async () => {

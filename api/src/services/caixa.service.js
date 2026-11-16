@@ -20,7 +20,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { ErroHttp } from '../lib/erros.js';
 import { emitirParaEquipe } from '../lib/eventos.js';
-import { diaLocal, localParaUtc } from '../lib/fuso.js';
+import { resolverDia } from './diaOperacional.service.js';
 import * as caixaRepo from '../repositories/caixa.repository.js';
 import * as pedidoRepo from '../repositories/pedido.repository.js';
 import { OPCOES_TRANSACAO, STATUS_ABERTOS } from './pedido.service.js';
@@ -197,9 +197,8 @@ export async function resumoParaCupom(caixaId) {
  * @param {string} data "YYYY-MM-DD" ou "hoje"
  */
 export async function caixasDoDia(data, agora = new Date()) {
-  const dia = data === 'hoje' ? diaLocal(agora) : data;
-  const [ano, mes, d] = dia.split('-').map(Number);
-  const caixas = await caixaRepo.listarAbertosEntre(localParaUtc(ano, mes, d, 0), localParaUtc(ano, mes, d + 1, 0));
+  const { dia, inicio, fim } = await resolverDia(data, agora);
+  const caixas = await caixaRepo.listarAbertosEntre(inicio, fim);
   const saida = [];
   for (const c of caixas) {
     const valores = await valoresDoCaixa(c.id, c.valorInicialCentavos);

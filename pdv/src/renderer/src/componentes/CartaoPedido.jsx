@@ -13,12 +13,23 @@ import {
  * Um pedido da fila. "Finalizar" abre a escolha da forma de pagamento
  * (pré-selecionada com a do pedido; a escolhida sobrescreve).
  */
-export function CartaoPedido({ pedido, novo, aoFinalizar, aoCancelar, aoVer }) {
+export function CartaoPedido({ pedido, novo, aoFinalizar, aoCancelar, aoReimprimir, aoVer }) {
   const [acao, setAcao] = useState(null); // null | 'finalizar' | 'cancelar'
   const finalizando = acao === 'finalizar';
   const [forma, setForma] = useState(pedido.formaPagamento ?? '');
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
+  const [reimpressao, setReimpressao] = useState(''); // '' | 'enviando' | 'ok' | mensagem de erro
+
+  async function reimprimir() {
+    setReimpressao('enviando');
+    try {
+      await aoReimprimir(pedido.id);
+      setReimpressao('ok');
+    } catch (err) {
+      setReimpressao(err.message);
+    }
+  }
 
   async function confirmar() {
     if (!forma) {
@@ -156,6 +167,14 @@ export function CartaoPedido({ pedido, novo, aoFinalizar, aoCancelar, aoVer }) {
         </div>
       ) : (
         <div className="pedido__acoes">
+          {reimpressao && reimpressao !== 'enviando' && (
+            <p className={reimpressao === 'ok' ? 'pedido__reimpressao' : 'erro'} role="status">
+              {reimpressao === 'ok' ? 'Enviado para a impressora.' : reimpressao}
+            </p>
+          )}
+          <button type="button" className="botao botao--contorno" disabled={reimpressao === 'enviando'} onClick={reimprimir}>
+            {reimpressao === 'enviando' ? 'Enviando…' : 'Reimprimir'}
+          </button>
           <button type="button" className="botao botao--contorno" onClick={() => setAcao('cancelar')}>
             Cancelar
           </button>

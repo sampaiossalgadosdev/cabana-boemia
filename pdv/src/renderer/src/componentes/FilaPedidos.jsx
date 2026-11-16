@@ -77,6 +77,9 @@ export function FilaPedidos({ statusConexao, aoNovoDelivery }) {
     }
   }, []);
 
+  // Cria um trabalho novo na API; o PDV do balcão imprime (mesmo que seja outro computador).
+  const reimprimir = useCallback((id) => chamar(pdv.pedidos.reimprimir(id)), []);
+
   const marcarVisto = (id) =>
     setNovos((n) => {
       const c = new Set(n);
@@ -111,6 +114,7 @@ export function FilaPedidos({ statusConexao, aoNovoDelivery }) {
         <div className="fila__lista">
           {fila.map((p) => (
             <CartaoPedido key={p.id} pedido={p} novo={novos.has(p.id)} aoFinalizar={finalizar} aoCancelar={cancelar}
+              aoReimprimir={reimprimir}
               aoVer={() => marcarVisto(p.id)} />
           ))}
         </div>

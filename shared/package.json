@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./telefone": "./src/telefone.js"
+    "./telefone": "./src/telefone.js",
+    "./cupom": "./src/cupom.js"
   },
   "scripts": {
     "dev": "echo \"[shared] dev ainda nao configurado\"",

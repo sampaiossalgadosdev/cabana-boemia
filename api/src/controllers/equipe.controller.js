@@ -3,6 +3,7 @@ import { validar } from '../lib/validar.js';
 import * as pedidoService from '../services/pedido.service.js';
 import { CANAIS, FORMAS_PAGAMENTO } from '../services/pedido.service.js';
 import * as equipeService from '../services/equipe.service.js';
+import * as impressaoService from '../services/impressao.service.js';
 import { enderecoSchema, itemPedidoSchema, telefone, trocoSoEmDinheiro } from './esquemas.js';
 
 const buscaSchema = z.object({
@@ -50,6 +51,8 @@ const listarSchema = z.object({
 });
 
 const idSchema = z.object({ id: z.coerce.number().int().positive() });
+
+const falhaSchema = z.object({ erro: z.string().max(2000).optional() });
 
 const finalizarSchema = z.object({
   formaPagamento: z.enum(FORMAS_PAGAMENTO, { error: 'Informe a forma de pagamento' }),
@@ -131,6 +134,26 @@ export function criarEquipeController(relogio = () => new Date()) {
     async definirTempo(req, res) {
       const { minutos } = validar(tempoSchema, req.body ?? {});
       res.json(await equipeService.definirTempoEstimado(minutos, relogio()));
+    },
+
+    async impressoesPendentes(req, res) {
+      res.json(await impressaoService.listarPendentes(relogio()));
+    },
+
+    async confirmarImpressao(req, res) {
+      const { id } = validar(idSchema, req.params);
+      res.json(await impressaoService.confirmar(id, relogio()));
+    },
+
+    async falhaImpressao(req, res) {
+      const { id } = validar(idSchema, req.params);
+      const { erro } = validar(falhaSchema, req.body ?? {});
+      res.json(await impressaoService.registrarFalha(id, erro));
+    },
+
+    async reimprimirPedido(req, res) {
+      const { id } = validar(idSchema, req.params);
+      res.status(201).json({ trabalho: await impressaoService.reimprimir(id) });
     },
   };
 }

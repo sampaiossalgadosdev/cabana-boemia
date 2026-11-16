@@ -21,7 +21,8 @@ export function TelaPrincipal({ usuario, aoSair }) {
   // F2: novo delivery de qualquer lugar da tela principal.
   useEffect(() => {
     function aoTeclar(e) {
-      if (e.key !== 'F2') return;
+      // Com o painel da impressora aberto (modal), F2 não abre nada por trás.
+      if (e.key !== 'F2' || document.querySelector('dialog[open]')) return;
       e.preventDefault();
       setAba('delivery');
       setLancando(true);

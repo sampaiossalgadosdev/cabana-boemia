@@ -6,7 +6,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 /** Eventos main → renderer que a página pode escutar. */
-const EVENTOS = ['pedido:novo', 'pedido:atualizado', 'socket:status', 'sessao:expirou'];
+const EVENTOS = ['pedido:novo', 'pedido:atualizado', 'socket:status', 'sessao:expirou', 'impressao:status'];
 
 const chamar = (canal, ...args) => ipcRenderer.invoke(canal, ...args);
 
@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('pdv', {
     finalizar: (id, formaPagamento) => chamar('pedidos:finalizar', Number(id), String(formaPagamento ?? '')),
     cancelar: (id) => chamar('pedidos:cancelar', Number(id)),
     criar: (dados) => chamar('pedidos:criar', dados),
+    reimprimir: (id) => chamar('pedidos:reimprimir', Number(id)),
   },
   cardapio: {
     obter: (turnoId) => chamar('cardapio:obter', turnoId == null ? null : Number(turnoId)),
@@ -43,6 +44,20 @@ contextBridge.exposeInMainWorld('pdv', {
   },
   tempoReal: {
     status: () => chamar('tempoReal:status'),
+  },
+  impressao: {
+    status: () => chamar('impressao:status'),
+    config: () => chamar('impressao:config'),
+    definirConfig: (dados) =>
+      chamar('impressao:definirConfig', {
+        modo: String(dados?.modo ?? ''),
+        impressora: String(dados?.impressora ?? ''),
+        largura: Number(dados?.largura),
+        tabela: String(dados?.tabela ?? ''),
+        guilhotina: dados?.guilhotina === true,
+      }),
+    testar: () => chamar('impressao:testar'),
+    tentarAgora: () => chamar('impressao:tentarAgora'),
   },
   /** @returns {() => void} para parar de escutar */
   aoEvento(nome, callback) {

@@ -10,6 +10,10 @@ import { criarArmazemRefresh } from './armazemRefresh.js';
 import { criarClienteApi } from './clienteApi.js';
 import { criarTempoReal } from './tempoReal.js';
 import { criarHandlers, executar } from './ipc.js';
+import { criarAgente } from './agente-impressao/agente.js';
+import { criarPing } from './agente-impressao/conexao.js';
+import { criarImpressoraArquivo, criarImpressoraWindows } from './agente-impressao/impressoras.js';
+import { carregarSpooler } from './agente-impressao/winspool.js';
 
 const DEV = !app.isPackaged;
 const URL_DEV_RENDERER = process.env.ELECTRON_RENDERER_URL;
@@ -45,24 +49,53 @@ function iniciar() {
     });
 
     let tempoReal;
+    let agente;
     const api = criarClienteApi({
       apiUrl: config.apiUrl,
       armazem: criarArmazemRefresh({ caminho: path.join(dados, 'sessao.bin'), safeStorage }),
       aoSessaoExpirar: (erro) => {
         tempoReal?.desligar();
+        agente?.desligar();
         enviar('sessao:expirou', { mensagem: erro.message, codigo: erro.codigo });
       },
     });
+
+    // Agente de impressão: só imprime neste computador se a impressora (ou o
+    // modo teste) estiver configurada na tela "Impressora".
+    agente = criarAgente({
+      api,
+      ping: criarPing({ apiUrl: config.apiUrl }),
+      configuracao: config.impressao,
+      criarSaida: async (cfg) =>
+        cfg.modo === 'arquivo'
+          ? criarImpressoraArquivo({ pasta: path.join(dados, 'impressoes-teste') })
+          : criarImpressoraWindows({ nome: cfg.impressora, spooler: await carregarSpooler() }),
+      aoStatus: (status) => enviar('impressao:status', status),
+    });
+
     tempoReal = criarTempoReal({
       io,
       apiUrl: config.apiUrl,
       accessToken: api.accessToken,
       renovar: api.renovar,
-      aoStatus: (status) => enviar('socket:status', status),
-      aoEvento: enviar,
+      aoStatus: (status) => {
+        enviar('socket:status', status);
+        // Eventos emitidos durante a queda não voltam: busca tudo o que está pendente.
+        if (status === 'conectado') agente.aoReconectar();
+      },
+      aoEvento: (nome, dados) => {
+        if (nome === 'impressao:nova') agente.aoImpressaoNova();
+        else enviar(nome, dados);
+      },
     });
 
-    const handlers = criarHandlers({ config, api, tempoReal, versao: app.getVersion() });
+    const listarImpressoras = async () => {
+      if (!janela || janela.isDestroyed()) return [];
+      const lista = await janela.webContents.getPrintersAsync();
+      return lista.map((p) => p.name).sort((a, b) => a.localeCompare(b));
+    };
+
+    const handlers = criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao: app.getVersion() });
     for (const [canal, handler] of Object.entries(handlers)) {
       ipcMain.handle(canal, (evento, ...args) => {
         // Só a nossa janela, com a nossa página, fala com o main.

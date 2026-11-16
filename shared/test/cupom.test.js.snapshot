@@ -1,0 +1,174 @@
+exports[`cupom.js > snapshot CANCELAMENTO (WhatsApp) em 32 colunas 1`] = `
+         CABANA BOEMIA
+================================
+        PEDIDO CANCELADO
+           PEDIDO #12
+      WhatsApp - Delivery
+--------------------------------
+Cliente: Maria Aparecida dos
+         Santos Oliveira
+Tel: (43) 99999-0000
+End: Rua Coronel Joaquim Pedro
+     de Oliveira, 1234 - casa
+     dos fundos (Ref.: em frente
+     à praça da matriz)
+Bairro: Centro
+--------------------------------
+2x X-Bacon              R$ 50,00
+   R$ 25,00 cada
+1x Porção de batata
+   frita com cheddar e
+   bacon (grande)        R$ 5,00
+1x Coca-Cola 1L         R$ 12,00
+--------------------------------
+Subtotal                R$ 67,00
+Taxa de entrega          R$ 5,00
+TOTAL                   R$ 72,00
+--------------------------------
+   Pedido em 14/11/2026 20:15
+ Cancelado em 14/11/2026 20:40
+********************************
+           CANCELADO
+********************************
+
+`;
+
+exports[`cupom.js > snapshot CANCELAMENTO (WhatsApp) em 48 colunas 1`] = `
+                 CABANA BOEMIA
+================================================
+                PEDIDO CANCELADO
+                   PEDIDO #12
+              WhatsApp - Delivery
+------------------------------------------------
+Cliente: Maria Aparecida dos Santos Oliveira
+Tel: (43) 99999-0000
+End: Rua Coronel Joaquim Pedro de Oliveira, 1234
+     - casa dos fundos (Ref.: em frente à praça
+     da matriz)
+Bairro: Centro
+------------------------------------------------
+2x X-Bacon                              R$ 50,00
+   R$ 25,00 cada
+1x Porção de batata frita com cheddar e
+   bacon (grande)                        R$ 5,00
+1x Coca-Cola 1L                         R$ 12,00
+------------------------------------------------
+Subtotal                                R$ 67,00
+Taxa de entrega                          R$ 5,00
+TOTAL                                   R$ 72,00
+------------------------------------------------
+           Pedido em 14/11/2026 20:15
+         Cancelado em 14/11/2026 20:40
+************************************************
+                   CANCELADO
+************************************************
+
+`;
+
+exports[`cupom.js > snapshot CONTA (salão, por kg) em 32 colunas 1`] = `
+         CABANA BOEMIA
+================================
+             CONTA
+           PEDIDO #3
+         Salão - Mesa 4
+--------------------------------
+0,455 kg Prato por kg   R$ 27,25
+         R$ 59,90/kg
+2x Suco de laranja      R$ 11,70
+   R$ 5,85 cada
+   OBS: sem gelo
+--------------------------------
+TOTAL                   R$ 38,95
+--------------------------------
+  Emitida em 15/11/2026 12:05
+     Não é documento fiscal
+
+`;
+
+exports[`cupom.js > snapshot CONTA (salão, por kg) em 48 colunas 1`] = `
+                 CABANA BOEMIA
+================================================
+                     CONTA
+                   PEDIDO #3
+                 Salão - Mesa 4
+------------------------------------------------
+0,455 kg Prato por kg                   R$ 27,25
+         R$ 59,90/kg
+2x Suco de laranja                      R$ 11,70
+   R$ 5,85 cada
+   OBS: sem gelo
+------------------------------------------------
+TOTAL                                   R$ 38,95
+------------------------------------------------
+          Emitida em 15/11/2026 12:05
+             Não é documento fiscal
+
+`;
+
+exports[`cupom.js > snapshot PEDIDO (site, dinheiro com troco) em 32 colunas 1`] = `
+         CABANA BOEMIA
+================================
+           PEDIDO #12
+        Site - Delivery
+--------------------------------
+Cliente: Maria Aparecida dos
+         Santos Oliveira
+Tel: (43) 99999-0000
+End: Rua Coronel Joaquim Pedro
+     de Oliveira, 1234 - casa
+     dos fundos (Ref.: em frente
+     à praça da matriz)
+Bairro: Centro
+--------------------------------
+2x X-Bacon              R$ 50,00
+   R$ 25,00 cada
+   OBS: sem cebola, "bem
+        passado"
+1x Porção de batata
+   frita com cheddar e
+   bacon (grande)        R$ 5,00
+1x Coca-Cola 1L         R$ 12,00
+--------------------------------
+Subtotal                R$ 67,00
+Taxa de entrega          R$ 5,00
+TOTAL                   R$ 72,00
+Pagamento               Dinheiro
+Troco para             R$ 100,00
+Levar de troco          R$ 28,00
+--------------------------------
+        Previsão: 40 min
+        14/11/2026 20:15
+
+`;
+
+exports[`cupom.js > snapshot PEDIDO (site, dinheiro com troco) em 48 colunas 1`] = `
+                 CABANA BOEMIA
+================================================
+                   PEDIDO #12
+                Site - Delivery
+------------------------------------------------
+Cliente: Maria Aparecida dos Santos Oliveira
+Tel: (43) 99999-0000
+End: Rua Coronel Joaquim Pedro de Oliveira, 1234
+     - casa dos fundos (Ref.: em frente à praça
+     da matriz)
+Bairro: Centro
+------------------------------------------------
+2x X-Bacon                              R$ 50,00
+   R$ 25,00 cada
+   OBS: sem cebola, "bem passado"
+1x Porção de batata frita com cheddar e
+   bacon (grande)                        R$ 5,00
+1x Coca-Cola 1L                         R$ 12,00
+------------------------------------------------
+Subtotal                                R$ 67,00
+Taxa de entrega                          R$ 5,00
+TOTAL                                   R$ 72,00
+Pagamento                               Dinheiro
+Troco para                             R$ 100,00
+Levar de troco                          R$ 28,00
+------------------------------------------------
+                Previsão: 40 min
+                14/11/2026 20:15
+
+`;

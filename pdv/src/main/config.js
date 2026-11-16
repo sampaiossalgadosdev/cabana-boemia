@@ -4,6 +4,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { lerConfigImpressao, validarConfigImpressao } from './agente-impressao/configuracao.js';
 
 /**
  * Normaliza e valida a URL da API: http(s), sem query/hash, sem barra no fim.
@@ -51,17 +52,28 @@ export function criarConfig({ caminho, apiUrlPadrao }) {
     return apiUrlPadrao;
   }
 
+  function gravar(novo) {
+    fs.mkdirSync(path.dirname(caminho), { recursive: true });
+    const tmp = `${caminho}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(novo, null, 2));
+    fs.renameSync(tmp, caminho);
+    salvo = novo;
+  }
+
   return {
     obter: () => ({ apiUrl: apiUrl() }),
     apiUrl,
     definirApiUrl(valor) {
       const url = validarApiUrl(valor);
-      salvo = { ...salvo, apiUrl: url };
-      fs.mkdirSync(path.dirname(caminho), { recursive: true });
-      const tmp = `${caminho}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(salvo, null, 2));
-      fs.renameSync(tmp, caminho);
+      gravar({ ...salvo, apiUrl: url });
       return url;
+    },
+    /** Impressora deste computador (modo, nome no Windows, largura, tabela, guilhotina). */
+    impressao: () => lerConfigImpressao(salvo.impressao),
+    definirImpressao(dados) {
+      const impressao = validarConfigImpressao(dados);
+      gravar({ ...salvo, impressao });
+      return impressao;
     },
   };
 }

@@ -73,8 +73,18 @@ describe('handlers IPC', () => {
       },
     };
     const tempoReal = { ligar() {}, desligar() {}, status: () => 'desligado' };
-    const config = { obter: () => ({ apiUrl: 'http://x' }), definirApiUrl: (u) => validarApiUrl(u) };
-    return { h: criarHandlers({ config, api, tempoReal, versao: '0.1.0' }), chamadas };
+    const agente = {
+      eventos: [],
+      ligar() { this.eventos.push('ligar'); },
+      desligar() { this.eventos.push('desligar'); },
+      reconfigurar() { this.eventos.push('reconfigurar'); },
+      status: () => ({ estado: 'ok' }),
+    };
+    const caminho = path.join(pastaTemp(), 'config.json');
+    const cfg = criarConfig({ caminho, apiUrlPadrao: 'http://x' });
+    const config = { ...cfg, definirApiUrl: (u) => validarApiUrl(u) };
+    const listarImpressoras = async () => ['EPSON TM-T20', 'Microsoft Print to PDF'];
+    return { h: criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao: '0.1.0' }), chamadas, agente, caminho };
   }
 
   test('finalizar valida id e forma de pagamento antes de chamar a API', async () => {
@@ -177,5 +187,61 @@ describe('handlers IPC', () => {
     const { h } = montar({ logado: true });
     const r = await executar(h['config:definirApiUrl'], ['https://outro.com']);
     assert.equal(r.ok, false);
+  });
+
+  test('reimprimir valida o id e chama a rota fixa', async () => {
+    const { h, chamadas } = montar();
+    assert.equal((await executar(h['pedidos:reimprimir'], ['7'])).ok, false);
+    await h['pedidos:reimprimir'](7);
+    assert.deepEqual(chamadas, [['POST', '/equipe/pedidos/7/reimprimir']]);
+  });
+
+  test('impressora: config com padrões, lista do Windows, salvar reconfigura o agente', async () => {
+    const { h, agente, caminho } = montar();
+    const r = await h['impressao:config']();
+    assert.deepEqual(r.config, { modo: 'desligado', impressora: '', largura: 48, tabela: 'cp860', guilhotina: true });
+    assert.deepEqual(r.impressoras, ['EPSON TM-T20', 'Microsoft Print to PDF']);
+
+    const ruins = [
+      { modo: 'impressora', impressora: '' },
+      { modo: 'arquivo', largura: 40 },
+      { modo: 'arquivo', tabela: 'utf8' },
+      { modo: 'qualquer' },
+      { modo: 'arquivo', guilhotina: 'sim' },
+    ];
+    for (const ruim of ruins) {
+      const x = await executar(h['impressao:definirConfig'], [ruim]);
+      assert.equal(x.ok, false, JSON.stringify(ruim));
+      assert.equal(x.erro.codigo, 'VALIDACAO');
+    }
+    assert.deepEqual(agente.eventos, []);
+
+    const salvo = await h['impressao:definirConfig']({ modo: 'impressora', impressora: ' EPSON TM-T20 ', largura: 32, tabela: 'cp850', guilhotina: false });
+    assert.deepEqual(salvo, { modo: 'impressora', impressora: 'EPSON TM-T20', largura: 32, tabela: 'cp850', guilhotina: false });
+    assert.deepEqual(agente.eventos, ['reconfigurar']);
+    // Persistido no config.json, ao lado do apiUrl.
+    const json = JSON.parse(fs.readFileSync(caminho, 'utf8'));
+    assert.deepEqual(json.impressao, salvo);
+    assert.deepEqual(criarConfig({ caminho, apiUrlPadrao: null }).impressao(), salvo);
+  });
+
+  test('config.json com impressão corrompida volta aos padrões', () => {
+    const caminho = path.join(pastaTemp(), 'config.json');
+    fs.writeFileSync(caminho, JSON.stringify({ apiUrl: 'http://x', impressao: { modo: 'impressora', largura: 99 } }));
+    assert.deepEqual(criarConfig({ caminho, apiUrlPadrao: null }).impressao(), {
+      modo: 'desligado', impressora: '', largura: 48, tabela: 'cp860', guilhotina: true,
+    });
+  });
+
+  test('login liga o agente; sair desliga', async () => {
+    const { h, agente } = montar();
+    const api = { entrar: async () => ({ id: 1 }) };
+    Object.assign(h, criarHandlers({
+      config: {}, api: { ...api, sair: async () => {} }, tempoReal: { ligar() {}, desligar() {} }, agente,
+      listarImpressoras: async () => [], versao: 'x',
+    }));
+    await h['sessao:entrar']('a@b.com', 'senha');
+    await h['sessao:sair']();
+    assert.deepEqual(agente.eventos, ['ligar', 'desligar']);
   });
 });

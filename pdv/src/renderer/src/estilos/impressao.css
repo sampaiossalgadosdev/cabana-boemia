@@ -1,0 +1,129 @@
+/* ───────── Impressora: indicador na barra e painel ───────── */
+
+.impressora {
+  border: 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.impressora--erro {
+  background: #fde3e6;
+  color: var(--cor-vermelho-escuro);
+}
+.impressora--erro .conexao__ponto {
+  animation: piscar 1s ease-in-out infinite;
+}
+.impressora--offline {
+  background: var(--cor-aviso-fundo);
+  color: var(--cor-laranja);
+}
+.impressora--desligado {
+  background: #efe9e2;
+  color: var(--cor-texto-suave);
+}
+
+.pedido__reimpressao {
+  margin: 0;
+  color: var(--cor-ok);
+  font-weight: 600;
+}
+.pedido__acoes > p {
+  grid-column: 1 / -1;
+}
+
+.painel {
+  width: min(640px, calc(100vw - 32px));
+  padding: 0;
+  border: 0;
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  color: var(--cor-texto);
+  box-shadow: var(--sombra);
+}
+.painel::backdrop {
+  background: rgb(17 17 17 / 45%);
+}
+.painel__corpo {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+}
+.painel__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.painel__topo h2 {
+  margin: 0;
+}
+.painel__grupo {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.painel__grupo legend {
+  margin-bottom: 6px;
+  padding: 0;
+  font-weight: 600;
+}
+.painel__linha {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: end;
+}
+.painel__linha .opcao--caixa {
+  grid-column: 1 / -1;
+}
+.painel .campo select {
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+  font: inherit;
+  font-weight: 400;
+}
+.painel .campo select:disabled {
+  opacity: 0.55;
+}
+.opcao--linha {
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  text-align: left;
+}
+.opcao--linha span {
+  display: grid;
+  gap: 2px;
+}
+.opcao--linha small {
+  color: var(--cor-texto-suave);
+  font-weight: 400;
+}
+.opcao--caixa {
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 14px;
+}
+.opcao--caixa input {
+  position: static;
+  opacity: 1;
+  pointer-events: auto;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--cor-vermelho);
+}
+.painel__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.painel .aviso-sucesso {
+  margin: 0;
+}

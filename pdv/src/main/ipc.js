@@ -74,13 +74,18 @@ export function validarMinutos(valor) {
  *   config: ReturnType<typeof import('./config.js').criarConfig>,
  *   api: ReturnType<typeof import('./clienteApi.js').criarClienteApi>,
  *   tempoReal: ReturnType<typeof import('./tempoReal.js').criarTempoReal>,
+ *   agente: ReturnType<typeof import('./agente-impressao/agente.js').criarAgente>,
+ *   listarImpressoras: () => Promise<string[]>,
  *   versao: string,
  * }} deps
  * @returns {Record<string, (...args: any[]) => Promise<unknown>>}
  */
-export function criarHandlers({ config, api, tempoReal, versao }) {
+export function criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao }) {
   async function aposLogin(usuario) {
-    if (usuario) tempoReal.ligar();
+    if (usuario) {
+      tempoReal.ligar();
+      agente.ligar();
+    }
     return usuario;
   }
 
@@ -104,6 +109,7 @@ export function criarHandlers({ config, api, tempoReal, versao }) {
 
     'sessao:sair': async () => {
       tempoReal.desligar();
+      agente.desligar();
       await api.sair();
       return null;
     },
@@ -119,6 +125,8 @@ export function criarHandlers({ config, api, tempoReal, versao }) {
     },
 
     'pedidos:cancelar': async (id) => api.requisitar('PATCH', `/equipe/pedidos/${idValido(id, 'pedido')}/cancelar`),
+
+    'pedidos:reimprimir': async (id) => api.requisitar('POST', `/equipe/pedidos/${idValido(id, 'pedido')}/reimprimir`),
 
     'pedidos:criar': async (dados) => api.requisitar('POST', '/equipe/pedidos', pedidoParaApi(dados)),
 
@@ -144,6 +152,31 @@ export function criarHandlers({ config, api, tempoReal, versao }) {
 
     'tempo:definir': async (minutos) =>
       api.requisitar('PUT', '/equipe/config/tempo-estimado', { minutos: validarMinutos(minutos) }),
+
+    'impressao:status': async () => agente.status(),
+
+    'impressao:config': async () => ({
+      config: config.impressao(),
+      impressoras: await listarImpressoras().catch(() => []),
+    }),
+
+    'impressao:definirConfig': async (dados) => {
+      let impressao;
+      try {
+        impressao = config.definirImpressao(dados);
+      } catch (err) {
+        throw new ErroEntrada(err.message);
+      }
+      agente.reconfigurar();
+      return impressao;
+    },
+
+    'impressao:testar': async () => agente.testar(),
+
+    'impressao:tentarAgora': async () => {
+      await agente.sincronizar();
+      return agente.status();
+    },
   };
 }
 

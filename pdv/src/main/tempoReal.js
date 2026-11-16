@@ -8,8 +8,8 @@
  * atendente desativada), o clienteApi já avisou "sessão expirou".
  */
 
-/** Eventos repassados ao renderer. */
-export const EVENTOS_EQUIPE = ['pedido:novo', 'pedido:atualizado'];
+/** Eventos da API escutados no main (impressao:nova vai para o agente de impressão). */
+export const EVENTOS_EQUIPE = ['pedido:novo', 'pedido:atualizado', 'impressao:nova'];
 
 const ESPERA_RECONEXAO_MS = 3_000;
 

@@ -1,6 +1,7 @@
 import { Logo } from './Logo.jsx';
 import { CampoTempo } from './CampoTempo.jsx';
 import { IndicadorConexao } from './IndicadorConexao.jsx';
+import { IndicadorImpressora } from './IndicadorImpressora.jsx';
 import { IconeBicicleta, IconeMesa, IconeSair } from './Icones.jsx';
 
 export function BarraSuperior({ aba, aoTrocarAba, statusConexao, usuario, aoSair, saindo }) {
@@ -31,6 +32,7 @@ export function BarraSuperior({ aba, aoTrocarAba, statusConexao, usuario, aoSair
 
       <div className="barra__direita">
         <IndicadorConexao status={statusConexao} />
+        <IndicadorImpressora />
         <span className="barra__usuario" title={usuario.email}>
           {usuario.nome}
         </span>

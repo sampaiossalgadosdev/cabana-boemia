@@ -12,6 +12,7 @@ import { useCarrinho } from './carrinho/CarrinhoContext.jsx';
 import { conciliar, mensagensDaConciliacao } from './carrinho/carrinho.js';
 import { repetirPedido } from './pedido/pedido.js';
 import { useUltimoPedido } from './hooks/useUltimoPedido.js';
+import { RodapeLegal } from './componentes/PaginaLegal.jsx';
 
 const SEM_CATEGORIAS = [];
 
@@ -117,6 +118,8 @@ export function App() {
           <EstadoCarregando />
         )}
       </main>
+
+      <RodapeLegal />
 
       <BarraCarrinho onAbrir={() => setGavetaAberta(true)} />
       <GavetaCarrinho

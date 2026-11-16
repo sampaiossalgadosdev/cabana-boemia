@@ -90,7 +90,7 @@ describe('caixa: abrir, movimentos, fechamento cego e retaguarda', { skip: semBa
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
     criarTempoReal(servidor);
     await new Promise((resolve) => servidor.listen(0, resolve));
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
     const login = async (email, senha) =>
       (await api('POST', '/auth/login', { corpo: { email, senha }, tk: null })).corpo.accessToken;
     tkAtendente = await login('ana@teste.com', 'senha-da-ana');
@@ -253,7 +253,7 @@ describe('caixa: abrir, movimentos, fechamento cego e retaguarda', { skip: semBa
   // ───────── Fechamento cego ─────────
 
   test('atendente não recebe o esperado nem a diferença (abrir, atual, movimentos, fechar, impressão, socket); retaguarda = 403', async () => {
-    const socket = conectarSocket(base, { auth: { token: tkAtendente }, transports: ['websocket'], forceNew: true, reconnection: false });
+    const socket = conectarSocket(new URL(base).origin, { path: '/api/socket.io', auth: { token: tkAtendente }, transports: ['websocket'], forceNew: true, reconnection: false });
     await new Promise((resolve, reject) => {
       socket.once('connect', resolve);
       socket.once('connect_error', reject);

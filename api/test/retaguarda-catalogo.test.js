@@ -92,7 +92,7 @@ describe('retaguarda: catálogo, cardápio do dia, turnos, bairros e configuraç
 
     servidor = http.createServer(criarApp({ log: false, relogio: () => SEXTA_20H }));
     await new Promise((resolve) => servidor.listen(0, resolve));
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
     const login = async (email, senha) =>
       (
         await (

@@ -23,7 +23,7 @@ describe('Socket.IO da equipe', { skip: semBancoDeTeste }, () => {
 
   /** Conecta sem reconexão automática; resolve no connect ou rejeita no connect_error. */
   async function conectar(token) {
-    const socket = conectarSocket(base, { auth: { token }, transports: ['websocket'], forceNew: true, reconnection: false });
+    const socket = conectarSocket(new URL(base).origin, { path: '/api/socket.io', auth: { token }, transports: ['websocket'], forceNew: true, reconnection: false });
     await new Promise((resolve, reject) => {
       socket.once('connect', resolve);
       socket.once('connect_error', reject);
@@ -42,7 +42,7 @@ describe('Socket.IO da equipe', { skip: semBancoDeTeste }, () => {
     servidor = http.createServer(criarApp({ log: false }));
     criarTempoReal(servidor);
     await new Promise((resolve) => servidor.listen(0, resolve));
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
     tokenDono = await login('dono@teste.com', 'senha-do-dono');
   });
 

@@ -1,13 +1,13 @@
 import express from 'express';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import helmet from 'helmet';
 import cors from 'cors';
 import morgan from 'morgan';
 import { criarRotas } from './routes/index.js';
 import { naoEncontrado } from './middlewares/naoEncontrado.js';
 import { tratarErro } from './middlewares/erro.js';
+import { servirSpa, DIST_SITE, DIST_RETAGUARDA, CSP_SITE, CSP_RETAGUARDA } from './lib/estaticos.js';
+
+export { DIST_SITE, DIST_RETAGUARDA };
 
 /** Lê CORS_ORIGINS ("a,b,c") e devolve a lista sem espaços nem itens vazios. */
 export function lerOrigensCors(valor = '') {
@@ -17,33 +17,8 @@ export function lerOrigensCors(valor = '') {
     .filter(Boolean);
 }
 
-/** Build da retaguarda (`npm run build -w retaguarda`), servido em /admin. */
-export const DIST_RETAGUARDA = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'retaguarda', 'dist');
-
-/**
- * Retaguarda (SPA) em /admin: arquivos do build e, para qualquer outra rota
- * sob /admin, o index.html (o React decide a tela). Sem build: não monta nada.
- */
-function servirRetaguarda(app, dist) {
-  const indice = path.join(dist, 'index.html');
-  if (!fs.existsSync(indice)) return;
-  app.use(
-    '/admin',
-    express.static(dist, {
-      index: false,
-      // Arquivos com hash no nome podem ficar em cache; o index.html nunca.
-      setHeaders(res, arquivo) {
-        res.set('Cache-Control', arquivo.includes(`${path.sep}assets${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache');
-      },
-    }),
-  );
-  app.get(['/admin', '/admin/*'], (req, res, next) => {
-    // Asset que não existe é 404 (devolver o index.html no lugar quebraria o navegador em silêncio).
-    if (req.path.startsWith('/admin/assets/')) return next();
-    res.set('Cache-Control', 'no-cache');
-    res.sendFile(indice);
-  });
-}
+/** Prefixo de todas as rotas da API (o site ocupa / e a retaguarda /admin). */
+export const PREFIXO_API = '/api';
 
 /**
  * Monta o app Express sem abrir porta; usado pelo server.js e pelos testes.
@@ -51,7 +26,7 @@ function servirRetaguarda(app, dist) {
  *           verificarIdTokenGoogle?: (idToken: string) => Promise<object> }} [opcoes]
  *   `relogio`: fonte do "agora" das rotas públicas (injetável nos testes).
  *   `verificarIdTokenGoogle`: troca o verificador do Google (testes usam chave própria).
- *   `distRetaguarda`: pasta do build da retaguarda servida em /admin (testes usam uma própria).
+ *   `distSite` / `distRetaguarda`: builds servidos em / e /admin (testes usam pastas próprias).
  */
 export function criarApp({
   corsOrigins = lerOrigensCors(process.env.CORS_ORIGINS),
@@ -59,6 +34,7 @@ export function criarApp({
   limiteLogin,
   relogio,
   verificarIdTokenGoogle,
+  distSite = DIST_SITE,
   distRetaguarda = DIST_RETAGUARDA,
 } = {}) {
   const app = express();
@@ -86,8 +62,9 @@ export function criarApp({
   app.use(express.json({ limit: '100kb' }));
   if (log) app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-  app.use(criarRotas({ limiteLogin, relogio, verificarIdTokenGoogle }));
-  servirRetaguarda(app, distRetaguarda);
+  app.use(PREFIXO_API, criarRotas({ limiteLogin, relogio, verificarIdTokenGoogle }));
+  servirSpa(app, { prefixo: '/admin', dist: distRetaguarda, csp: CSP_RETAGUARDA });
+  servirSpa(app, { prefixo: '/', dist: distSite, csp: CSP_SITE });
 
   app.use(naoEncontrado);
   app.use(tratarErro);

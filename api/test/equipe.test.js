@@ -38,7 +38,7 @@ describe('rotas da equipe (PDV) e socket', { skip: semBancoDeTeste }, () => {
   const login = async (email, senha) => (await api('POST', '/auth/login', { corpo: { email, senha } })).corpo.accessToken;
 
   async function conectar(auth) {
-    const socket = conectarSocket(base, { auth, transports: ['websocket'], forceNew: true, reconnection: false });
+    const socket = conectarSocket(new URL(base).origin, { path: '/api/socket.io', auth, transports: ['websocket'], forceNew: true, reconnection: false });
     await new Promise((resolve, reject) => {
       socket.once('connect', resolve);
       socket.once('connect_error', (err) => {
@@ -83,7 +83,7 @@ describe('rotas da equipe (PDV) e socket', { skip: semBancoDeTeste }, () => {
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
     criarTempoReal(servidor);
     await new Promise((resolve) => servidor.listen(0, resolve));
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
     tokenDono = await login('dono@teste.com', 'senha-do-dono');
     tokenAna = await login('ana@teste.com', 'senha-da-ana');
 

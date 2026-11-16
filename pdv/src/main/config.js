@@ -6,9 +6,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { lerConfigImpressao, validarConfigImpressao } from './agente-impressao/configuracao.js';
 
+/** Prefixo das rotas da API no servidor (o site fica em /, a retaguarda em /admin). */
+export const PREFIXO_API = '/api';
+
 /**
- * Normaliza e valida a URL da API: http(s), sem query/hash, sem barra no fim.
- * @returns {string} URL normalizada
+ * Normaliza e valida o endereço do servidor: http(s), sem query/hash, sem
+ * barra no fim e sem o `/api` (o PDV acrescenta sozinho; quem digitar com
+ * `/api` não fica com `/api/api`).
+ * @returns {string} endereço normalizado
  * @throws {Error} mensagem pronta para a tela
  */
 export function validarApiUrl(valor) {
@@ -25,8 +30,11 @@ export function validarApiUrl(valor) {
   if (url.username || url.password || url.search || url.hash) {
     throw new Error('Informe só o endereço do servidor, sem parâmetros');
   }
-  return `${url.origin}${url.pathname}`.replace(/\/+$/, '');
+  return `${url.origin}${url.pathname}`.replace(/\/+$/, '').replace(/\/api$/i, '');
 }
+
+/** Base das rotas HTTP da API a partir do endereço do servidor. */
+export const baseDaApi = (servidor) => (servidor ? `${servidor}${PREFIXO_API}` : null);
 
 /**
  * @param {{ caminho: string, apiUrlPadrao: string | null }} opcoes
@@ -41,7 +49,8 @@ export function criarConfig({ caminho, apiUrlPadrao }) {
     salvo = {}; // primeira execução ou arquivo corrompido
   }
 
-  function apiUrl() {
+  /** Endereço do servidor como a pessoa configurou (sem `/api`). */
+  function servidor() {
     if (typeof salvo.apiUrl === 'string') {
       try {
         return validarApiUrl(salvo.apiUrl);
@@ -61,8 +70,10 @@ export function criarConfig({ caminho, apiUrlPadrao }) {
   }
 
   return {
-    obter: () => ({ apiUrl: apiUrl() }),
-    apiUrl,
+    obter: () => ({ apiUrl: servidor() }),
+    servidor,
+    /** Base das rotas da API (`<servidor>/api`); null se não configurado. */
+    apiUrl: () => baseDaApi(servidor()),
     definirApiUrl(valor) {
       const url = validarApiUrl(valor);
       gravar({ ...salvo, apiUrl: url });

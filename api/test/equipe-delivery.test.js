@@ -60,7 +60,7 @@ describe('delivery do WhatsApp pelo PDV: clientes, lançamento, cancelamento e g
 
   async function conectar() {
     const login = await api('POST', '/auth/login', { corpo: { email: 'ana@teste.com', senha: 'senha-da-ana' }, token: null });
-    const socket = conectarSocket(base, {
+    const socket = conectarSocket(new URL(base).origin, { path: '/api/socket.io',
       auth: { token: login.corpo.accessToken },
       transports: ['websocket'],
       forceNew: true,
@@ -94,7 +94,7 @@ describe('delivery do WhatsApp pelo PDV: clientes, lançamento, cancelamento e g
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
     criarTempoReal(servidor);
     await new Promise((resolve) => servidor.listen(0, resolve));
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
     tokenAna = (await api('POST', '/auth/login', { corpo: { email: 'ana@teste.com', senha: 'senha-da-ana' }, token: null }))
       .corpo.accessToken;
   });

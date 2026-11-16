@@ -54,6 +54,6 @@ describe('retaguarda servida em /admin', () => {
   });
 
   test('as rotas da API continuam fora de /admin', async () => {
-    assert.equal((await fetch(`${base}/health`)).status, 200);
+    assert.equal((await fetch(`${base}/api/health`)).status, 200);
   });
 });

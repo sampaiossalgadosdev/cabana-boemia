@@ -31,7 +31,7 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
     servidor = await new Promise((resolve) => {
       const s = app.listen(0, () => resolve(s));
     });
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
   });
 
   // Estado conhecido: tudo disponível hoje, com saldo.

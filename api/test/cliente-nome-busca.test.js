@@ -56,7 +56,7 @@ describe('Cliente.nomeBusca: preenchido em toda gravação e usado na busca do P
 
     servidor = http.createServer(criarApp({ log: false }));
     await new Promise((resolve) => servidor.listen(0, resolve));
-    base = `http://127.0.0.1:${servidor.address().port}`;
+    base = `http://127.0.0.1:${servidor.address().port}/api`;
     const login = await fetch(`${base}/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

@@ -6,6 +6,7 @@ import './estilos/app.css';
 import './estilos/delivery.css';
 import './estilos/impressao.css';
 import './estilos/salao.css';
+import './estilos/caixa.css';
 
 createRoot(document.getElementById('raiz')).render(
   <StrictMode>

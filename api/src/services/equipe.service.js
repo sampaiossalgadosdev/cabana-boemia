@@ -9,7 +9,8 @@ import * as configRepo from '../repositories/configuracao.repository.js';
 import * as equipeRepo from '../repositories/equipe.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoService from './endereco.service.js';
-import { pedidoPublico, STATUS_ABERTOS } from './pedido.service.js';
+import { OPCOES_TRANSACAO, pedidoPublico, STATUS_ABERTOS } from './pedido.service.js';
+import { exigirCaixaAberto } from './caixa.service.js';
 import { calcularTempoEstimado, temSaldo } from './publico.service.js';
 import { calcularTurnoAtivo, calcularProximaAbertura } from './turno.service.js';
 
@@ -36,31 +37,40 @@ export async function listarPedidosDoDia({ dataRef, canais, somenteAbertos = tru
 /**
  * Finaliza um pedido aberto. A forma de pagamento informada SOBRESCREVE a
  * escolhida pelo cliente (vale o que foi pago de fato). Troco só existe em
- * DINHEIRO: em outra forma é apagado. Avisa a equipe com "pedido:atualizado".
+ * DINHEIRO: em outra forma é apagado. Exige caixa aberto (409 CAIXA_FECHADO)
+ * e grava o `caixaId`: o pedido entra no caixa em que foi finalizado.
+ * Avisa a equipe com "pedido:atualizado".
  */
 export async function finalizarPedido(id, { formaPagamento }, agora = new Date()) {
-  const atual = await pedidoRepo.buscarPorId(id);
-  if (!atual) throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+  const pedido = await prisma.$transaction(async (tx) => {
+    // Caixa primeiro (mesma ordem de travas do fechamento de comanda): caixa → pedido.
+    const caixaId = await exigirCaixaAberto(tx);
+    const atual = await pedidoRepo.buscarPorId(id, tx);
+    if (!atual) throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
 
-  const count = await pedidoRepo.finalizarSeAberto(
-    id,
-    {
-      formaPagamento,
-      trocoParaCentavos: formaPagamento === 'DINHEIRO' ? atual.trocoParaCentavos : null,
-      finalizadoEm: agora,
-    },
-    STATUS_ABERTOS,
-  );
-  if (count === 0) {
-    // Já encerrado (ou outra atendente finalizou no mesmo instante).
-    const s = await pedidoRepo.buscarStatus(id);
-    const situacao = s?.status === 'CANCELADO' ? 'cancelado' : 'finalizado';
-    throw new ErroHttp(409, `Pedido já está ${situacao}`, { codigo: 'PEDIDO_ENCERRADO' });
-  }
+    const count = await pedidoRepo.finalizarSeAberto(
+      id,
+      {
+        formaPagamento,
+        trocoParaCentavos: formaPagamento === 'DINHEIRO' ? atual.trocoParaCentavos : null,
+        finalizadoEm: agora,
+        caixaId,
+      },
+      STATUS_ABERTOS,
+      tx,
+    );
+    if (count === 0) {
+      // Já encerrado (ou outra atendente finalizou no mesmo instante).
+      const s = await pedidoRepo.buscarStatus(id, tx);
+      const situacao = s?.status === 'CANCELADO' ? 'cancelado' : 'finalizado';
+      throw new ErroHttp(409, `Pedido já está ${situacao}`, { codigo: 'PEDIDO_ENCERRADO' });
+    }
+    return pedidoRepo.buscarPorId(id, tx);
+  }, OPCOES_TRANSACAO);
 
-  const pedido = pedidoPublico(await pedidoRepo.buscarPorId(id));
-  emitirParaEquipe('pedido:atualizado', pedido);
-  return pedido;
+  const publico = pedidoPublico(pedido);
+  emitirParaEquipe('pedido:atualizado', publico);
+  return publico;
 }
 
 const CONFIG_PADRAO = { tempoEstimadoPadraoMin: 40, tempoEstimadoManualMin: null, tempoManualDefinidoEm: null };

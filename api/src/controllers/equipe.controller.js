@@ -5,6 +5,7 @@ import { CANAIS, FORMAS_PAGAMENTO } from '../services/pedido.service.js';
 import * as equipeService from '../services/equipe.service.js';
 import * as impressaoService from '../services/impressao.service.js';
 import * as comandaService from '../services/comanda.service.js';
+import * as caixaService from '../services/caixa.service.js';
 import { enderecoSchema, itemPedidoSchema, opcional, telefone, trocoSoEmDinheiro } from './esquemas.js';
 
 const buscaSchema = z.object({
@@ -52,6 +53,31 @@ const listarSchema = z.object({
 });
 
 const idSchema = z.object({ id: z.coerce.number().int().positive() });
+
+// ───────── Caixa ─────────
+
+/** Teto de sanidade para valores do caixa (R$ 100.000,00). */
+const VALOR_MAX_CENTAVOS = 10_000_000;
+const centavos = (mensagem, min) =>
+  z
+    .number({ error: mensagem })
+    .int('Use centavos inteiros')
+    .min(min, min > 0 ? 'Informe um valor maior que zero' : 'O valor não pode ser negativo')
+    .max(VALOR_MAX_CENTAVOS, 'Valor alto demais');
+
+const abrirCaixaSchema = z.object({ valorInicialCentavos: centavos('Informe o valor inicial', 0) });
+
+const movimentoCaixaSchema = z.object({
+  tipo: z.enum(caixaService.TIPOS_MOVIMENTO, { error: 'Escolha sangria ou suprimento' }),
+  valorCentavos: centavos('Informe o valor', 1),
+  motivo: z.string({ error: 'Informe o motivo' }).trim().min(1, 'Informe o motivo').max(140),
+});
+
+/** Fechamento cego: só o valor contado (e observação). */
+const fecharCaixaSchema = z.object({
+  valorContadoCentavos: centavos('Informe o valor contado', 0),
+  observacao: opcional(500),
+});
 
 // ───────── Comandas do salão ─────────
 
@@ -168,6 +194,25 @@ export function criarEquipeController(relogio = () => new Date()) {
     async definirTempo(req, res) {
       const { minutos } = validar(tempoSchema, req.body ?? {});
       res.json(await equipeService.definirTempoEstimado(minutos, relogio()));
+    },
+
+    async caixaAtual(req, res) {
+      res.json({ caixa: await caixaService.caixaAtual() });
+    },
+
+    async abrirCaixa(req, res) {
+      const dados = validar(abrirCaixaSchema, req.body ?? {});
+      res.status(201).json({ caixa: await caixaService.abrirCaixa(dados, { usuarioId: req.usuario.id, agora: relogio() }) });
+    },
+
+    async movimentoCaixa(req, res) {
+      const dados = validar(movimentoCaixaSchema, req.body ?? {});
+      res.status(201).json({ caixa: await caixaService.registrarMovimento(dados, { usuarioId: req.usuario.id, agora: relogio() }) });
+    },
+
+    async fecharCaixa(req, res) {
+      const dados = validar(fecharCaixaSchema, req.body ?? {});
+      res.json({ caixa: await caixaService.fecharCaixa(dados, { usuarioId: req.usuario.id, agora: relogio() }) });
     },
 
     async listarComandas(req, res) {

@@ -185,6 +185,40 @@ describe('handlers IPC', () => {
     assert.equal(chamadas.length, 0);
   });
 
+  test('caixa: rotas fixas; fechamento manda só contado e observação (nunca esperado)', async () => {
+    const { h, chamadas } = montar();
+    await h['caixa:atual']();
+    await h['caixa:abrir'](15000);
+    await h['caixa:movimento']({ tipo: 'SANGRIA', valorCentavos: 5000, motivo: ' depósito ', usuarioId: 9 });
+    await h['caixa:fechar']({ valorContadoCentavos: 14500, observacao: '', esperadoCentavos: 1, diferencaCentavos: 2 });
+    assert.deepEqual(chamadas, [
+      ['GET', '/equipe/caixa/atual'],
+      ['POST', '/equipe/caixa/abrir', { valorInicialCentavos: 15000 }],
+      ['POST', '/equipe/caixa/movimentos', { tipo: 'SANGRIA', valorCentavos: 5000, motivo: 'depósito' }],
+      ['POST', '/equipe/caixa/fechar', { valorContadoCentavos: 14500, observacao: null }],
+    ]);
+  });
+
+  test('caixa: recusa valores e tipos inválidos antes de chamar a API', async () => {
+    const { h, chamadas } = montar();
+    const ruins = [
+      ['caixa:abrir', [-1]],
+      ['caixa:abrir', [12.5]],
+      ['caixa:abrir', [NaN]],
+      ['caixa:movimento', [{ tipo: 'RETIRADA', valorCentavos: 100, motivo: 'x' }]],
+      ['caixa:movimento', [{ tipo: 'SANGRIA', valorCentavos: 0, motivo: 'x' }]],
+      ['caixa:movimento', [{ tipo: 'SANGRIA', valorCentavos: 100, motivo: '  ' }]],
+      ['caixa:fechar', [{}]],
+      ['caixa:fechar', [{ valorContadoCentavos: 10_000_001 }]],
+    ];
+    for (const [canal, args] of ruins) {
+      const r = await executar(h[canal], args);
+      assert.equal(r.ok, false, `${canal} ${JSON.stringify(args)}`);
+      assert.equal(r.erro.codigo, 'VALIDACAO');
+    }
+    assert.equal(chamadas.length, 0);
+  });
+
   test('cancelar valida o id; busca de cliente vai codificada na URL', async () => {
     const { h, chamadas } = montar();
     assert.equal((await executar(h['pedidos:cancelar'], ['1'])).ok, false);

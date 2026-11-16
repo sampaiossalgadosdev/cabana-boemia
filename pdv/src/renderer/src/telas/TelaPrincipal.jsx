@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
-import { chamar, pdv } from '../lib/pdv.js';
+import { useCallback, useEffect, useState } from 'react';
+import { CAIXA_FECHADO_EVENTO, chamar, pdv } from '../lib/pdv.js';
 import { BarraSuperior } from '../componentes/BarraSuperior.jsx';
 import { FilaPedidos } from '../componentes/FilaPedidos.jsx';
 import { NovoDelivery } from '../componentes/delivery/NovoDelivery.jsx';
 import { Salao } from '../componentes/salao/Salao.jsx';
+import { TelaAbrirCaixa } from '../componentes/caixa/TelaAbrirCaixa.jsx';
+import { PainelCaixa } from '../componentes/caixa/PainelCaixa.jsx';
 
 const AVISO_MS = 6000;
 
@@ -13,6 +15,35 @@ export function TelaPrincipal({ usuario, aoSair }) {
   const [aviso, setAviso] = useState('');
   const [status, setStatus] = useState('reconectando');
   const [saindo, setSaindo] = useState(false);
+  // undefined = ainda não sabe (carregando/sem rede): não bloqueia a tela.
+  const [caixa, setCaixa] = useState(undefined);
+  const [painelCaixa, setPainelCaixa] = useState(false);
+
+  const carregarCaixa = useCallback(async () => {
+    try {
+      setCaixa((await chamar(pdv.caixa.atual())).caixa);
+    } catch {
+      // Sem rede: mantém o que sabia; a API recusa finalizar se o caixa estiver fechado.
+    }
+  }, []);
+
+  // Caixa: ao entrar, a cada (re)conexão, quando outro PDV abre/fecha/movimenta
+  // e quando uma operação recebe 409 CAIXA_FECHADO.
+  useEffect(() => {
+    carregarCaixa();
+    const pararEvento = pdv.aoEvento('caixa:atualizado', (d) => setCaixa(d?.caixa ?? null));
+    window.addEventListener(CAIXA_FECHADO_EVENTO, carregarCaixa);
+    return () => {
+      pararEvento();
+      window.removeEventListener(CAIXA_FECHADO_EVENTO, carregarCaixa);
+    };
+  }, [carregarCaixa]);
+
+  useEffect(() => {
+    if (status === 'conectado') carregarCaixa();
+  }, [status, carregarCaixa]);
+
+  const semCaixa = caixa === null;
 
   useEffect(() => {
     chamar(pdv.tempoReal.status()).then(setStatus, () => {});
@@ -50,18 +81,25 @@ export function TelaPrincipal({ usuario, aoSair }) {
   return (
     <div className="principal">
       <BarraSuperior aba={aba} aoTrocarAba={setAba} statusConexao={status} usuario={usuario}
-        aoSair={sair} saindo={saindo} />
+        aoSair={sair} saindo={saindo} caixa={caixa} aoAbrirCaixa={() => setPainelCaixa(true)} />
       <main className="conteudo">
         {aviso && (
           <p className="aviso-sucesso" role="status">
             {aviso}
           </p>
         )}
-        {/* A fila fica montada mesmo no Salão e durante o lançamento: o alerta continua tocando. */}
-        <div hidden={aba !== 'delivery' || lancando}>
+        {semCaixa && (
+          <TelaAbrirCaixa usuario={usuario}
+            aoAbrir={(c, { recarregar } = {}) => {
+              if (recarregar) carregarCaixa();
+              else setCaixa(c);
+            }} />
+        )}
+        {/* A fila fica montada mesmo no Salão, durante o lançamento e com o caixa fechado: o alerta continua tocando. */}
+        <div hidden={semCaixa || aba !== 'delivery' || lancando}>
           <FilaPedidos statusConexao={status} aoNovoDelivery={() => setLancando(true)} />
         </div>
-        {aba === 'delivery' && lancando && (
+        {!semCaixa && aba === 'delivery' && lancando && (
           <NovoDelivery
             aoSair={() => setLancando(false)}
             aoConcluir={(pedido) => {
@@ -70,8 +108,15 @@ export function TelaPrincipal({ usuario, aoSair }) {
             }}
           />
         )}
-        {aba === 'salao' && <Salao statusConexao={status} />}
+        {!semCaixa && aba === 'salao' && <Salao statusConexao={status} />}
       </main>
+      {painelCaixa && caixa && (
+        <PainelCaixa caixa={caixa} aoMudar={setCaixa} aoFechar={() => setPainelCaixa(false)}
+          aoFechado={(mensagem) => {
+            setCaixa(null);
+            setAviso(mensagem);
+          }} />
+      )}
     </div>
   );
 }

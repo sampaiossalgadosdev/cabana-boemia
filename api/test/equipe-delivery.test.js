@@ -88,6 +88,8 @@ describe('delivery do WhatsApp pelo PDV: clientes, lançamento, cancelamento e g
     vila = await prisma.bairro.create({ data: { nome: 'Vila Nova', taxaCentavos: 700 } });
     fechado = await prisma.bairro.create({ data: { nome: 'Longe', taxaCentavos: 2000, ativo: false } });
     ana = await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
+    // Finalizar exige caixa aberto (as regras do caixa estão em caixa.test.js).
+    await prisma.caixa.create({ data: { abertoPorId: ana.id, valorInicialCentavos: 0 } });
 
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
     criarTempoReal(servidor);

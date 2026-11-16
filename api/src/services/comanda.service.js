@@ -7,7 +7,8 @@
  *   produto, calcula o preço SÓ com o banco (POR_KG = round(preço × g / 1000)),
  *   baixa o estoque com a mesma regra atômica do `criarPedido` e recalcula os totais.
  * - Remover item: marca `canceladoEm` e devolve exatamente o que aquele item baixou.
- * - Fechar: forma de pagamento obrigatória → FINALIZADO; cupom CONTA só se pedido.
+ * - Fechar: forma de pagamento obrigatória e caixa aberto (409 CAIXA_FECHADO) →
+ *   FINALIZADO com o `caixaId`; cupom CONTA só se pedido.
  *   Fechar não mexe no estoque (a baixa já aconteceu no lançamento).
  *
  * Toda alteração trava a linha do pedido primeiro (pedido → produtos →
@@ -30,6 +31,7 @@ import {
   necessidadesDeEstoque,
   pedidoPublico,
 } from './pedido.service.js';
+import { exigirCaixaAberto } from './caixa.service.js';
 
 const naoEncontrada = () => new ErroHttp(404, 'Comanda não encontrada', { codigo: 'NAO_ENCONTRADO' });
 
@@ -137,13 +139,15 @@ export async function removerItem(id, itemId, { usuarioId = null, agora = new Da
  */
 export async function fecharComanda(id, { formaPagamento, imprimirConta = false }, { agora = new Date() } = {}) {
   const { pedido, trabalho } = await prisma.$transaction(async (tx) => {
+    // Caixa antes da comanda: mesma ordem de travas da finalização do delivery.
+    const caixaId = await exigirCaixaAberto(tx);
     await travarAberta(tx, id);
     if ((await comandaRepo.contarItensAtivos(id, tx)) === 0) {
       throw new ErroHttp(409, 'A comanda não tem itens. Lance os itens ou exclua a comanda.', {
         codigo: 'COMANDA_VAZIA',
       });
     }
-    await comandaRepo.fechar(id, { formaPagamento, finalizadoEm: agora }, tx);
+    await comandaRepo.fechar(id, { formaPagamento, finalizadoEm: agora, caixaId }, tx);
     const trabalho = imprimirConta
       ? await pedidoRepo.criarTrabalhoImpressao({ pedidoId: id, tipo: 'CONTA', status: 'PENDENTE' }, tx)
       : null;

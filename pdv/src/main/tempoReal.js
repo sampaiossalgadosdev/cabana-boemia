@@ -9,7 +9,7 @@
  */
 
 /** Eventos da API escutados no main (impressao:nova vai para o agente de impressão). */
-export const EVENTOS_EQUIPE = ['pedido:novo', 'pedido:atualizado', 'impressao:nova'];
+export const EVENTOS_EQUIPE = ['pedido:novo', 'pedido:atualizado', 'impressao:nova', 'caixa:atualizado'];
 
 const ESPERA_RECONEXAO_MS = 3_000;
 

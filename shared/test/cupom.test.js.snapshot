@@ -119,6 +119,63 @@ Pagamento                                 Débito
 
 `;
 
+exports[`cupom.js > snapshot FECHAMENTO (caixa) em 32 colunas 1`] = `
+         CABANA BOEMIA
+================================
+         FECHAMENTO DE
+             CAIXA
+--------------------------------
+Abertura        15/11/2026 10:58
+Aberto por                   Ana
+Fechamento      15/11/2026 23:30
+Fechado por                  Bia
+--------------------------------
+Fundo de troco         R$ 100,00
+Suprimentos:
+12:10 Troco do banco    R$ 20,00
+Sangrias:
+16:45 Depósito          R$ 50,00
+--------------------------------
+Vendas por forma de pagamento
+Dinheiro (3)            R$ 75,37
+Pix (1)                 R$ 45,90
+Total vendido (4)      R$ 121,27
+--------------------------------
+DINHEIRO CONTADO       R$ 145,00
+Obs: Faltou uma moeda de R$ 0,50
+--------------------------------
+  Emitido em 15/11/2026 23:31
+
+`;
+
+exports[`cupom.js > snapshot FECHAMENTO (caixa) em 48 colunas 1`] = `
+                 CABANA BOEMIA
+================================================
+              FECHAMENTO DE CAIXA
+------------------------------------------------
+Abertura                        15/11/2026 10:58
+Aberto por                                   Ana
+Fechamento                      15/11/2026 23:30
+Fechado por                                  Bia
+------------------------------------------------
+Fundo de troco                         R$ 100,00
+Suprimentos:
+12:10 Troco do banco                    R$ 20,00
+Sangrias:
+16:45 Depósito                          R$ 50,00
+------------------------------------------------
+Vendas por forma de pagamento
+Dinheiro (3)                            R$ 75,37
+Pix (1)                                 R$ 45,90
+Total vendido (4)                      R$ 121,27
+------------------------------------------------
+DINHEIRO CONTADO                       R$ 145,00
+Obs: Faltou uma moeda de R$ 0,50
+------------------------------------------------
+          Emitido em 15/11/2026 23:31
+
+`;
+
 exports[`cupom.js > snapshot PEDIDO (site, dinheiro com troco) em 32 colunas 1`] = `
          CABANA BOEMIA
 ================================

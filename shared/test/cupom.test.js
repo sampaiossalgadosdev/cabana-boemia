@@ -8,7 +8,7 @@ import {
   montarCupom,
   quebrar,
 } from '../src/cupom.js';
-import { cancelamentoWhatsapp, contaSalao, pedidoSite } from './fixtures/trabalhos.js';
+import { cancelamentoWhatsapp, contaSalao, fechamentoCaixa, pedidoSite } from './fixtures/trabalhos.js';
 
 // Snapshot em texto puro (legível no diff). Para regravar depois de mudar o
 // layout de propósito: node --test --test-update-snapshots test/cupom.test.js
@@ -20,6 +20,7 @@ describe('cupom.js', () => {
       ['PEDIDO (site, dinheiro com troco)', pedidoSite],
       ['CANCELAMENTO (WhatsApp)', cancelamentoWhatsapp],
       ['CONTA (salão, por kg)', contaSalao],
+      ['FECHAMENTO (caixa)', fechamentoCaixa],
     ]) {
       test(`snapshot ${nome} em ${colunas} colunas`, (t) => {
         const linhas = montarCupom(trabalho, { colunas, restaurante: 'Cabana Boemia' });
@@ -98,6 +99,22 @@ describe('cupom.js', () => {
     assert.match(texto, /TOTAL +R\$ 63,95/);
     assert.doesNotMatch(texto, /Tel:|Taxa de entrega|Troco/);
     assert.match(texto, /Não é documento fiscal/);
+  });
+
+  test('FECHAMENTO: abertura, movimentos, totais por forma e contado; nunca esperado nem diferença', () => {
+    const texto = cupomParaTexto(montarCupom(fechamentoCaixa, { colunas: 48 }), 48);
+    assert.match(texto, /FECHAMENTO DE CAIXA/);
+    assert.match(texto, /Abertura +15\/11\/2026 10:58/);
+    assert.match(texto, /Fechado por +Bia/);
+    assert.match(texto, /Fundo de troco +R\$ 100,00/);
+    assert.match(texto, /12:10 Troco do banco +R\$ 20,00/);
+    assert.match(texto, /16:45 Depósito +R\$ 50,00/);
+    assert.ok(texto.indexOf('Dinheiro (3)') < texto.indexOf('Pix (1)'), 'formas na ordem fixa');
+    assert.match(texto, /Total vendido \(4\) +R\$ 121,27/);
+    assert.match(texto, /DINHEIRO CONTADO +R\$ 145,00/);
+    assert.match(texto, /Obs: Faltou uma moeda/);
+    assert.doesNotMatch(texto, /[Ee]sperado|[Dd]iferen|PEDIDO #/);
+    assert.doesNotMatch(texto, /145,37|-R\$/, 'nem o valor esperado/diferença por extenso');
   });
 
   test('pagamento sem troco: só a forma', () => {

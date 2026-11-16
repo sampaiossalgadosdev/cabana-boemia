@@ -115,6 +115,11 @@ export const api = {
     reativar: (id) => patch(`/usuarios/${id}/reativar`),
     trocarSenha: (id, senha) => patch(`/usuarios/${id}/senha`, { senha }),
   },
+  relatorios: {
+    dia: (data) => get(`/retaguarda/relatorios/dia${consulta({ data })}`),
+    imprimir: (data) => post('/retaguarda/relatorios/dia/imprimir', { data }),
+    caixas: (data) => get(`/retaguarda/caixas${consulta({ data })}`),
+  },
   config: {
     obter: () => get('/retaguarda/config'),
     salvar: (dados) => put('/retaguarda/config', dados),

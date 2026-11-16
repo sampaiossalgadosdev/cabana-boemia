@@ -82,3 +82,56 @@ export function moverNaOrdem(lista, id, direcao) {
     .filter((x) => x.ordem !== x.antes)
     .map(({ id: idItem, ordem }) => ({ id: idItem, ordem }));
 }
+
+// ───────── Relatório do dia ─────────
+
+const DIAS_CURTOS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
+/** "2026-11-13" → "sexta, 13/11/2026". */
+export function formatarDia(dia) {
+  const [a, m, d] = dia.split('-').map(Number);
+  const semana = DIAS_SEMANA[new Date(Date.UTC(a, m - 1, d)).getUTCDay()].toLowerCase();
+  return `${semana}, ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${a}`;
+}
+
+/** "2026-11-30" + 1 → "2026-12-01". */
+export function somarDias(dia, n) {
+  const [a, m, d] = dia.split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+const horaMin = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+const diaMes = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' });
+
+/** ISO → "20:30". */
+export const formatarHora = (iso) => horaMin.format(new Date(iso));
+
+/** Expediente [inicio, fim) → "sex 13/11 04:00 até sáb 14/11 04:00". */
+export function descreverExpediente(inicio, fim) {
+  const parte = (iso) => {
+    const d = new Date(iso);
+    const semana = DIAS_CURTOS[new Date(d.getTime() - 3 * 3_600_000).getUTCDay()];
+    return `${semana} ${diaMes.format(d)} ${horaMin.format(d)}`;
+  };
+  return `${parte(inicio)} até ${parte(fim)}`;
+}
+
+/** Largura da barra em % do maior valor (0 se não vendeu; mínimo 1% para aparecer). */
+export function larguraBarra(valor, maior) {
+  if (!valor || !maior) return 0;
+  return Math.max(1, Math.round((valor / maior) * 1000) / 10);
+}
+
+/**
+ * Diferença do caixa (contado − esperado): faltou (negativa, vermelho),
+ * sobrou ou bateu. Caixa ainda aberto: null.
+ */
+export function descreverDiferenca(diferencaCentavos) {
+  if (diferencaCentavos == null) return null;
+  if (diferencaCentavos < 0) return { tipo: 'faltou', centavos: -diferencaCentavos };
+  if (diferencaCentavos > 0) return { tipo: 'sobrou', centavos: diferencaCentavos };
+  return { tipo: 'bateu', centavos: 0 };
+}
+
+/** Peso em gramas → "1,250 kg". */
+export const formatarPeso = (g) => `${(g / 1000).toFixed(3).replace('.', ',')} kg`;

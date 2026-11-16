@@ -55,6 +55,7 @@ enum TipoTrabalhoImpressao {
   CANCELAMENTO
   CONTA
   FECHAMENTO
+  RELATORIO_DIA
 }
 
 enum TipoMovimentoCaixa {
@@ -333,17 +334,19 @@ model ContadorPedido {
 
 // ───────────── Impressão ─────────────
 
-/// Dono: um pedido (PEDIDO, CANCELAMENTO, CONTA) ou um caixa (FECHAMENTO); exatamente um (CHECK).
+/// Dono: um pedido (PEDIDO, CANCELAMENTO, CONTA), um caixa (FECHAMENTO) ou um dia operacional
+/// (RELATORIO_DIA, `dataRelatorio`); exatamente um (CHECK).
 model TrabalhoImpressao {
-  id         Int                     @id @default(autoincrement())
-  pedidoId   Int?
-  caixaId    Int?
-  tipo       TipoTrabalhoImpressao
-  status     StatusTrabalhoImpressao @default(PENDENTE)
-  tentativas Int                     @default(0)
-  ultimoErro String?
-  criadoEm   DateTime                @default(now())
-  impressoEm DateTime?
+  id            Int                     @id @default(autoincrement())
+  pedidoId      Int?
+  caixaId       Int?
+  dataRelatorio DateTime?               @db.Date // RELATORIO_DIA: dia operacional do resumo
+  tipo          TipoTrabalhoImpressao
+  status        StatusTrabalhoImpressao @default(PENDENTE)
+  tentativas    Int                     @default(0)
+  ultimoErro    String?
+  criadoEm      DateTime                @default(now())
+  impressoEm    DateTime?
 
   pedido Pedido? @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
   caixa  Caixa?  @relation(fields: [caixaId], references: [id], onDelete: Restrict)
@@ -402,6 +405,7 @@ model Configuracao {
   nomeRestaurante        String    @default("Cabana Boemia")
   whatsappNumero         String    @default("")
   tempoEstimadoPadraoMin Int       @default(40)
+  horaViradaDia          Int       @default(4) // dia operacional vira às HH:00 local (0–12; CHECK)
   tempoEstimadoManualMin Int?
   tempoManualDefinidoEm  DateTime?
   atualizadoEm           DateTime  @updatedAt

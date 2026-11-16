@@ -7,7 +7,9 @@
  */
 import { ErroHttp } from '../lib/erros.js';
 import { emitirParaEquipe } from '../lib/eventos.js';
-import { localParaUtc, partesLocais } from '../lib/fuso.js';
+import { HORA_VIRADA_PADRAO, diaOperacional, intervaloDoDia } from '../lib/fuso.js';
+import { horaViradaDe } from './diaOperacional.service.js';
+import { relatorioDoDia } from './relatorio.service.js';
 import * as impressaoRepo from '../repositories/impressao.repository.js';
 import * as pedidoRepo from '../repositories/pedido.repository.js';
 import * as configRepo from '../repositories/configuracao.repository.js';
@@ -21,13 +23,12 @@ const HORAS_ANTES_DO_DIA = 2;
 const MAX_ERRO = 500;
 
 /**
- * A partir de quando um pendente ainda vale: início do dia local ou
+ * A partir de quando um pendente ainda vale: início do dia OPERACIONAL ou
  * `HORAS_ANTES_DO_DIA` atrás, o que vier antes. Evita que um PDV ligado pela
  * primeira vez (ou depois de dias sem impressora) despeje cupons antigos.
  */
-export function inicioDaJanela(agora) {
-  const p = partesLocais(agora);
-  const inicioDoDia = localParaUtc(p.ano, p.mes, p.dia, 0);
+export function inicioDaJanela(agora, horaVirada = HORA_VIRADA_PADRAO) {
+  const inicioDoDia = intervaloDoDia(diaOperacional(agora, horaVirada), horaVirada).inicio;
   return new Date(Math.min(inicioDoDia.getTime(), agora.getTime() - HORAS_ANTES_DO_DIA * 3_600_000));
 }
 
@@ -41,26 +42,32 @@ const trabalhoPublico = (t) => ({
   impressoEm: t.impressoEm,
   pedidoId: t.pedidoId,
   caixaId: t.caixaId,
+  dataRelatorio: t.dataRelatorio ? t.dataRelatorio.toISOString().slice(0, 10) : null,
   ...(t.pedido ? { pedido: pedidoPublico(t.pedido) } : {}),
 });
 
-/** FECHAMENTO não tem pedido: leva o resumo do caixa (sem esperado nem diferença). */
-async function comResumoDoCaixa(t) {
+/**
+ * FECHAMENTO não tem pedido: leva o resumo do caixa (sem esperado nem
+ * diferença). RELATORIO_DIA leva o relatório do dia operacional, calculado agora.
+ */
+async function comResumo(t, agora) {
   const publico = trabalhoPublico(t);
   if (t.caixaId) publico.caixa = await resumoParaCupom(t.caixaId);
+  if (t.dataRelatorio) publico.relatorio = await relatorioDoDia(publico.dataRelatorio, agora);
   return publico;
 }
 
 /** @returns {{ restaurante: { nome: string }, limite: number, trabalhos: object[] }} */
 export async function listarPendentes(agora = new Date()) {
-  const [config, trabalhos] = await Promise.all([
-    configRepo.buscar(),
-    impressaoRepo.listarPendentes({ desde: inicioDaJanela(agora), limite: LIMITE_PENDENTES }),
-  ]);
+  const config = await configRepo.buscar();
+  const trabalhos = await impressaoRepo.listarPendentes({
+    desde: inicioDaJanela(agora, horaViradaDe(config)),
+    limite: LIMITE_PENDENTES,
+  });
   return {
     restaurante: { nome: config?.nomeRestaurante ?? 'Cabana Boemia' },
     limite: LIMITE_PENDENTES,
-    trabalhos: await Promise.all(trabalhos.map(comResumoDoCaixa)),
+    trabalhos: await Promise.all(trabalhos.map((t) => comResumo(t, agora))),
   };
 }
 

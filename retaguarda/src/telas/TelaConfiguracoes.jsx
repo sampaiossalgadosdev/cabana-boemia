@@ -30,6 +30,7 @@ function FormConfig({ config, aoSalvar }) {
       nomeRestaurante: config.nomeRestaurante,
       whatsappNumero: formatarWhatsapp(config.whatsappNumero),
       tempoEstimadoPadraoMin: String(config.tempoEstimadoPadraoMin),
+      horaViradaDia: String(config.horaViradaDia ?? 4),
     });
   }, [config]);
   if (!f) return null;
@@ -50,6 +51,7 @@ function FormConfig({ config, aoSalvar }) {
         nomeRestaurante: f.nomeRestaurante.trim(),
         whatsappNumero: f.whatsappNumero,
         tempoEstimadoPadraoMin: tempo,
+        horaViradaDia: Number(f.horaViradaDia),
       });
       avisar('Configurações salvas.');
       await aoSalvar();
@@ -103,6 +105,21 @@ function FormConfig({ config, aoSalvar }) {
               aria-describedby={d}
               onChange={(e) => setF((x) => ({ ...x, tempoEstimadoPadraoMin: e.target.value.replace(/\D/g, '') }))}
             />
+          )}
+        </Campo>
+        <Campo
+          rotulo="Virada do dia"
+          erro={erros.horaViradaDia}
+          ajuda="O dia do restaurante (número do pedido, relatório, caixas) só vira nesta hora. Com 04:00, o pedido da 00:30 ainda conta no dia anterior."
+        >
+          {(id, d) => (
+            <select id={id} className="entrada entrada--curta" value={f.horaViradaDia} aria-describedby={d} onChange={mudar('horaViradaDia')}>
+              {Array.from({ length: 13 }, (_, h) => (
+                <option key={h} value={h}>
+                  {String(h).padStart(2, '0')}:00{h === 0 ? ' (meia-noite)' : ''}
+                </option>
+              ))}
+            </select>
           )}
         </Campo>
         <button type="submit" className="botao botao--primario" disabled={salvando}>

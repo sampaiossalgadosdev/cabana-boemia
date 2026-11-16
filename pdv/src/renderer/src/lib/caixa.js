@@ -24,12 +24,28 @@ const dia = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', ye
 const diaMes = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' });
 const horaMin = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
 
-/** Caixa aberto num dia local anterior a hoje (esquecido aberto)? */
-export const abertoAntesDeHoje = (abertoEm, agora = new Date()) => dia.format(new Date(abertoEm)) < dia.format(agora);
+// Hora da virada do dia operacional (Configuracao.horaViradaDia), recebida em
+// GET /equipe/caixa/atual. Padrão 4 até a primeira resposta.
+let horaViradaAtual = 4;
+export const definirHoraVirada = (h) => {
+  if (Number.isInteger(h) && h >= 0 && h <= 12) horaViradaAtual = h;
+};
+
+/**
+ * Dia OPERACIONAL "YYYY-MM-DD" (vira às `horaVirada`:00, não à meia-noite).
+ * Desloca o instante pela virada e pega o dia local (o Brasil não tem horário
+ * de verão; mesma regra da API em lib/fuso.js).
+ */
+export const diaOperacional = (instante, horaVirada = horaViradaAtual) =>
+  dia.format(new Date(new Date(instante).getTime() - horaVirada * 3_600_000));
+
+/** Caixa aberto num dia operacional anterior a hoje (esquecido aberto)? */
+export const abertoAntesDeHoje = (abertoEm, agora = new Date(), horaVirada = horaViradaAtual) =>
+  diaOperacional(abertoEm, horaVirada) < diaOperacional(agora, horaVirada);
 
 /** "Caixa aberto desde 14/11 às 19:02" se esquecido; senão null. */
-export function avisoCaixaEsquecido(caixa, agora = new Date()) {
-  if (!caixa || !abertoAntesDeHoje(caixa.abertoEm, agora)) return null;
+export function avisoCaixaEsquecido(caixa, agora = new Date(), horaVirada = horaViradaAtual) {
+  if (!caixa || !abertoAntesDeHoje(caixa.abertoEm, agora, horaVirada)) return null;
   const d = new Date(caixa.abertoEm);
   return `Caixa aberto desde ${diaMes.format(d)} às ${horaMin.format(d)}`;
 }

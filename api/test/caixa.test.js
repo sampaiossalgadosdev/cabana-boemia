@@ -245,8 +245,9 @@ describe('caixa: abrir, movimentos, fechamento cego e retaguarda', { skip: semBa
       ['SUPRIMENTO', 2000, 'troco do banco'],
       ['SANGRIA', 5000, 'depósito'],
     ]);
-    // Outro dia: nada.
-    assert.deepEqual((await api('GET', '/retaguarda/caixas?data=2026-11-14', { tk: tkDono })).corpo.caixas, []);
+    // Outro dia: nada. Dia no futuro: 400.
+    assert.deepEqual((await api('GET', '/retaguarda/caixas?data=2026-11-12', { tk: tkDono })).corpo.caixas, []);
+    assert.equal((await api('GET', '/retaguarda/caixas?data=2026-11-14', { tk: tkDono })).status, 400);
   });
 
   // ───────── Fechamento cego ─────────

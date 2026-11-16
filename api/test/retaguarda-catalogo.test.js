@@ -358,9 +358,10 @@ describe('retaguarda: catálogo, cardápio do dia, turnos, bairros e configuraç
       nomeRestaurante: 'Cabana Boemia',
       whatsappNumero: '(43) 99999-0000',
       tempoEstimadoPadraoMin: 50,
+      horaViradaDia: 4,
     });
     assert.equal(r.status, 200, JSON.stringify(r.corpo));
-    assert.deepEqual(r.corpo.config, { nomeRestaurante: 'Cabana Boemia', whatsappNumero: '5543999990000', tempoEstimadoPadraoMin: 50 });
+    assert.deepEqual(r.corpo.config, { nomeRestaurante: 'Cabana Boemia', whatsappNumero: '5543999990000', tempoEstimadoPadraoMin: 50, horaViradaDia: 4 });
     assert.equal((await publico('/publico/config')).whatsapp, '5543999990000');
     assert.equal((await publico('/publico/cardapio')).tempoEstimadoMin, 50);
     assert.deepEqual((await api('GET', '/retaguarda/config')).corpo.config, r.corpo.config);
@@ -371,6 +372,8 @@ describe('retaguarda: catálogo, cardápio do dia, turnos, bairros e configuraç
       { nomeRestaurante: 'X', whatsappNumero: '123', tempoEstimadoPadraoMin: 40 },
       { nomeRestaurante: 'X', whatsappNumero: '43999990000', tempoEstimadoPadraoMin: 0 },
       { nomeRestaurante: 'X', whatsappNumero: '43999990000', tempoEstimadoPadraoMin: 241 },
+      { nomeRestaurante: 'X', whatsappNumero: '43999990000', tempoEstimadoPadraoMin: 40, horaViradaDia: 13 },
+      { nomeRestaurante: 'X', whatsappNumero: '43999990000', tempoEstimadoPadraoMin: 40, horaViradaDia: -1 },
     ]) {
       assert.equal((await api('PUT', '/retaguarda/config', corpo)).status, 400, JSON.stringify(corpo));
     }

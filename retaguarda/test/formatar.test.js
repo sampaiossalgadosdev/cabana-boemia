@@ -95,3 +95,26 @@ test('moverNaOrdem: troca vizinhos, renumera de 10 em 10 e devolve só o que mud
     ],
   );
 });
+
+test('relatório: dia por extenso, somar dias (virada de mês), hora em Brasília', async () => {
+  const { formatarDia, somarDias, formatarHora, descreverExpediente } = await import('../src/lib/formatar.js');
+  assert.equal(formatarDia('2026-11-13'), 'sexta, 13/11/2026');
+  assert.equal(somarDias('2026-11-30', 1), '2026-12-01');
+  assert.equal(somarDias('2026-01-01', -1), '2025-12-31');
+  assert.equal(formatarHora('2026-11-14T03:30:00Z'), '00:30');
+  assert.equal(descreverExpediente('2026-11-13T07:00:00Z', '2026-11-14T07:00:00Z'), 'sex 13/11 04:00 até sáb 14/11 04:00');
+});
+
+test('relatório: largura das barras e diferença do caixa', async () => {
+  const { larguraBarra, descreverDiferenca, formatarPeso } = await import('../src/lib/formatar.js');
+  assert.equal(larguraBarra(4617, 4617), 100);
+  assert.equal(larguraBarra(2700, 4617), 58.5);
+  assert.equal(larguraBarra(1, 100000), 1, 'valor pequeno ainda aparece');
+  assert.equal(larguraBarra(0, 4617), 0);
+  assert.equal(larguraBarra(0, 0), 0);
+  assert.deepEqual(descreverDiferenca(-67), { tipo: 'faltou', centavos: 67 });
+  assert.deepEqual(descreverDiferenca(150), { tipo: 'sobrou', centavos: 150 });
+  assert.deepEqual(descreverDiferenca(0), { tipo: 'bateu', centavos: 0 });
+  assert.equal(descreverDiferenca(null), null);
+  assert.equal(formatarPeso(487), '0,487 kg');
+});

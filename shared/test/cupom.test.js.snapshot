@@ -243,3 +243,81 @@ Levar de troco                          R$ 28,00
                 14/11/2026 20:15
 
 `;
+
+exports[`cupom.js > snapshot RELATORIO_DIA (sexta, virada 04:00) em 32 colunas 1`] = `
+         CABANA BOEMIA
+================================
+         RESUMO DO DIA
+--------------------------------
+       13/11/2026 (sexta)
+Expediente das 04:00 às 04:00 do
+          dia seguinte
+--------------------------------
+Pedidos finalizados            3
+TOTAL VENDIDO          R$ 115,17
+Ticket médio            R$ 38,39
+Taxas de entrega        R$ 10,00
+--------------------------------
+Por forma de pagamento
+Dinheiro (1)            R$ 27,00
+Pix (1)                 R$ 42,00
+Débito (1)              R$ 46,17
+Crédito (0)              R$ 0,00
+Por canal
+Site (1)                R$ 42,00
+WhatsApp (1)            R$ 27,00
+Salão (1)               R$ 46,17
+--------------------------------
+Mais vendidos
+2x X-Bacon              R$ 32,00
+2x Refrigerante Lata    R$ 10,00
+1x Prato por kg (0,487
+kg)                     R$ 29,17
+1x X-Salada             R$ 13,00
+1x X-Burguer            R$ 12,00
+1x Coca-Cola 1L          R$ 9,00
+--------------------------------
+Pedidos cancelados (1)  R$ 55,00
+Itens removidos (1)      R$ 5,00
+--------------------------------
+  Emitido em 14/11/2026 10:05
+
+`;
+
+exports[`cupom.js > snapshot RELATORIO_DIA (sexta, virada 04:00) em 48 colunas 1`] = `
+                 CABANA BOEMIA
+================================================
+                 RESUMO DO DIA
+------------------------------------------------
+               13/11/2026 (sexta)
+ Expediente das 04:00 às 04:00 do dia seguinte
+------------------------------------------------
+Pedidos finalizados                            3
+TOTAL VENDIDO                          R$ 115,17
+Ticket médio                            R$ 38,39
+Taxas de entrega                        R$ 10,00
+------------------------------------------------
+Por forma de pagamento
+Dinheiro (1)                            R$ 27,00
+Pix (1)                                 R$ 42,00
+Débito (1)                              R$ 46,17
+Crédito (0)                              R$ 0,00
+Por canal
+Site (1)                                R$ 42,00
+WhatsApp (1)                            R$ 27,00
+Salão (1)                               R$ 46,17
+------------------------------------------------
+Mais vendidos
+2x X-Bacon                              R$ 32,00
+2x Refrigerante Lata                    R$ 10,00
+1x Prato por kg (0,487 kg)              R$ 29,17
+1x X-Salada                             R$ 13,00
+1x X-Burguer                            R$ 12,00
+1x Coca-Cola 1L                          R$ 9,00
+------------------------------------------------
+Pedidos cancelados (1)                  R$ 55,00
+Itens removidos (1)                      R$ 5,00
+------------------------------------------------
+          Emitido em 14/11/2026 10:05
+
+`;

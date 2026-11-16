@@ -61,3 +61,36 @@ export function localParaUtc(ano, mes, dia, minutos) {
   utc = palpite - offsetMin(new Date(utc)) * 60_000;
   return new Date(utc);
 }
+
+// ───────── Dia operacional ─────────
+
+/** Hora local em que o dia operacional vira (Configuracao.horaViradaDia). */
+export const HORA_VIRADA_PADRAO = 4;
+
+/**
+ * Dia operacional "YYYY-MM-DD" de um instante: o expediente que começou às
+ * `horaVirada`:00 local. Com virada às 4, sexta 23:59 e sábado 00:30 são da
+ * sexta; sábado 04:00 já é sábado. Assim o turno que passa da meia-noite não
+ * é partido (número do pedido, relatório, caixas).
+ */
+export function diaOperacional(instante, horaVirada = HORA_VIRADA_PADRAO) {
+  const p = partesLocais(instante);
+  if (p.minutos >= horaVirada * 60) return p.data;
+  // Antes da virada: ainda é o dia anterior (Date.UTC normaliza o dia 0).
+  return new Date(Date.UTC(p.ano, p.mes - 1, p.dia - 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * Intervalo UTC [inicio, fim) do dia operacional "YYYY-MM-DD":
+ * [D horaVirada:00, D+1 horaVirada:00) no horário local.
+ */
+export function intervaloDoDia(dia, horaVirada = HORA_VIRADA_PADRAO) {
+  const [ano, mes, d] = dia.split('-').map(Number);
+  return {
+    inicio: localParaUtc(ano, mes, d, horaVirada * 60),
+    fim: localParaUtc(ano, mes, d + 1, horaVirada * 60),
+  };
+}
+
+/** "YYYY-MM-DD" → Date à meia-noite UTC (formato dos campos @db.Date). */
+export const paraCampoData = (dia) => new Date(`${dia}T00:00:00.000Z`);

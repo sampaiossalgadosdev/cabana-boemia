@@ -1,5 +1,6 @@
 /** Dados públicos do site (sem login): cardápio do turno ativo, bairros, config. */
-import { diaLocal } from '../lib/fuso.js';
+import { diaOperacional } from '../lib/fuso.js';
+import { horaViradaDe } from './diaOperacional.service.js';
 import * as publicoRepo from '../repositories/publico.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import { calcularTurnoAtivo, calcularProximaAbertura } from './turno.service.js';
@@ -17,13 +18,21 @@ async function configuracao() {
   return (await publicoRepo.buscarConfiguracao()) ?? CONFIG_PADRAO;
 }
 
-/** Manual vale só no dia local em que foi definido; senão, o padrão. */
-export function calcularTempoEstimado(config, agora) {
-  const manualDeHoje =
+/**
+ * Manual vale só no dia OPERACIONAL em que foi definido (o tempo digitado às
+ * 23h continua valendo às 00:30); senão, o padrão.
+ */
+export function manualDeHoje(config, agora) {
+  const virada = horaViradaDe(config);
+  return (
     config.tempoEstimadoManualMin != null &&
     config.tempoManualDefinidoEm != null &&
-    diaLocal(config.tempoManualDefinidoEm) === diaLocal(agora);
-  return manualDeHoje ? config.tempoEstimadoManualMin : config.tempoEstimadoPadraoMin;
+    diaOperacional(config.tempoManualDefinidoEm, virada) === diaOperacional(agora, virada)
+  );
+}
+
+export function calcularTempoEstimado(config, agora) {
+  return manualDeHoje(config, agora) ? config.tempoEstimadoManualMin : config.tempoEstimadoPadraoMin;
 }
 
 /** Estoque próprio > 0 (se controla) e todo insumo com saldo para 1 unidade. */

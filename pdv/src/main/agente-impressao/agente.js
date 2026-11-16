@@ -142,8 +142,12 @@ export function criarAgente({
 
   function documento(trabalho) {
     const linhas = montarCupom(trabalho, { colunas: cfg.largura, restaurante });
-    // FECHAMENTO não tem pedido: o documento leva o id do caixa.
-    const origem = trabalho.pedido ? `pedido-${trabalho.pedido.numeroDia}` : `caixa-${trabalho.caixaId ?? trabalho.caixa?.id ?? 0}`;
+    // FECHAMENTO não tem pedido: o documento leva o id do caixa; RELATORIO_DIA, o dia operacional.
+    const origem = trabalho.pedido
+      ? `pedido-${trabalho.pedido.numeroDia}`
+      : trabalho.dataRelatorio
+        ? `dia-${trabalho.dataRelatorio}`
+        : `caixa-${trabalho.caixaId ?? trabalho.caixa?.id ?? 0}`;
     return {
       trabalhoId: trabalho.id,
       linhas,

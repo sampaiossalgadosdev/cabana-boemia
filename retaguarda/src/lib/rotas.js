@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 /** Telas da retaguarda (caminho sob /admin). A primeira é a inicial. */
 export const TELAS = [
   { caminho: 'cardapio-do-dia', titulo: 'Cardápio do dia' },
+  { caminho: 'relatorio', titulo: 'Relatório do dia' },
   { caminho: 'produtos', titulo: 'Produtos' },
   { caminho: 'categorias', titulo: 'Categorias' },
   { caminho: 'estoque', titulo: 'Estoque' },

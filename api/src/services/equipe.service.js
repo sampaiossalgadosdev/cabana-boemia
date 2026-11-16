@@ -1,6 +1,7 @@
 /** Operações da equipe logada (PDV): fila do dia, finalizar pedido, tempo estimado. */
 import { ErroHttp } from '../lib/erros.js';
-import { diaLocal } from '../lib/fuso.js';
+import { diaOperacional } from '../lib/fuso.js';
+import { horaVirada } from './diaOperacional.service.js';
 import { paraBusca } from '../lib/texto.js';
 import { emitirParaEquipe } from '../lib/eventos.js';
 import { prisma } from '../lib/prisma.js';
@@ -11,7 +12,7 @@ import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoService from './endereco.service.js';
 import { OPCOES_TRANSACAO, pedidoPublico, STATUS_ABERTOS } from './pedido.service.js';
 import { exigirCaixaAberto } from './caixa.service.js';
-import { calcularTempoEstimado, temSaldo } from './publico.service.js';
+import { calcularTempoEstimado, manualDeHoje, temSaldo } from './publico.service.js';
 import { calcularTurnoAtivo, calcularProximaAbertura } from './turno.service.js';
 
 export { STATUS_ABERTOS };
@@ -20,12 +21,12 @@ export const TEMPO_MIN = 1;
 export const TEMPO_MAX = 240;
 
 /**
- * Pedidos de um dia local.
+ * Pedidos de um dia operacional (dataRef).
  * @param {{ dataRef: string, canais?: string[], somenteAbertos?: boolean }} filtro
- *   `dataRef`: "YYYY-MM-DD" ou "hoje" (dia local de `agora`).
+ *   `dataRef`: "YYYY-MM-DD" ou "hoje" (dia operacional de `agora`).
  */
 export async function listarPedidosDoDia({ dataRef, canais, somenteAbertos = true }, agora = new Date()) {
-  const dia = dataRef === 'hoje' ? diaLocal(agora) : dataRef;
+  const dia = dataRef === 'hoje' ? diaOperacional(agora, await horaVirada()) : dataRef;
   const pedidos = await pedidoRepo.listarDoDia({
     dataRef: dia,
     canais,
@@ -75,16 +76,12 @@ export async function finalizarPedido(id, { formaPagamento }, agora = new Date()
 
 const CONFIG_PADRAO = { tempoEstimadoPadraoMin: 40, tempoEstimadoManualMin: null, tempoManualDefinidoEm: null };
 
-/** `manualMin` só aparece se foi definido hoje (dia local); senão null. */
+/** `manualMin` só aparece se foi definido hoje (dia operacional); senão null. */
 function tempoPublico(config, agora) {
   const c = config ?? CONFIG_PADRAO;
-  const manualDeHoje =
-    c.tempoEstimadoManualMin != null &&
-    c.tempoManualDefinidoEm != null &&
-    diaLocal(c.tempoManualDefinidoEm) === diaLocal(agora);
   return {
     padraoMin: c.tempoEstimadoPadraoMin,
-    manualMin: manualDeHoje ? c.tempoEstimadoManualMin : null,
+    manualMin: manualDeHoje(c, agora) ? c.tempoEstimadoManualMin : null,
     vigenteMin: calcularTempoEstimado(c, agora),
   };
 }

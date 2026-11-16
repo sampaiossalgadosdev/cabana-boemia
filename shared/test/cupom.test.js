@@ -8,7 +8,7 @@ import {
   montarCupom,
   quebrar,
 } from '../src/cupom.js';
-import { cancelamentoWhatsapp, contaSalao, fechamentoCaixa, pedidoSite } from './fixtures/trabalhos.js';
+import { cancelamentoWhatsapp, contaSalao, fechamentoCaixa, pedidoSite, relatorioDia } from './fixtures/trabalhos.js';
 
 // Snapshot em texto puro (legível no diff). Para regravar depois de mudar o
 // layout de propósito: node --test --test-update-snapshots test/cupom.test.js
@@ -21,6 +21,7 @@ describe('cupom.js', () => {
       ['CANCELAMENTO (WhatsApp)', cancelamentoWhatsapp],
       ['CONTA (salão, por kg)', contaSalao],
       ['FECHAMENTO (caixa)', fechamentoCaixa],
+      ['RELATORIO_DIA (sexta, virada 04:00)', relatorioDia],
     ]) {
       test(`snapshot ${nome} em ${colunas} colunas`, (t) => {
         const linhas = montarCupom(trabalho, { colunas, restaurante: 'Cabana Boemia' });

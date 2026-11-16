@@ -6,7 +6,7 @@ Mostra o sistema inteiro funcionando de ponta a ponta: o cliente pede pelo celul
 
 1. **PDV instalado no computador do balcão** (`Cabana Boemia PDV Setup <versão>.exe`).
    - O instalador não tem assinatura digital, então o Windows mostra **"O Windows protegeu o computador"** / **editor desconhecido**. Clique em **Mais informações** e depois em **Executar assim mesmo**. Isso só acontece na instalação.
-   - Na primeira abertura, informe o servidor **`https://cabana.managerpix.com.br`** (sem `/api`) e escolha a impressora térmica e a largura do papel. Clique em **Imprimir teste**: o cupom tem que sair com acentos e cortar.
+   - Na primeira abertura, confira o servidor (já vem preenchido com **`https://cabana.managerpix.com.br`**) e salve e escolha a impressora térmica e a largura do papel. Clique em **Imprimir teste**: o cupom tem que sair com acentos e cortar.
 2. **Login com Google do site:** já configurado e em produção (qualquer conta Google entra; ver README › Google).
 3. **Bairros cadastrados** na retaguarda (**Bairros e taxas**), com as taxas reais. Sem bairro, o cliente não consegue cadastrar o endereço no site.
 4. **Loja aberta na hora da demo.** O site só aceita pedidos no turno ativo. Na retaguarda (`/admin` › **Turnos e horários**), confira se há horário cobrindo a demo; se não houver, crie um temporário no turno Lanches (e apague depois).

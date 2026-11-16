@@ -2,7 +2,7 @@
 
 Monorepo npm workspaces: `api` (Express + Prisma + Socket.IO), `site` (cliente), `retaguarda` (dono), `pdv` (Electron, balcão) e `shared`.
 
-Em produção é **um serviço só** no Railway (mais o PostgreSQL). A API serve tudo:
+Em produção é **um serviço só** no Railway (mais o PostgreSQL), em **https://cabana.managerpix.com.br** (CNAME no Registro.br apontando para o Railway; o domínio do Railway, https://cabana-boemia-production.up.railway.app, continua ativo e serve o mesmo sistema). A API serve tudo:
 
 | Caminho | O quê |
 |---|---|
@@ -11,7 +11,7 @@ Em produção é **um serviço só** no Railway (mais o PostgreSQL). A API serve
 | `/api/...` | rotas da API (ex.: `/api/health`, `/api/publico/cardapio`) |
 | `/api/socket.io` | tempo real da equipe (PDV) |
 
-O PDV fala com o mesmo domínio: na primeira tela do app instalado, digite só `https://<seu-app>.up.railway.app` (o PDV acrescenta o `/api`).
+O PDV fala com o mesmo domínio: na primeira tela do app instalado, digite só `https://cabana.managerpix.com.br` (o PDV acrescenta o `/api`).
 
 ## Desenvolvimento
 
@@ -28,7 +28,7 @@ npm run dist -w pdv      # instalador do PDV → pdv/dist/Cabana Boemia PDV Setu
 
 ### PDV (balcão)
 
-O instalador (`npm run dist -w pdv`, no Windows) instala só para o usuário, sem pedir administrador, cria atalho na área de trabalho e abre o PDV ao terminar; a partir daí ele abre sozinho com o Windows. Na primeira abertura pede o servidor (`https://<domínio>`, sem `/api`) e a impressora térmica (lista do Windows e largura do papel 80/58 mm). O log da impressão fica em `%APPDATA%\Cabana Boemia PDV\logs\impressao.log`. O instalador não é assinado: na primeira vez o Windows SmartScreen avisa "editor desconhecido" (Mais informações › Executar assim mesmo).
+O instalador (`npm run dist -w pdv`, no Windows) instala só para o usuário, sem pedir administrador, cria atalho na área de trabalho e abre o PDV ao terminar; a partir daí ele abre sozinho com o Windows. Na primeira abertura pede o servidor (`https://cabana.managerpix.com.br`, sem `/api`) e a impressora térmica (lista do Windows e largura do papel 80/58 mm). O log da impressão fica em `%APPDATA%\Cabana Boemia PDV\logs\impressao.log`. O instalador não é assinado: na primeira vez o Windows SmartScreen avisa "editor desconhecido" (Mais informações › Executar assim mesmo).
 
 Build de produção local (o mesmo que o Railway roda):
 
@@ -54,8 +54,8 @@ O Railway usa o **Railpack**, que reconhece os workspaces pelo `package.json` da
 |---|---|
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (referência ao serviço do banco; o nome antes do ponto é o nome do serviço) |
 | `JWT_SECRET`, `JWT_REFRESH_SECRET`, `JWT_CLIENTE_SECRET` | 48 bytes aleatórios cada, **diferentes entre si** e dos de dev. Gerar: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`. Sem eles (ou com menos de 32 caracteres) a API não inicia. |
-| `GOOGLE_CLIENT_ID` | ID do cliente OAuth (`...apps.googleusercontent.com`). Vazio = login do site responde 503. |
-| `CORS_ORIGINS` | `https://<seu-app>.up.railway.app` (com `https://`, sem barra no fim; vários separados por vírgula) |
+| `GOOGLE_CLIENT_ID` | ID do cliente OAuth "Site Cabana Boemia" (`456901563669-…apps.googleusercontent.com`, valor público). Vazio = login do site responde 503. |
+| `CORS_ORIGINS` | `https://cabana.managerpix.com.br,https://cabana-boemia-production.up.railway.app` (com `https://`, sem barra no fim, separados por vírgula sem espaço) |
 | `NODE_ENV` | `production` |
 | `BCRYPT_CUSTO` | `12` |
 | `ELECTRON_SKIP_BINARY_DOWNLOAD` | `1` (a instalação inclui o workspace do PDV; não baixa o Electron no servidor) |
@@ -89,19 +89,25 @@ Alternativa sem `ssh`: rodar do seu computador contra o banco do Railway usando 
 DATABASE_URL="<DATABASE_PUBLIC_URL>" node api/prisma/seed.js
 ```
 
+### Domínio
+
+- `cabana.managerpix.com.br`: registro **CNAME** no Registro.br (zona de `managerpix.com.br`) apontando para o alvo que o Railway mostrou em *Settings → Networking → Custom Domain*. O Railway emite o certificado `https` sozinho.
+- O domínio do Railway (`cabana-boemia-production.up.railway.app`) continua ativo; os dois estão no `CORS_ORIGINS` e nas origens do cliente OAuth.
+- `managerpix.com.br` **vence em 11/04/2027**: se não for renovado, site, retaguarda, PDV e login param.
+- Trocar de domínio (ex.: `cabanaboemia.com.br`): Custom Domain no Railway + DNS, verificar o domínio novo no Search Console e pôr no Branding do Google, acrescentar a origem no cliente OAuth e no `CORS_ORIGINS`, e trocar o servidor no PDV (deslogado). Nenhuma mudança de código: o sistema não guarda o domínio.
+
 ### Google (login do cliente no site)
 
-No [Google Cloud Console](https://console.cloud.google.com/):
+Configurado no [Google Cloud Console](https://console.cloud.google.com/), projeto **Cabana Boemia**, em **Google Auth Platform**:
 
-1. **APIs e serviços → Tela de permissão OAuth**: tipo *Externo*, nome "Cabana Boemia", e-mail de suporte; escopos padrão (`openid`, `email`, `profile`). Publique o app (sai de "Teste") para qualquer conta Google conseguir entrar.
-2. **Credenciais → Criar credenciais → ID do cliente OAuth → Aplicativo da Web**.
-3. **Origens JavaScript autorizadas**:
-   - `https://<seu-app>.up.railway.app`
-   - para desenvolvimento: `http://localhost` e `http://localhost:5173`
-4. **URIs de redirecionamento**: nenhum (o site usa o Google Identity Services com popup e ID token).
-5. Copie o ID do cliente para `GOOGLE_CLIENT_ID` no Railway (e no `api/.env` para dev).
+- **Branding:** app "Cabana Boemia", página inicial `https://cabana.managerpix.com.br`, política `https://cabana.managerpix.com.br/privacidade`, termos `https://cabana.managerpix.com.br/termos`, domínio autorizado `managerpix.com.br` (verificado no [Google Search Console](https://search.google.com/search-console) por registro TXT). **Sem logo:** logo exige verificação de marca pelo Google (dias); só colocar se for pedir essa verificação.
+- **Público-alvo:** Externo, **Em produção** (qualquer conta Google entra). Escopos só básicos (`openid`, `email`, `profile`): não precisa de verificação de escopos.
+- **Cliente "Site Cabana Boemia"** (Aplicativo da Web):
+  - Origens JavaScript autorizadas: `https://cabana.managerpix.com.br`, `https://cabana-boemia-production.up.railway.app`, `http://localhost`, `http://localhost:5173`.
+  - URIs de redirecionamento: **nenhuma** (o site usa o Google Identity Services com popup e ID token).
+  - **Client secret não é usado** e foi excluído do console. Só o ID do cliente (público) vai para `GOOGLE_CLIENT_ID` no Railway (e no `api/.env` para testar o login em dev).
 
-A mudança de origem no Google pode levar alguns minutos para valer.
+As páginas `/privacidade` e `/termos` são do próprio site (`site/src/componentes/PaginaLegal.jsx`); se mudar o que o site coleta, atualize o texto. Mudanças de origem no Google podem levar alguns minutos para valer.
 
 ### Segurança das páginas (CSP)
 

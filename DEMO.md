@@ -4,18 +4,21 @@ Mostra o sistema inteiro funcionando de ponta a ponta: o cliente pede pelo celul
 
 ## Antes da demonstração (na véspera ou 30 minutos antes)
 
-1. **PDV instalado no computador do balcão** (`Cabana Boemia PDV Setup <versão>.exe`): na primeira abertura, informe o servidor (`https://<domínio>`, sem `/api`) e escolha a impressora térmica e a largura do papel. Clique em **Imprimir teste**: o cupom tem que sair com acentos e cortar.
-2. **Login com Google do site configurado** (ver README › Google). Se o app do Google ainda estiver "Em teste", cadastre como usuário de teste o e-mail da conta que vai usar no celular.
-3. **Loja aberta na hora da demo.** O site só aceita pedidos no turno ativo. Na retaguarda (`/admin` › **Turnos e horários**), confira se há horário cobrindo a demo; se não houver, crie um temporário no turno Lanches (e apague depois).
-4. **WhatsApp do restaurante** preenchido em **Configurações** (aparece no link de cancelamento do site).
-5. **Dados de demonstração.** Rode **uma vez no dia** da demo:
+1. **PDV instalado no computador do balcão** (`Cabana Boemia PDV Setup <versão>.exe`).
+   - O instalador não tem assinatura digital, então o Windows mostra **"O Windows protegeu o computador"** / **editor desconhecido**. Clique em **Mais informações** e depois em **Executar assim mesmo**. Isso só acontece na instalação.
+   - Na primeira abertura, informe o servidor **`https://cabana.managerpix.com.br`** (sem `/api`) e escolha a impressora térmica e a largura do papel. Clique em **Imprimir teste**: o cupom tem que sair com acentos e cortar.
+2. **Login com Google do site:** já configurado e em produção (qualquer conta Google entra; ver README › Google).
+3. **Bairros cadastrados** na retaguarda (**Bairros e taxas**), com as taxas reais. Sem bairro, o cliente não consegue cadastrar o endereço no site.
+4. **Loja aberta na hora da demo.** O site só aceita pedidos no turno ativo. Na retaguarda (`/admin` › **Turnos e horários**), confira se há horário cobrindo a demo; se não houver, crie um temporário no turno Lanches (e apague depois).
+5. **WhatsApp do restaurante** preenchido em **Configurações** (aparece no link de cancelamento do site).
+6. **Dados de demonstração.** Rode **uma vez no dia** da demo:
    - no computador de desenvolvimento: `npm run seed:demo`
    - no Railway (produção): `railway ssh -- "cd api && node scripts/seed-demo.js --confirmar"`
 
    O script cria 5 clientes, 8 pedidos do dia (site, WhatsApp e salão; 5 finalizados nas 4 formas, 2 abertos na fila, 1 cancelado), 2 comandas abertas (Família Silva com prato por quilo e Seu Zé), abre o caixa (R$ 100,00 de fundo) se estiver fechado e deixa o **Pão de lanche com 5 unidades** (o X-Bacon do passo 1 e o X-Tudo do passo 2 gastam 2; sobram 3 para o passo 4). Os cupons desses pedidos ficam como já impressos (a impressora não solta nada ao abrir). Se não houver bairro cadastrado, cria "Centro" e "Jardim Primavera"; se o "Prato por kg" estiver sem preço, ativa a R$ 59,90/kg.
 
    Os pedidos de demonstração entram no relatório e no caixa do dia. No sistema de produção, faça a demo **antes de começar a vender de verdade** (ou num dia sem movimento).
-6. **No celular:** abra o site (`https://<domínio>`) e deixe na tela do cardápio. **No balcão:** PDV aberto e logado, som ligado. **Num notebook:** retaguarda aberta e logada como dono.
+7. **No celular:** abra o site (`https://cabana.managerpix.com.br`) e deixe na tela do cardápio. **No balcão:** PDV aberto e logado, som ligado. **Num notebook:** retaguarda aberta e logada como dono.
 
 ## Roteiro
 
@@ -60,7 +63,7 @@ Mostra o sistema inteiro funcionando de ponta a ponta: o cliente pede pelo celul
 | Sintoma | O que fazer |
 |---|---|
 | Cupom não saiu | Indicador "Impressora" na barra do PDV: papel, tampa, cabo. Ao resolver, sai sozinho (uma vez só). Log em `%APPDATA%\Cabana Boemia PDV\logs\impressao.log`. |
-| "Estamos fechados agora" no site | Falta horário do turno cobrindo agora (passo 3 da preparação). |
-| Botão do Google não aparece ou dá erro | `GOOGLE_CLIENT_ID` no Railway, origem autorizada no Google Cloud, conta cadastrada como usuário de teste. |
+| "Estamos fechados agora" no site | Falta horário do turno cobrindo agora (passo 4 da preparação). |
+| Botão do Google não aparece ou dá erro | Abra o site pelo endereço `https://cabana.managerpix.com.br` (origem autorizada no Google); confira `GOOGLE_CLIENT_ID` no Railway. |
 | "Abrir caixa" no lugar da tela principal | Abra o caixa com o fundo de troco (o seed:demo abre se não houver). |
 | PDV "Reconectando…" | Internet do balcão. Pedidos feitos nesse meio tempo imprimem quando a conexão voltar. |

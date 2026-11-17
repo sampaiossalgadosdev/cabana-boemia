@@ -205,6 +205,22 @@ describe('retaguarda: catálogo, cardápio do dia, turnos, bairros e configuraç
     assert.equal((await api('GET', `/retaguarda/produtos/${prod.id}`)).corpo.produto.sugerirNaSacola, true);
     assert.equal((await api('PUT', `/retaguarda/produtos/${prod.id}`, novoProduto({ nome: 'X-Teste Duplo', sugerirNaSacola: 'sim' }))).status, 400);
     soCardapio();
+
+    // Foto: link https gravado; ausente não mexe; vazio apaga; não-https recusado.
+    assert.equal(prod.imagemUrl, null, 'nasce sem foto');
+    const foto = 'https://exemplo.com/fotos/x-teste.jpg?w=600';
+    const comFoto = await api('PUT', `/retaguarda/produtos/${prod.id}`, novoProduto({ nome: 'X-Teste Duplo', imagemUrl: `  ${foto} ` }));
+    assert.equal(comFoto.status, 200, JSON.stringify(comFoto.corpo));
+    assert.equal(comFoto.corpo.produto.imagemUrl, foto);
+    const semCampo = await api('PUT', `/retaguarda/produtos/${prod.id}`, novoProduto({ nome: 'X-Teste Duplo' }));
+    assert.equal(semCampo.corpo.produto.imagemUrl, foto, 'ausente não apaga');
+    for (const ruim of ['http://exemplo.com/a.jpg', 'javascript:alert(1)', 'https://', `https://exemplo.com/${'a'.repeat(500)}`]) {
+      const r = await api('PUT', `/retaguarda/produtos/${prod.id}`, novoProduto({ nome: 'X-Teste Duplo', imagemUrl: ruim }));
+      assert.equal(r.status, 400, ruim);
+    }
+    const vazio = await api('PUT', `/retaguarda/produtos/${prod.id}`, novoProduto({ nome: 'X-Teste Duplo', imagemUrl: '' }));
+    assert.equal(vazio.corpo.produto.imagemUrl, null);
+    soCardapio();
     assert.equal(ed.corpo.produto.turnos.length, 2);
     assert.deepEqual(ed.corpo.produto.insumos, []);
     assert.equal(await prisma.produtoInsumo.count({ where: { produtoId: prod.id } }), 0);

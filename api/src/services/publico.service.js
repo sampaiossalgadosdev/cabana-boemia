@@ -101,6 +101,7 @@ export async function cardapio(agora = new Date()) {
       tipoPreco: p.tipoPreco,
       precoCentavos: p.precoCentavos,
       sugerirNaSacola: p.sugerirNaSacola,
+      imagemUrl: p.imagemUrl,
       // Limite do "+" na sacola: o saldo, mas nunca acima do máximo por item, para
       // não revelar o estoque (prévia; a API confere na baixa). Fechado: null.
       maxSacola: turno ? Math.min(saldoDisponivel(p) ?? MAX_POR_ITEM, MAX_POR_ITEM) : null,

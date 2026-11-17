@@ -1,23 +1,34 @@
 import { formatarPreco } from '../lib/dinheiro.js';
 import { idSecao } from '../hooks/useCategoriaAtiva.js';
+import { ImagemProduto } from './ImagemProduto.jsx';
 
+/**
+ * Card horizontal (texto à esquerda, foto à direita). O card inteiro abre o
+ * modal do produto: o botão fica no nome (título acessível) e se estica sobre o
+ * card. Loja fechada: prévia, botão desabilitado.
+ */
 function CardProduto({ produto, desabilitado, onAdicionar }) {
   return (
-    <li className="card">
-      <h3 className="card__nome">{produto.nome}</h3>
-      {produto.descricao && <p className="card__descricao">{produto.descricao}</p>}
-      <div className="card__rodape">
-        <span className="preco">{formatarPreco(produto.precoCentavos)}</span>
-        <button
-          type="button"
-          className="botao botao--primario"
-          disabled={desabilitado}
-          onClick={() => onAdicionar(produto)}
-          aria-label={desabilitado ? `${produto.nome}: fechado agora` : `Adicionar ${produto.nome}`}
-        >
-          {desabilitado ? 'Fechado' : 'Adicionar'}
-        </button>
+    <li className={`produto${desabilitado ? ' produto--fechado' : ''}`}>
+      <div className="produto__texto">
+        <h3 className="produto__nome">
+          <button
+            type="button"
+            className="produto__abrir"
+            disabled={desabilitado}
+            onClick={() => onAdicionar(produto)}
+            aria-label={desabilitado ? `${produto.nome}: fechado agora` : undefined}
+          >
+            {produto.nome}
+          </button>
+        </h3>
+        {produto.descricao && <p className="produto__descricao">{produto.descricao}</p>}
+        <span className="produto__rodape">
+          <span className="preco">{formatarPreco(produto.precoCentavos)}</span>
+          {desabilitado && <span className="produto__fechado">Fechado agora</span>}
+        </span>
       </div>
+      <ImagemProduto src={produto.imagemUrl} className="produto__imagem" />
     </li>
   );
 }
@@ -55,7 +66,7 @@ export function ListaCardapio({ categorias, desabilitado, onAdicionar }) {
 export function EstadoCarregando() {
   return (
     <div className="secao" aria-busy="true" aria-label="Carregando cardápio">
-      <div className="lista-produtos">
+      <div className="lista-carregando">
         {[1, 2, 3, 4].map((n) => (
           <div key={n} className="esqueleto" />
         ))}

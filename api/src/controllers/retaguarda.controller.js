@@ -61,6 +61,15 @@ const produtoSchema = z
     ativo,
     vendidoNoSite: z.boolean().default(true),
     sugerirNaSacola: z.boolean().default(false),
+    // Link da foto: vazio/null = sem foto; ausente = não mexe (cliente antigo não apaga).
+    imagemUrl: z
+      .string({ error: 'Link da foto inválido' })
+      .trim()
+      .max(500, 'Link da foto muito longo')
+      .refine((v) => v === '' || (/^https:\/\/\S+$/.test(v) && URL.canParse(v)), 'Use um link que comece com https://')
+      .transform((v) => v || null)
+      .nullable()
+      .optional(),
     controlaEstoque: z.boolean().default(false),
     estoqueMinimo: quantidadeEstoque('Estoque mínimo inválido').nullable().default(null),
     ordem: ordem.default(0),

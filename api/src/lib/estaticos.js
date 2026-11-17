@@ -56,6 +56,9 @@ export const CSP_SITE = {
   styleSrc: ["'self'", "'unsafe-inline'", `${GOOGLE_GSI}style`],
   connectSrc: ["'self'", GOOGLE_GSI],
   frameSrc: [GOOGLE_GSI],
+  // Fotos dos produtos: o dono cola o link na retaguarda e pode ser de qualquer
+  // host (hoje Unsplash, depois as fotos reais). Só imagem e só https.
+  imgSrc: ["'self'", 'data:', 'https:'],
 };
 
 /** CSP da retaguarda: não carrega nada de fora. */

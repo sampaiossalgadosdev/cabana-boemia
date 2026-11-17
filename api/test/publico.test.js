@@ -69,6 +69,7 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
     assert.deepEqual(Object.keys(corpo.categorias[0].produtos[0]).sort(), [
       'descricao',
       'id',
+      'imagemUrl',
       'maxSacola',
       'nome',
       'precoCentavos',

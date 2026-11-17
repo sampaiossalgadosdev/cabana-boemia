@@ -169,6 +169,7 @@ const vazio = (dados) => ({
   ativo: true,
   vendidoNoSite: true,
   sugerirNaSacola: false,
+  imagemUrl: '',
   controlaEstoque: false,
   estoqueMinimo: '',
   ordem: 0,
@@ -185,6 +186,7 @@ const doProduto = (p) => ({
   ativo: p.ativo,
   vendidoNoSite: p.vendidoNoSite,
   sugerirNaSacola: Boolean(p.sugerirNaSacola),
+  imagemUrl: p.imagemUrl ?? '',
   controlaEstoque: p.controlaEstoque,
   estoqueMinimo: p.estoqueMinimo ?? '',
   ordem: p.ordem,
@@ -224,6 +226,7 @@ function FormProduto({ aberto, produto, dados, aoFechar, aoSalvar, irParaEstoque
     else if (f.ativo && f.precoCentavos <= 0) e.precoCentavos = 'Defina o preço antes de ativar';
     if (f.estoqueMinimo !== '' && !/^\d+$/.test(String(f.estoqueMinimo))) e.estoqueMinimo = 'Use um número inteiro';
     if (!/^\d+$/.test(String(f.ordem))) e.ordem = 'Use um número inteiro';
+    if (f.imagemUrl.trim() && !/^https:\/\/\S+$/.test(f.imagemUrl.trim())) e.imagemUrl = 'Use um link que comece com https://';
     if (f.insumos.some((i) => !i.insumoId || !(i.quantidade >= 1))) e.insumos = 'Escolha o insumo e a quantidade';
     if (new Set(f.insumos.map((i) => i.insumoId)).size !== f.insumos.length) e.insumos = 'Insumo repetido';
     return e;
@@ -242,6 +245,7 @@ function FormProduto({ aberto, produto, dados, aoFechar, aoSalvar, irParaEstoque
       ativo: f.ativo,
       vendidoNoSite: f.vendidoNoSite,
       sugerirNaSacola: f.sugerirNaSacola,
+      imagemUrl: f.imagemUrl.trim(),
       controlaEstoque: porKg ? false : f.controlaEstoque,
       estoqueMinimo: !porKg && f.controlaEstoque && f.estoqueMinimo !== '' ? Number(f.estoqueMinimo) : null,
       ordem: Number(f.ordem),
@@ -306,6 +310,27 @@ function FormProduto({ aberto, produto, dados, aoFechar, aoSalvar, irParaEstoque
                   maxLength={500}
                   value={f.descricao}
                   onChange={(e) => mudar('descricao', e.target.value)}
+                />
+              )}
+            </Campo>
+            <Campo
+              rotulo="Foto (link)"
+              erro={erros.imagemUrl}
+              className="inteiro"
+              ajuda="Link https:// da imagem. Vazio: o site mostra um quadro neutro no lugar da foto."
+            >
+              {(id, d) => (
+                <input
+                  id={id}
+                  className="entrada"
+                  type="url"
+                  inputMode="url"
+                  maxLength={500}
+                  placeholder="https://…"
+                  value={f.imagemUrl}
+                  aria-invalid={Boolean(erros.imagemUrl)}
+                  aria-describedby={d}
+                  onChange={(e) => mudar('imagemUrl', e.target.value)}
                 />
               )}
             </Campo>

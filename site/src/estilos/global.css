@@ -301,42 +301,168 @@ button:disabled {
   background: var(--cor-dourado);
 }
 
+/* Lista de produtos: no celular, um bloco branco com os cards separados por uma
+   linha fina; a partir de 900 px, grade de 2 colunas com cada card no seu bloco. */
 .lista-produtos {
-  display: grid;
-  gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 14px 16px;
   border-radius: var(--raio);
   background: var(--cor-superficie);
   box-shadow: var(--sombra);
+  overflow: hidden;
 }
 
-.card__nome {
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 700;
-}
-
-.card__descricao {
-  margin: 0;
-  color: var(--cor-texto-suave);
-  font-size: 0.92rem;
-}
-
-.card__rodape {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.lista-carregando {
+  display: grid;
   gap: 12px;
-  margin-top: 6px;
+}
+
+/* Card horizontal: texto à esquerda, foto à direita. O botão do nome se estica
+   (::after) sobre o card inteiro, que vira a área de toque. */
+.produto {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  padding: 16px;
+  border-bottom: 1px solid var(--cor-borda);
+  background: var(--cor-superficie);
+  transition: background-color 0.15s;
+}
+
+.produto:last-child {
+  border-bottom: 0;
+}
+
+.produto:not(.produto--fechado):active {
+  background: #f6f1eb;
+}
+
+@media (hover: hover) {
+  .produto:not(.produto--fechado):hover {
+    background: #faf6f1;
+  }
+}
+
+.produto:has(.produto__abrir:focus-visible) {
+  outline: 3px solid var(--cor-dourado);
+  outline-offset: -3px;
+}
+
+.produto__texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.produto__nome,
+.produto__descricao {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  margin: 0;
+}
+
+.produto__nome {
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.produto__abrir {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+
+.produto__abrir::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.produto__abrir:disabled {
+  cursor: default;
+}
+
+.produto__descricao {
+  color: var(--cor-texto-suave);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.produto__rodape {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.produto__fechado {
+  color: var(--cor-texto-desabilitado);
+  font-size: 0.8rem;
+}
+
+.produto__imagem {
+  flex: none;
+  width: 104px;
+  height: 104px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #f3efea;
+}
+
+.imagem-produto--vazia {
+  display: grid;
+  place-items: center;
+  color: #b3a698;
+}
+
+@media (max-width: 359px) {
+  .produto__imagem {
+    width: 88px;
+    height: 88px;
+  }
+}
+
+@media (min-width: 900px) {
+  .conteudo--cardapio,
+  .abas__lista {
+    max-width: 960px;
+  }
+
+  .lista-produtos {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  .produto,
+  .produto:last-child {
+    border: 1px solid var(--cor-borda);
+    border-radius: var(--raio);
+  }
+
+  .produto__imagem {
+    width: 112px;
+    height: 112px;
+  }
 }
 
 .preco {
@@ -822,6 +948,16 @@ button:disabled {
 }
 
 /* ───────── Modal do produto ───────── */
+
+.modal-produto__imagem {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #f3efea;
+}
 
 .modal-produto__descricao {
   margin: 0 0 6px;

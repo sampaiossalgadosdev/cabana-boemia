@@ -85,10 +85,13 @@ describe('site em /, retaguarda em /admin, API em /api', () => {
     assert.doesNotMatch(diretiva(csp, 'script-src'), /unsafe/);
     assert.equal(diretiva(csp, 'object-src'), "object-src 'none'");
     assert.equal(diretiva(csp, 'default-src'), "default-src 'self'");
+    // Fotos dos produtos (link da retaguarda): imagens de qualquer host https.
+    assert.equal(diretiva(csp, 'img-src'), "img-src 'self' data: https:");
 
     const cspAdmin = (await fetch(`${base}/admin`)).headers.get('content-security-policy');
     assert.doesNotMatch(cspAdmin, /google/);
     assert.equal(diretiva(cspAdmin, 'script-src'), "script-src 'self'");
+    assert.equal(diretiva(cspAdmin, 'img-src'), "img-src 'self' data:");
 
     // O popup do login Google continua funcionando (COOP).
     assert.equal((await fetch(`${base}/`)).headers.get('cross-origin-opener-policy'), 'same-origin-allow-popups');

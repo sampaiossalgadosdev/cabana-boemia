@@ -102,7 +102,7 @@ export function App() {
 
       {aba === 'inicio' && (
         <>
-          <div className="conteudo">
+          <div className="conteudo conteudo--cardapio">
             {semConexao && dados && <FaixaSemConexao />}
             {fechado && <AvisoFechado proximaAbertura={dados.proximaAbertura} />}
             {!fechado && ultimoPedido?.itens.length > 0 && categorias.length > 0 && (
@@ -119,7 +119,7 @@ export function App() {
             <AbasCategorias categorias={categorias} ativa={ativa} onSelecionar={irPara} />
           )}
 
-          <main className="conteudo">
+          <main className="conteudo conteudo--cardapio">
             {dados ? (
               <ListaCardapio categorias={categorias} desabilitado={fechado} onAdicionar={abrirModal} />
             ) : semConexao ? (

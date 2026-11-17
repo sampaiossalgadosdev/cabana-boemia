@@ -170,6 +170,7 @@ model Produto {
   disponivelHoje  Boolean   @default(false)
   vendidoNoSite   Boolean   @default(true) // false: só aparece no PDV (ex.: Prato por kg)
   sugerirNaSacola Boolean   @default(false) // "Peça também" na sacola do site
+  imagemUrl       String?   @db.VarChar(500) // link da foto (site); null = placeholder
   controlaEstoque Boolean   @default(false)
   estoque         Int? // saldo oficial quando controlaEstoque = true
   estoqueMinimo   Int?

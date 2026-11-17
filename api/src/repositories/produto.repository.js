@@ -12,6 +12,7 @@ export const SELECT_PRODUTO = {
   disponivelHoje: true,
   vendidoNoSite: true,
   sugerirNaSacola: true,
+  imagemUrl: true,
   controlaEstoque: true,
   estoque: true,
   estoqueMinimo: true,

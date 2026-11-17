@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Dialogo } from './Dialogo.jsx';
+import { ImagemProduto } from './ImagemProduto.jsx';
 import { formatarPreco } from '../lib/dinheiro.js';
 import { OBSERVACAO_MAX, QUANTIDADE_MAX } from '../carrinho/carrinho.js';
 
@@ -81,6 +82,8 @@ export function ModalProduto({ produto, item, onConfirmar, onFechar }) {
     >
       {produto && (
         <>
+          {/* Sem foto (ou falhou): o modal fica como antes, sem placeholder grande. */}
+          <ImagemProduto src={produto.imagemUrl} className="modal-produto__imagem" carregamento="eager" placeholder={false} />
           {produto.descricao && <p className="modal-produto__descricao">{produto.descricao}</p>}
           <span className="preco">{formatarPreco(produto.precoCentavos)}</span>
           <SeletorQuantidade valor={quantidade} onMudar={setQuantidade} />

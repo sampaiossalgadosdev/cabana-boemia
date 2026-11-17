@@ -199,6 +199,7 @@ export function Finalizacao({ onEditarTelefone, onPedidoEnviado, onCardapioDesat
     if (!forma) return setErro('Escolha a forma de pagamento.');
     if (erroTroco) return setErro(erroTroco);
     setEnviando(true);
+    let criado = false;
     try {
       const corpo = corpoDoPedido(itens, {
         enderecoId,
@@ -208,6 +209,7 @@ export function Finalizacao({ onEditarTelefone, onPedidoEnviado, onCardapioDesat
         totalEsperadoCentavos: resumo.totalCentavos,
       });
       const { pedido } = await api.enviarPedido(token, corpo);
+      criado = true;
       onPedidoEnviado(pedido);
     } catch (err) {
       if (sessaoExpirou(err)) return sair();
@@ -240,7 +242,9 @@ export function Finalizacao({ onEditarTelefone, onPedidoEnviado, onCardapioDesat
       // chave garante que tentar de novo não duplica o pedido.
       setErro(err.status ? err.message : ERRO_GENERICO);
     } finally {
-      setEnviando(false);
+      // Pedido criado: o botão fica travado enquanto a animação de confirmação
+      // roda por cima (Enter no botão focado não reenvia).
+      if (!criado) setEnviando(false);
     }
   };
 

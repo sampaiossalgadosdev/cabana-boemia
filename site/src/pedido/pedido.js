@@ -3,7 +3,9 @@
  * O total mostrado aqui é só uma prévia: a API recalcula tudo com os preços
  * do banco e o pedido devolvido é a fonte da verdade.
  */
+import { taxaDeEntrega } from '@restaurante/shared/frete';
 import { adicionar, totalCentavos } from '../carrinho/carrinho.js';
+import { formatarPreco } from '../lib/dinheiro.js';
 
 export const FORMAS_PAGAMENTO = [
   { valor: 'PIX', rotulo: 'Pix' },
@@ -14,10 +16,41 @@ export const FORMAS_PAGAMENTO = [
 
 export const rotuloPagamento = (valor) => FORMAS_PAGAMENTO.find((f) => f.valor === valor)?.rotulo ?? valor;
 
-/** Prévia do total: itens do carrinho + taxa do bairro escolhido. */
-export function resumoDoPedido(itens, taxaEntregaCentavos = 0) {
+/**
+ * Prévia do total: itens da sacola + taxa do bairro escolhido, zerada pelo
+ * frete grátis (`{ minimoCentavos }` do cardápio; null = desligado) com a
+ * mesma regra da API. A taxa nunca vai no corpo do pedido.
+ */
+export function resumoDoPedido(itens, taxaBairroCentavos = 0, freteGratis = null) {
   const subtotal = totalCentavos(itens);
-  return { subtotalCentavos: subtotal, taxaEntregaCentavos, totalCentavos: subtotal + taxaEntregaCentavos };
+  const taxa = taxaDeEntrega(taxaBairroCentavos, subtotal, freteGratis);
+  return { subtotalCentavos: subtotal, taxaEntregaCentavos: taxa, totalCentavos: subtotal + taxa };
+}
+
+/** Valor da linha "Entrega": "Grátis" quando não há taxa. */
+export const textoTaxa = (centavos) => (centavos === 0 ? 'Grátis' : formatarPreco(centavos));
+
+/** "2× X-Bacon, 1× Coca-Cola 1L e mais 2" (histórico de pedidos). */
+export function resumoItens(itens, maximo = 3) {
+  const partes = itens.slice(0, maximo).map((i) => `${i.quantidade}× ${i.nome}`);
+  const resto = itens.length - maximo;
+  return resto > 0 ? `${partes.join(', ')} e mais ${resto}` : partes.join(', ');
+}
+
+const formatoData = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  weekday: 'short',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/** ISO → "sáb., 14/11/2026 · 20:15" no horário de Brasília. */
+export function dataDoPedido(iso) {
+  const p = Object.fromEntries(formatoData.formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
+  return `${p.weekday}, ${p.day}/${p.month}/${p.year} · ${p.hour}:${p.minute}`;
 }
 
 /**
@@ -67,7 +100,7 @@ export function linkCancelamento(whatsapp, numeroPedido, nome) {
 }
 
 /**
- * "Repetir último pedido": joga no carrinho só o que está no cardápio AGORA,
+ * "Repetir pedido" (o último ou um do histórico): joga na sacola só o que está no cardápio AGORA,
  * com o preço de agora (não o do pedido antigo).
  * @returns {{ itens: any[], adicionados: number, indisponiveis: string[] }}
  */

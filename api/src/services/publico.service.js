@@ -1,4 +1,5 @@
 /** Dados públicos do site (sem login): cardápio do turno ativo, bairros, config. */
+import { freteGratisDaConfig } from '@restaurante/shared/frete';
 import { diaOperacional } from '../lib/fuso.js';
 import { horaViradaDe } from './diaOperacional.service.js';
 import * as publicoRepo from '../repositories/publico.repository.js';
@@ -12,6 +13,8 @@ const CONFIG_PADRAO = {
   tempoEstimadoPadraoMin: 40,
   tempoEstimadoManualMin: null,
   tempoManualDefinidoEm: null,
+  freteGratisAtivo: false,
+  freteGratisMinimoCentavos: null,
 };
 
 async function configuracao() {
@@ -56,6 +59,9 @@ export async function cardapio(agora = new Date()) {
     turno,
     proximaAbertura,
     tempoEstimadoMin: calcularTempoEstimado(config, agora),
+    // Também aqui (além de /publico/config): o site recarrega o cardápio a
+    // cada 30 s, então a barra de frete grátis acompanha a retaguarda.
+    freteGratis: freteGratisDaConfig(config),
   };
 
   const turnoDoCardapio = turno ?? proximaAbertura?.turno;
@@ -94,6 +100,8 @@ export async function config() {
   return {
     nome: c.nomeRestaurante,
     whatsapp: c.whatsappNumero,
+    // null = desligado; { minimoCentavos } = frete grátis com subtotal >= mínimo.
+    freteGratis: freteGratisDaConfig(c),
     // O Client ID OAuth é público: o site precisa dele para desenhar o botão do Google.
     googleClientId: process.env.GOOGLE_CLIENT_ID || null,
   };

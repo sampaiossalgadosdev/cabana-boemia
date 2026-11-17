@@ -9,7 +9,11 @@ import {
   repetirPedido,
   novaChavePedido,
   aplicarPrecosNovos,
+  textoTaxa,
+  resumoItens,
+  dataDoPedido,
 } from '../src/pedido/pedido.js';
+import { abaDoCaminho, caminhoDaAba } from '../src/lib/navegacao.js';
 import { adicionar } from '../src/carrinho/carrinho.js';
 
 const XBACON = { id: 6, nome: 'X-Bacon', precoCentavos: 1600 };
@@ -22,6 +26,38 @@ const categorias = [
 test('resumoDoPedido: itens + taxa do bairro', () => {
   const itens = adicionar(adicionar([], XBACON, 2), COCA, 1);
   assert.deepEqual(resumoDoPedido(itens, 500), { subtotalCentavos: 4100, taxaEntregaCentavos: 500, totalCentavos: 4600 });
+});
+
+test('resumoDoPedido com frete grátis: subtotal (sem taxa) >= mínimo zera a taxa', () => {
+  const itens = adicionar(adicionar([], XBACON, 2), COCA, 1); // 4100
+  assert.deepEqual(resumoDoPedido(itens, 500, { minimoCentavos: 4100 }), { subtotalCentavos: 4100, taxaEntregaCentavos: 0, totalCentavos: 4100 });
+  assert.deepEqual(resumoDoPedido(itens, 500, { minimoCentavos: 4101 }), { subtotalCentavos: 4100, taxaEntregaCentavos: 500, totalCentavos: 4600 });
+  assert.equal(textoTaxa(0), 'Grátis');
+  assert.match(textoTaxa(500), /R\$\s5,00/);
+});
+
+test('histórico: itens resumidos e data no horário de Brasília', () => {
+  const itens = [
+    { quantidade: 2, nome: 'X-Bacon' },
+    { quantidade: 1, nome: 'Coca-Cola 1L' },
+    { quantidade: 1, nome: 'Batata' },
+    { quantidade: 3, nome: 'Água' },
+    { quantidade: 1, nome: 'Pudim' },
+  ];
+  assert.equal(resumoItens(itens.slice(0, 2)), '2× X-Bacon, 1× Coca-Cola 1L');
+  assert.equal(resumoItens(itens), '2× X-Bacon, 1× Coca-Cola 1L, 1× Batata e mais 2');
+  assert.equal(dataDoPedido('2026-11-14T23:15:00.000Z'), 'sáb., 14/11/2026 · 20:15');
+  assert.equal(dataDoPedido('2026-11-15T03:30:00.000Z'), 'dom., 15/11/2026 · 00:30');
+});
+
+test('navegação: caminho ↔ aba (barra final aceita; desconhecido = início)', () => {
+  assert.equal(abaDoCaminho('/'), 'inicio');
+  assert.equal(abaDoCaminho('/pedidos'), 'pedidos');
+  assert.equal(abaDoCaminho('/perfil/'), 'perfil');
+  assert.equal(abaDoCaminho('/qualquer'), 'inicio');
+  assert.equal(abaDoCaminho(''), 'inicio');
+  assert.equal(caminhoDaAba('pedidos'), '/pedidos');
+  assert.equal(caminhoDaAba('xyz'), '/');
 });
 
 test('corpoDoPedido nunca manda preço nem nome; troco só em dinheiro', () => {

@@ -29,6 +29,7 @@ export function criarClienteRoutes({ verificarIdTokenGoogle = criarVerificadorGo
   r.put('/enderecos/:id', assincrono(c.atualizarEndereco));
   r.delete('/enderecos/:id', assincrono(c.removerEndereco));
   r.post('/pedidos', exigirTelefoneCliente, assincrono(c.criarPedido));
+  r.get('/pedidos', assincrono(c.listarPedidos));
   r.get('/pedidos/ultimo', assincrono(c.ultimoPedido));
   return r;
 }

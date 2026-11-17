@@ -126,6 +126,19 @@ describe('cupom.js', () => {
     assert.doesNotMatch(texto, /Troco/);
   });
 
+  test('entrega com taxa 0 (frete grátis) sai "Grátis", não R$ 0,00; total sem taxa', () => {
+    const trabalho = structuredClone(pedidoSite);
+    Object.assign(trabalho.pedido, { taxaEntregaCentavos: 0, totalCentavos: 6700, trocoParaCentavos: null });
+    for (const colunas of [48, 32]) {
+      const linhas = montarCupom(trabalho, { colunas });
+      for (const l of linhas) assert.equal(l.texto.length, l.grande ? colunas / 2 : colunas);
+      const texto = cupomParaTexto(linhas, colunas);
+      assert.match(texto, /Taxa de entrega +Grátis/);
+      assert.doesNotMatch(texto, /Taxa de entrega +R\$/);
+      assert.match(texto, /TOTAL +R\$ 67,00/);
+    }
+  });
+
   test('largura e tipo inválidos são recusados', () => {
     assert.throws(() => montarCupom(pedidoSite, { colunas: 40 }), /Largura inválida/);
     assert.throws(() => montarCupom({ ...pedidoSite, tipo: 'OUTRO' }), /Tipo de cupom inválido/);

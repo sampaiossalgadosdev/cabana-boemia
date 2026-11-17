@@ -12,6 +12,7 @@ import { ErroHttp } from '../lib/erros.js';
 import { diaOperacional, paraCampoData } from '../lib/fuso.js';
 import { horaViradaDe } from './diaOperacional.service.js';
 import { emitirParaEquipe } from '../lib/eventos.js';
+import { freteGratisDaConfig, taxaDeEntrega } from '@restaurante/shared/frete';
 import * as pedidoRepo from '../repositories/pedido.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoRepo from '../repositories/endereco.repository.js';
@@ -59,7 +60,7 @@ export function motivoIndisponivel(produto, { canal, turnoId }) {
  * SITE: o total que o cliente viu precisa bater com o recalculado. Se não
  * bater (o dono mudou um preço), 409 com os preços novos, antes de baixar estoque.
  */
-export function conferirTotalEsperado(totalEsperadoCentavos, valores) {
+export function conferirTotalEsperado(totalEsperadoCentavos, valores, { taxaBairroCentavos = null, freteGratis = null } = {}) {
   if (totalEsperadoCentavos === valores.totalCentavos) return;
   throw new ErroHttp(409, 'Os preços mudaram. Confira o novo total e confirme de novo.', {
     codigo: 'PRECO_ALTERADO',
@@ -67,6 +68,9 @@ export function conferirTotalEsperado(totalEsperadoCentavos, valores) {
       subtotalCentavos: valores.subtotalCentavos,
       taxaEntregaCentavos: valores.taxaEntregaCentavos,
       totalCentavos: valores.totalCentavos,
+      // Para o site refazer a prévia: taxa do bairro (antes do frete grátis) e a regra vigente.
+      taxaBairroCentavos,
+      freteGratis,
       itens: [...new Map(valores.linhas.map((l) => [l.produto.id, l])).values()].map((l) => ({
         produtoId: l.produto.id,
         nome: l.produto.nome,
@@ -162,7 +166,7 @@ export function validarPagamento({ forma, trocoParaCentavos }, totalCentavos, { 
 const estoqueAcabou = (nomes, insumo) =>
   new ErroHttp(
     409,
-    `Acabou: ${nomes.join(', ')}${insumo ? ` (sem ${insumo.toLowerCase()})` : ''}. Remova do carrinho para continuar.`,
+    `Acabou: ${nomes.join(', ')}${insumo ? ` (sem ${insumo.toLowerCase()})` : ''}. Remova do pedido para continuar.`,
     { codigo: 'ESTOQUE_INSUFICIENTE', detalhes: { produtos: nomes, insumo: insumo ?? null } },
   );
 
@@ -385,7 +389,7 @@ async function criarNaTransacao(tx, d) {
   }
   if (indisponiveis.length) {
     const nomes = indisponiveis.map((i) => i.nome ?? `produto ${i.produtoId}`).join(', ');
-    throw new ErroHttp(409, `Indisponível agora: ${nomes}. Remova do carrinho para continuar.`, {
+    throw new ErroHttp(409, `Indisponível agora: ${nomes}. Remova do pedido para continuar.`, {
       codigo: 'PRODUTO_INDISPONIVEL',
       detalhes: indisponiveis,
     });
@@ -399,8 +403,16 @@ async function criarNaTransacao(tx, d) {
   }
 
   // 4. Preços e totais recalculados; pagamento conferido contra o total do servidor.
-  const valores = calcularValores(d.itens, produtosPorId, bairro?.taxaCentavos ?? 0);
-  if (d.canal === 'SITE') conferirTotalEsperado(d.totalEsperadoCentavos, valores);
+  //    Frete grátis (configuração do banco): subtotal dos itens >= mínimo zera a
+  //    taxa. Vale para todo pedido com entrega (site e WhatsApp); o site nunca manda taxa.
+  const config = await pedidoRepo.buscarConfiguracao(tx);
+  const freteGratis = freteGratisDaConfig(config);
+  const doItens = calcularValores(d.itens, produtosPorId);
+  const taxa = bairro ? taxaDeEntrega(bairro.taxaCentavos, doItens.subtotalCentavos, freteGratis) : 0;
+  const valores = { ...doItens, taxaEntregaCentavos: taxa, totalCentavos: doItens.subtotalCentavos + taxa };
+  if (d.canal === 'SITE') {
+    conferirTotalEsperado(d.totalEsperadoCentavos, valores, { taxaBairroCentavos: bairro?.taxaCentavos ?? null, freteGratis });
+  }
   validarPagamento(d.pagamento, valores.totalCentavos, { obrigatorio: d.canal !== 'SALAO' });
 
   // 5. Baixa atômica do estoque (409 com o nome do que acabou).
@@ -408,7 +420,6 @@ async function criarNaTransacao(tx, d) {
 
   // 6. Número do dia (dia OPERACIONAL: vira às horaViradaDia, não à meia-noite),
   //    atômico e sem buraco em caso de rollback.
-  const config = await pedidoRepo.buscarConfiguracao(tx);
   const dia = diaOperacional(d.agora, horaViradaDe(config));
   const numeroDia = await pedidoRepo.proximoNumeroDoDia(dia, tx);
 
@@ -472,6 +483,21 @@ export async function criarPedidoDoSite(
     totalEsperadoCentavos,
     agora,
   });
+}
+
+export const PEDIDOS_POR_PAGINA = 20;
+
+/**
+ * Histórico do cliente (aba "Pedidos" do site), mais novo primeiro.
+ * `proximo` = id para pedir a página seguinte (null = acabou).
+ */
+export async function pedidosDoCliente(clienteId, { antesDeId } = {}) {
+  const lista = await pedidoRepo.listarDoCliente(clienteId, { antesDeId, limite: PEDIDOS_POR_PAGINA + 1 });
+  const pagina = lista.slice(0, PEDIDOS_POR_PAGINA);
+  return {
+    pedidos: pagina.map(pedidoPublico),
+    proximo: lista.length > PEDIDOS_POR_PAGINA ? pagina.at(-1).id : null,
+  };
 }
 
 /** Último pedido do cliente (para "Repetir último pedido"), ou null. */

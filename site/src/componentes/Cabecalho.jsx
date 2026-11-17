@@ -25,8 +25,11 @@ function TempoEstimado({ minutos }) {
   return <span className="selo">Entrega em ~{minutos} min</span>;
 }
 
-/** @param {{ cardapio: any }} props resposta do GET /publico/cardapio (ou null carregando) */
-export function Cabecalho({ cardapio }) {
+/**
+ * @param {{ cardapio: any, children?: any }} props resposta do GET /publico/cardapio (ou null
+ * carregando); `children` = navegação de telas largas, abaixo do status
+ */
+export function Cabecalho({ cardapio, children }) {
   return (
     <header className="cabecalho">
       <div className="cabecalho__interno">
@@ -35,6 +38,7 @@ export function Cabecalho({ cardapio }) {
           <StatusTurno cardapio={cardapio} />
           {cardapio?.aberto && <TempoEstimado minutos={cardapio.tempoEstimadoMin} />}
         </div>
+        {children}
       </div>
     </header>
   );

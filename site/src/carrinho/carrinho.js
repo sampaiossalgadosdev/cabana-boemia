@@ -116,10 +116,10 @@ export function conciliar(itens, categorias) {
 export function mensagensDaConciliacao({ removidos, precosAlterados }) {
   const msgs = [];
   if (removidos.length === 1) {
-    msgs.push(`${removidos[0]} saiu do cardápio e foi removido do seu carrinho.`);
+    msgs.push(`${removidos[0]} saiu do cardápio e foi removido da sua sacola.`);
   } else if (removidos.length > 1) {
     const lista = `${removidos.slice(0, -1).join(', ')} e ${removidos.at(-1)}`;
-    msgs.push(`${lista} saíram do cardápio e foram removidos do seu carrinho.`);
+    msgs.push(`${lista} saíram do cardápio e foram removidos da sua sacola.`);
   }
   for (const p of precosAlterados) {
     msgs.push(`O preço de ${p.nome} mudou de ${formatarPreco(p.de)} para ${formatarPreco(p.para)}.`);

@@ -389,6 +389,8 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
         subtotalCentavos: 2 * 1800 + 900,
         taxaEntregaCentavos: 500,
         totalCentavos: 2 * 1800 + 900 + 500,
+        taxaBairroCentavos: 500,
+        freteGratis: null,
         itens: [
           { produtoId: p['X-Bacon'].id, nome: 'X-Bacon', precoUnitarioCentavos: 1800 },
           { produtoId: p['Coca-Cola 1L'].id, nome: 'Coca-Cola 1L', precoUnitarioCentavos: 900 },
@@ -405,6 +407,85 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
     } finally {
       await prisma.produto.update({ where: { nome: 'X-Bacon' }, data: { precoCentavos: 1600 } });
     }
+  });
+
+  // ───────── Frete grátis ─────────
+
+  describe('frete grátis (configuração da retaguarda)', () => {
+    const ligar = (minimo) =>
+      prisma.configuracao.upsert({
+        where: { id: 1 },
+        update: { freteGratisAtivo: true, freteGratisMinimoCentavos: minimo },
+        create: { id: 1, freteGratisAtivo: true, freteGratisMinimoCentavos: minimo },
+      });
+    after(() => prisma.configuracao.update({ where: { id: 1 }, data: { freteGratisAtivo: false, freteGratisMinimoCentavos: null } }));
+
+    test('subtotal >= mínimo: taxa 0 no pedido; abaixo do mínimo: taxa do bairro', async () => {
+      await ligar(4100); // R$ 41,00
+      const c = await novoCliente();
+      const acima = [item('X-Bacon', 2), item('Coca-Cola 1L')]; // 4100, exatamente o mínimo
+      const r = await pedir(c, acima, { totalEsperadoCentavos: 4100 });
+      assert.equal(r.status, 201, JSON.stringify(r.corpo));
+      assert.equal(r.corpo.pedido.subtotalCentavos, 4100);
+      assert.equal(r.corpo.pedido.taxaEntregaCentavos, 0);
+      assert.equal(r.corpo.pedido.totalCentavos, 4100);
+
+      const abaixo = [item('X-Bacon', 2)]; // 3200
+      const r2 = await pedir(c, abaixo, { totalEsperadoCentavos: 3200 + 500 });
+      assert.equal(r2.status, 201, JSON.stringify(r2.corpo));
+      assert.equal(r2.corpo.pedido.taxaEntregaCentavos, 500);
+    });
+
+    test('o site não decide a taxa: total com a taxa cheia (ou campo de taxa no corpo) = 409 com a regra vigente', async () => {
+      await ligar(4100);
+      const c = await novoCliente();
+      const itens = [item('X-Bacon', 2), item('Coca-Cola 1L')];
+      const r = await pedir(c, itens, { totalEsperadoCentavos: 4100 + 500, taxaEntregaCentavos: 500 });
+      assert.equal(r.status, 409);
+      assert.equal(r.corpo.erro.codigo, 'PRECO_ALTERADO');
+      assert.equal(r.corpo.erro.detalhes.taxaEntregaCentavos, 0);
+      assert.equal(r.corpo.erro.detalhes.taxaBairroCentavos, 500);
+      assert.deepEqual(r.corpo.erro.detalhes.freteGratis, { minimoCentavos: 4100 });
+
+      // Abaixo do mínimo, mandar taxa 0 não dá frete grátis.
+      const r2 = await pedir(c, [item('X-Bacon')], { totalEsperadoCentavos: 1600, taxaEntregaCentavos: 0 });
+      assert.equal(r2.status, 409);
+      assert.equal(r2.corpo.erro.detalhes.totalCentavos, 1600 + 500);
+      assert.equal(await prisma.pedido.count({ where: { clienteId: c.cliente.id } }), 0);
+    });
+
+    test('desligado: taxa do bairro mesmo acima do mínimo guardado; WhatsApp segue a mesma regra', async () => {
+      await ligar(4100);
+      const zap = await criarPedido({
+        canal: 'WHATSAPP',
+        itens: [{ produtoId: p['X-Bacon'].id, quantidade: 3 }],
+        cliente: { nome: 'Seu João', telefone: '43988887777' },
+        endereco: { texto: 'Rua A, 10', bairroId: centro.id },
+        pagamento: { forma: 'PIX' },
+      });
+      assert.equal(zap.pedido.taxaEntregaCentavos, 0);
+      assert.equal(zap.pedido.totalCentavos, 4800);
+
+      await prisma.configuracao.update({ where: { id: 1 }, data: { freteGratisAtivo: false } });
+      const c = await novoCliente();
+      const r = await pedir(c, [item('X-Bacon', 3)], { totalEsperadoCentavos: 4800 + 500 });
+      assert.equal(r.status, 201, JSON.stringify(r.corpo));
+      assert.equal(r.corpo.pedido.taxaEntregaCentavos, 500);
+    });
+
+    test('GET /publico/config e /publico/cardapio expõem a regra (null desligado)', async () => {
+      await ligar(6900);
+      assert.deepEqual((await api('GET', '/publico/config')).corpo.freteGratis, { minimoCentavos: 6900 });
+      assert.deepEqual((await api('GET', '/publico/cardapio')).corpo.freteGratis, { minimoCentavos: 6900 });
+      await prisma.configuracao.update({ where: { id: 1 }, data: { freteGratisAtivo: false } });
+      assert.equal((await api('GET', '/publico/config')).corpo.freteGratis, null);
+    });
+
+    test('o banco recusa frete grátis ligado sem mínimo (CHECK)', async () => {
+      await assert.rejects(
+        prisma.configuracao.update({ where: { id: 1 }, data: { freteGratisAtivo: true, freteGratisMinimoCentavos: null } }),
+      );
+    });
   });
 
   test('pedido do site sem o total que o cliente viu = 400', async () => {
@@ -537,5 +618,32 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
       ],
     );
     assert.equal((await api('GET', '/cliente/pedidos/ultimo')).status, 401);
+  });
+  test('GET /cliente/pedidos: histórico do próprio cliente, mais novo primeiro, paginado de 20 em 20', async () => {
+    const c = await novoCliente();
+    const outro = await novoCliente();
+    assert.deepEqual((await api('GET', '/cliente/pedidos', { token: c.token })).corpo, { pedidos: [], proximo: null });
+
+    const ids = [];
+    for (let i = 0; i < 21; i += 1) {
+      const r = await pedir(c, [item('Coca-Cola 1L')]);
+      assert.equal(r.status, 201, JSON.stringify(r.corpo));
+      ids.push(r.corpo.pedido.id);
+    }
+    await pedir(outro, [item('X-Bacon')]);
+
+    const p1 = (await api('GET', '/cliente/pedidos', { token: c.token })).corpo;
+    assert.equal(p1.pedidos.length, 20);
+    assert.deepEqual(p1.pedidos.map((x) => x.id), ids.slice(1).reverse());
+    assert.equal(p1.pedidos[0].itens[0].nome, 'Coca-Cola 1L');
+    assert.equal(p1.pedidos[0].formaPagamento, 'PIX');
+    assert.ok(p1.proximo);
+
+    const p2 = (await api('GET', `/cliente/pedidos?antesDeId=${p1.proximo}`, { token: c.token })).corpo;
+    assert.deepEqual(p2, { pedidos: [p2.pedidos[0]], proximo: null });
+    assert.equal(p2.pedidos[0].id, ids[0]);
+
+    assert.equal((await api('GET', '/cliente/pedidos')).status, 401);
+    assert.equal((await api('GET', '/cliente/pedidos?antesDeId=abc', { token: c.token })).status, 400);
   });
 });

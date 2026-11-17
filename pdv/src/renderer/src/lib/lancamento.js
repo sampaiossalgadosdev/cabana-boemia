@@ -3,6 +3,7 @@
  * grade e pagamento. Lógica pura (testada com node:test). Os valores aqui são
  * só para mostrar: o preço e o total oficiais saem da API.
  */
+import { taxaDeEntrega } from '@restaurante/shared/frete';
 
 /** Limite da API por linha (itemPedidoSchema). */
 export const MAX_POR_LINHA = 20;
@@ -97,8 +98,13 @@ export function atualizarPrecos(linhas, produtosPorId) {
   });
 }
 
-export function totais(linhas, taxaEntregaCentavos = 0) {
+/**
+ * Prévia dos totais. `freteGratis` (do GET /equipe/cardapio, null = desligado)
+ * zera a taxa do bairro com subtotal >= mínimo, a mesma regra da API.
+ */
+export function totais(linhas, taxaBairroCentavos = 0, freteGratis = null) {
   const subtotalCentavos = linhas.reduce((s, l) => s + l.precoCentavos * l.quantidade, 0);
+  const taxaEntregaCentavos = taxaDeEntrega(taxaBairroCentavos, subtotalCentavos, freteGratis);
   return { subtotalCentavos, taxaEntregaCentavos, totalCentavos: subtotalCentavos + taxaEntregaCentavos };
 }
 

@@ -163,6 +163,21 @@ const configSchema = z.object({
     .int('Use uma hora cheia')
     .min(0, 'Entre 0 e 12 horas')
     .max(12, 'Entre 0 e 12 horas'),
+  // Frete grátis: ausentes = não mexe (cliente antigo). Desligado guarda o
+  // mínimo para quando religar; ligado exige mínimo > 0.
+  freteGratisAtivo: z.boolean({ error: 'Valor inválido' }).optional(),
+  freteGratisMinimoCentavos: z
+    .number({ error: 'Valor inválido' })
+    .int('Valor inválido')
+    .min(1, 'Informe um valor maior que zero')
+    .max(MAX_CENTAVOS, 'Valor muito alto')
+    .nullable()
+    .optional(),
+}).superRefine((d, ctx) => {
+  // Ligado (ou sem dizer, com o banco talvez ligado) exige o mínimo junto.
+  if ((d.freteGratisAtivo || (d.freteGratisAtivo === undefined && d.freteGratisMinimoCentavos === null)) && d.freteGratisMinimoCentavos == null) {
+    ctx.addIssue({ code: 'custom', path: ['freteGratisMinimoCentavos'], message: 'Informe a partir de quanto o frete é grátis' });
+  }
 });
 
 const imprimirSchema = z.object({ data: caixasSchema.shape.data });

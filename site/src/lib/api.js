@@ -47,7 +47,7 @@ export async function buscarCardapio(signal, { forcar = false } = {}) {
   return res.json();
 }
 
-/** GET /publico/config → { nome, whatsapp, googleClientId } */
+/** GET /publico/config → { nome, whatsapp, googleClientId, freteGratis } */
 export const buscarConfig = () => requisitar('GET', '/publico/config');
 
 /** POST /cliente/auth/google → { token, cliente } */
@@ -75,3 +75,14 @@ export const buscarUltimoPedido = (token) => requisitar('GET', '/cliente/pedidos
 /** PUT /cliente/me → { cliente } */
 export const salvarPerfil = (token, { nome, telefone }) =>
   requisitar('PUT', '/cliente/me', { token, corpo: { nome, telefone } });
+
+/** GET /cliente/pedidos → { pedidos, proximo } (mais novo primeiro; `proximo` pagina) */
+export const listarPedidos = (token, antesDeId) =>
+  requisitar('GET', `/cliente/pedidos${antesDeId ? `?antesDeId=${antesDeId}` : ''}`, { token });
+
+/** PUT /cliente/enderecos/:id → { endereco } */
+export const atualizarEndereco = (token, id, dados) =>
+  requisitar('PUT', `/cliente/enderecos/${id}`, { token, corpo: dados });
+
+/** DELETE /cliente/enderecos/:id → 204 */
+export const removerEndereco = (token, id) => requisitar('DELETE', `/cliente/enderecos/${id}`, { token });

@@ -101,6 +101,9 @@ describe('carrinho do lançamento', () => {
     const b = produto({ id: 2, nome: 'Coca', precoCentavos: 900 });
     let linhas = adicionarProduto(adicionarProduto(adicionarProduto([], a), a), b);
     assert.deepEqual(totais(linhas, 500), { subtotalCentavos: 3300, taxaEntregaCentavos: 500, totalCentavos: 3800 });
+    // Frete grátis (mesma regra da API): a partir do mínimo, a taxa some.
+    assert.deepEqual(totais(linhas, 500, { minimoCentavos: 3300 }), { subtotalCentavos: 3300, taxaEntregaCentavos: 0, totalCentavos: 3300 });
+    assert.deepEqual(totais(linhas, 500, { minimoCentavos: 3301 }), { subtotalCentavos: 3300, taxaEntregaCentavos: 500, totalCentavos: 3800 });
     linhas = atualizarPrecos(linhas, new Map([[1, { ...a, precoCentavos: 1300 }]]));
     assert.deepEqual(linhas.map((l) => [l.produtoId, l.precoCentavos]), [[1, 1300], [2, 900]]);
   });

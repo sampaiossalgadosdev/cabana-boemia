@@ -361,7 +361,14 @@ describe('retaguarda: catálogo, cardápio do dia, turnos, bairros e configuraç
       horaViradaDia: 4,
     });
     assert.equal(r.status, 200, JSON.stringify(r.corpo));
-    assert.deepEqual(r.corpo.config, { nomeRestaurante: 'Cabana Boemia', whatsappNumero: '5543999990000', tempoEstimadoPadraoMin: 50, horaViradaDia: 4 });
+    assert.deepEqual(r.corpo.config, {
+      nomeRestaurante: 'Cabana Boemia',
+      whatsappNumero: '5543999990000',
+      tempoEstimadoPadraoMin: 50,
+      horaViradaDia: 4,
+      freteGratisAtivo: false,
+      freteGratisMinimoCentavos: null,
+    });
     assert.equal((await publico('/publico/config')).whatsapp, '5543999990000');
     assert.equal((await publico('/publico/cardapio')).tempoEstimadoMin, 50);
     assert.deepEqual((await api('GET', '/retaguarda/config')).corpo.config, r.corpo.config);
@@ -377,5 +384,39 @@ describe('retaguarda: catálogo, cardápio do dia, turnos, bairros e configuraç
     ]) {
       assert.equal((await api('PUT', '/retaguarda/config', corpo)).status, 400, JSON.stringify(corpo));
     }
+  });
+
+  test('frete grátis: liga com mínimo, desliga guardando o mínimo; ligado sem mínimo ou mínimo 0 = 400', async () => {
+    const base = { nomeRestaurante: 'Cabana Boemia', whatsappNumero: '43999990000', tempoEstimadoPadraoMin: 40, horaViradaDia: 4 };
+    soCardapio();
+    const liga = await api('PUT', '/retaguarda/config', { ...base, freteGratisAtivo: true, freteGratisMinimoCentavos: 6900 });
+    assert.equal(liga.status, 200, JSON.stringify(liga.corpo));
+    assert.equal(liga.corpo.config.freteGratisAtivo, true);
+    assert.equal(liga.corpo.config.freteGratisMinimoCentavos, 6900);
+    assert.deepEqual((await publico('/publico/config')).freteGratis, { minimoCentavos: 6900 });
+    assert.deepEqual(soCardapio(), [{ evento: 'cardapio:atualizado', dados: { origem: 'config' } }]);
+
+    // Sem os campos: não mexe (cliente antigo).
+    const semCampos = await api('PUT', '/retaguarda/config', base);
+    assert.equal(semCampos.corpo.config.freteGratisAtivo, true);
+
+    const desliga = await api('PUT', '/retaguarda/config', { ...base, freteGratisAtivo: false, freteGratisMinimoCentavos: 6900 });
+    assert.equal(desliga.corpo.config.freteGratisAtivo, false);
+    assert.equal(desliga.corpo.config.freteGratisMinimoCentavos, 6900);
+    assert.equal((await publico('/publico/config')).freteGratis, null);
+
+    for (const extra of [
+      { freteGratisAtivo: true, freteGratisMinimoCentavos: null },
+      { freteGratisAtivo: true },
+      { freteGratisAtivo: true, freteGratisMinimoCentavos: 0 },
+      { freteGratisAtivo: false, freteGratisMinimoCentavos: -100 },
+      { freteGratisAtivo: false, freteGratisMinimoCentavos: 69.5 },
+      { freteGratisAtivo: 'sim', freteGratisMinimoCentavos: 6900 },
+      { freteGratisMinimoCentavos: null },
+    ]) {
+      const r = await api('PUT', '/retaguarda/config', { ...base, ...extra });
+      assert.equal(r.status, 400, JSON.stringify(extra));
+    }
+    await api('PUT', '/retaguarda/config', { ...base, freteGratisAtivo: false, freteGratisMinimoCentavos: null });
   });
 });

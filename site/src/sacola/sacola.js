@@ -77,19 +77,3 @@ export function resumoDaSacola(itens, { taxaBairroCentavos = null, freteGratis =
     progresso: progressoFreteGratis(subtotal, freteGratis),
   };
 }
-
-const ICONES = [
-  ['lanche', '🍔'],
-  ['pizza', '🍕'],
-  ['porc', '🍟'],
-  ['bebida', '🥤'],
-  ['marmita', '🍱'],
-  ['prato', '🍽️'],
-  ['sobremesa', '🍮'],
-];
-
-/** Miniatura enquanto os produtos não têm foto: ícone pela categoria. */
-export function iconeDaCategoria(nome) {
-  const n = normalizar(nome);
-  return ICONES.find(([chave]) => n.includes(chave))?.[1] ?? '🍽️';
-}

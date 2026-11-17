@@ -6,7 +6,6 @@ import {
   sugestoes,
   enderecoDaTaxa,
   resumoDaSacola,
-  iconeDaCategoria,
   rotuloItens,
   produtosDoCardapio,
 } from '../src/sacola/sacola.js';
@@ -91,11 +90,7 @@ test('resumoDaSacola: taxa conhecida, desconhecida e frete grátis (mesmo sem sa
   assert.equal(desligado.totalCentavos, 4600);
 });
 
-test('auxiliares: ícone pela categoria, rótulo de itens e mapa de produtos com a categoria', () => {
-  assert.equal(iconeDaCategoria('Lanches'), '🍔');
-  assert.equal(iconeDaCategoria('Porções'), '🍟');
-  assert.equal(iconeDaCategoria('BEBIDAS'), '🥤');
-  assert.equal(iconeDaCategoria('Outra coisa'), '🍽️');
+test('auxiliares: rótulo de itens e mapa de produtos com a categoria', () => {
   assert.equal(rotuloItens(1), '1 item');
   assert.equal(rotuloItens(3), '3 itens');
   assert.equal(produtosDoCardapio(cardapio().categorias).get(23).categoria, 'Bebidas');

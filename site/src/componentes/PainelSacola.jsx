@@ -10,7 +10,6 @@ import { quandoAbre } from '../lib/horario.js';
 import { logoUrl } from '../lib/logo.js';
 import {
   enderecoDaTaxa,
-  iconeDaCategoria,
   limiteDaLinha,
   produtosDoCardapio,
   resumoDaSacola,
@@ -18,6 +17,7 @@ import {
   sugestoes as listarSugestoes,
 } from '../sacola/sacola.js';
 import { LinhaFreteGratis } from './BarraSacola.jsx';
+import { ImagemProduto } from './ImagemProduto.jsx';
 import { Checkout } from './Checkout.jsx';
 import { PedidoEnviado } from './PedidoEnviado.jsx';
 
@@ -41,7 +41,7 @@ function ItemSacola({ item, produto, limite, onEditar, onMudar, onRemover }) {
   return (
     <li className="sacola-item">
       <div className="sacola-item__miniatura">
-        <span aria-hidden="true">{iconeDaCategoria(produto?.categoria)}</span>
+        <ImagemProduto src={produto?.imagemUrl} className="sacola-foto" />
         <button type="button" className="sacola-item__editar" onClick={() => onEditar(item)} aria-label={`Editar ${item.nome}`}>
           <Icone d={LAPIS} tamanho={14} />
         </button>
@@ -77,7 +77,7 @@ function CartaoSugestao({ produto, adicionado, onAdicionar }) {
   return (
     <li className="sugestao">
       <div className="sugestao__imagem">
-        <span aria-hidden="true">{iconeDaCategoria(produto.categoria)}</span>
+        <ImagemProduto src={produto.imagemUrl} className="sacola-foto" />
         <button
           type="button"
           className={`sugestao__mais${adicionado ? ' sugestao__mais--ok' : ''}`}

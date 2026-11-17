@@ -206,7 +206,7 @@ export async function cardapioDaEquipe({ turnoId } = {}, agora = new Date()) {
     turnoAtivo: ativo,
     turnos: turnos.map((t) => ({ id: t.id, nome: t.nome })),
     // Prévia do delivery (a taxa oficial é a da API): null = frete grátis desligado.
-    freteGratis: freteGratisDaConfig(config),
+    freteGratis: freteGratisDaConfig(config, { canal: 'WHATSAPP' }),
   };
   if (!turno) return { ...base, categorias: [], porKg: [] };
 

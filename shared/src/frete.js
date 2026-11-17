@@ -8,12 +8,16 @@
  */
 
 /**
- * @param {{ freteGratisAtivo?: boolean, freteGratisMinimoCentavos?: number | null } | null | undefined} config
+ * Regra vigente para um canal. `freteGratisWhatsapp = false` deixa o frete
+ * grátis só no site (o delivery lançado pelo PDV paga a taxa do bairro).
+ * @param {{ freteGratisAtivo?: boolean, freteGratisMinimoCentavos?: number | null, freteGratisWhatsapp?: boolean } | null | undefined} config
+ * @param {{ canal?: 'SITE' | 'WHATSAPP' | 'SALAO' }} [opcoes] padrão SITE
  * @returns {{ minimoCentavos: number } | null}
  */
-export function freteGratisDaConfig(config) {
+export function freteGratisDaConfig(config, { canal = 'SITE' } = {}) {
   const minimo = config?.freteGratisMinimoCentavos;
   if (!config?.freteGratisAtivo || !Number.isInteger(minimo) || minimo <= 0) return null;
+  if (canal !== 'SITE' && config.freteGratisWhatsapp === false) return null;
   return { minimoCentavos: minimo };
 }
 

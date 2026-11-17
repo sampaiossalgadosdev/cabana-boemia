@@ -55,7 +55,7 @@ button:disabled {
  * linha de frete grátis; os avisos flutuantes usam as mesmas variáveis.
  */
 :root {
-  --altura-nav: 62px;
+  --altura-nav: 52px; /* barra inferior do celular (~16% menor que os 62 px iniciais) */
   --altura-sacola: 0px;
   --altura-rodape-fixo: calc(var(--altura-nav) + var(--altura-sacola) + env(safe-area-inset-bottom));
 }
@@ -504,10 +504,10 @@ button:disabled {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 1px;
   height: var(--altura-nav);
   color: var(--cor-texto-suave);
-  font-size: 0.75rem;
+  font-size: 0.6875rem; /* 11 px */
   font-weight: 600;
   text-decoration: none;
   -webkit-tap-highlight-color: transparent;
@@ -523,6 +523,11 @@ button:disabled {
   background: var(--cor-superficie);
   border-top: 1px solid var(--cor-borda);
   box-shadow: 0 -2px 12px rgb(17 17 17 / 6%);
+}
+
+.navegacao--inferior .navegacao__icone {
+  width: 20px;
+  height: 20px;
 }
 
 .navegacao--inferior .navegacao__lista {

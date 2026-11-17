@@ -368,6 +368,7 @@ describe('retaguarda: catálogo, cardápio do dia, turnos, bairros e configuraç
       horaViradaDia: 4,
       freteGratisAtivo: false,
       freteGratisMinimoCentavos: null,
+      freteGratisWhatsapp: true,
     });
     assert.equal((await publico('/publico/config')).whatsapp, '5543999990000');
     assert.equal((await publico('/publico/cardapio')).tempoEstimadoMin, 50);
@@ -399,6 +400,13 @@ describe('retaguarda: catálogo, cardápio do dia, turnos, bairros e configuraç
     // Sem os campos: não mexe (cliente antigo).
     const semCampos = await api('PUT', '/retaguarda/config', base);
     assert.equal(semCampos.corpo.config.freteGratisAtivo, true);
+
+    // "Vale também para o WhatsApp": padrão true; desmarcar persiste e não mexe no site.
+    const soSite = await api('PUT', '/retaguarda/config', { ...base, freteGratisAtivo: true, freteGratisMinimoCentavos: 6900, freteGratisWhatsapp: false });
+    assert.equal(soSite.corpo.config.freteGratisWhatsapp, false);
+    assert.deepEqual((await publico('/publico/config')).freteGratis, { minimoCentavos: 6900 });
+    assert.equal((await api('PUT', '/retaguarda/config', { ...base, freteGratisWhatsapp: 'nao' })).status, 400);
+    await api('PUT', '/retaguarda/config', { ...base, freteGratisWhatsapp: true });
 
     const desliga = await api('PUT', '/retaguarda/config', { ...base, freteGratisAtivo: false, freteGratisMinimoCentavos: 6900 });
     assert.equal(desliga.corpo.config.freteGratisAtivo, false);

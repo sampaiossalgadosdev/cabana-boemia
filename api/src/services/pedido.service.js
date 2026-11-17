@@ -404,9 +404,9 @@ async function criarNaTransacao(tx, d) {
 
   // 4. Preços e totais recalculados; pagamento conferido contra o total do servidor.
   //    Frete grátis (configuração do banco): subtotal dos itens >= mínimo zera a
-  //    taxa. Vale para todo pedido com entrega (site e WhatsApp); o site nunca manda taxa.
+  //    taxa. Site sempre; WhatsApp só com `freteGratisWhatsapp` (padrão ligado). O site nunca manda taxa.
   const config = await pedidoRepo.buscarConfiguracao(tx);
-  const freteGratis = freteGratisDaConfig(config);
+  const freteGratis = freteGratisDaConfig(config, { canal: d.canal });
   const doItens = calcularValores(d.itens, produtosPorId);
   const taxa = bairro ? taxaDeEntrega(bairro.taxaCentavos, doItens.subtotalCentavos, freteGratis) : 0;
   const valores = { ...doItens, taxaEntregaCentavos: taxa, totalCentavos: doItens.subtotalCentavos + taxa };

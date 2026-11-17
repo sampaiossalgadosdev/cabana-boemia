@@ -408,6 +408,7 @@ model Configuracao {
   horaViradaDia             Int       @default(4) // dia operacional vira às HH:00 local (0–12; CHECK)
   freteGratisAtivo          Boolean   @default(false)
   freteGratisMinimoCentavos Int? // frete grátis a partir deste subtotal (centavos); CHECK: ligado exige > 0
+  freteGratisWhatsapp       Boolean   @default(true) // frete grátis vale também no delivery lançado pelo PDV
   tempoEstimadoManualMin    Int?
   tempoManualDefinidoEm     DateTime?
   atualizadoEm              DateTime  @updatedAt

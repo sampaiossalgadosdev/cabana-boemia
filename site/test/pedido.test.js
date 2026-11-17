@@ -12,6 +12,8 @@ import {
   textoTaxa,
   resumoItens,
   dataDoPedido,
+  avisosDaRepeticao,
+  AVISO_INDISPONIVEIS,
 } from '../src/pedido/pedido.js';
 import { abaDoCaminho, caminhoDaAba } from '../src/lib/navegacao.js';
 import { adicionar } from '../src/carrinho/carrinho.js';
@@ -128,6 +130,45 @@ test('repetirPedido soma com o que já está no carrinho', () => {
   const r = repetirPedido(carrinho, { itens: [{ produtoId: 6, nome: 'X-Bacon', quantidade: 2, observacao: 'sem cebola' }] }, categorias);
   assert.equal(r.itens.length, 1);
   assert.equal(r.itens[0].quantidade, 3);
+});
+
+test('repetir: preço de AGORA (não o salvo), observações mantidas, indisponíveis pulados com o aviso', () => {
+  // Pedido antigo: X-Bacon a R$ 14 com observação; Coca (sem saldo hoje), lanche de outro
+  // turno e produto inativo: nenhum dos três vem no cardápio público de agora.
+  const antigo = {
+    itens: [
+      { produtoId: 6, nome: 'X-Bacon', quantidade: 2, observacao: 'sem cebola', precoUnitarioCentavos: 1400 },
+      { produtoId: 6, nome: 'X-Bacon', quantidade: 1, observacao: 'bem passado', precoUnitarioCentavos: 1400 },
+      { produtoId: 23, nome: 'Coca-Cola 1L', quantidade: 1, observacao: null, precoUnitarioCentavos: 800 },
+      { produtoId: 50, nome: 'Marmita M', quantidade: 1, observacao: null },
+      { produtoId: 51, nome: 'X-Antigo', quantidade: 1, observacao: 'sem tomate' },
+    ],
+  };
+  const agora = [{ id: 1, nome: 'Lanches', produtos: [XBACON] }]; // só o X-Bacon, a R$ 16
+  const r = repetirPedido([], antigo, agora);
+  assert.deepEqual(
+    r.itens.map((i) => [i.nome, i.quantidade, i.observacao, i.precoCentavos]),
+    [
+      ['X-Bacon', 2, 'sem cebola', 1600],
+      ['X-Bacon', 1, 'bem passado', 1600],
+    ],
+  );
+  assert.deepEqual(r.indisponiveis, ['Coca-Cola 1L', 'Marmita M', 'X-Antigo']);
+  assert.deepEqual(avisosDaRepeticao(r), {
+    mensagens: ['3 itens foram para a sacola.', `${AVISO_INDISPONIVEIS}: Coca-Cola 1L, Marmita M, X-Antigo.`],
+    abrirSacola: true,
+  });
+  assert.equal(AVISO_INDISPONIVEIS, 'Alguns itens não estão disponíveis e não foram adicionados');
+});
+
+test('repetir sem nada disponível: sacola intacta, só o aviso, não abre a sacola', () => {
+  const naSacola = adicionar([], COCA, 1);
+  const r = repetirPedido(naSacola, { itens: [{ produtoId: 6, nome: 'X-Bacon', quantidade: 2, observacao: null }] }, []);
+  assert.equal(r.adicionados, 0);
+  assert.equal(r.itens, naSacola, 'mesma sacola, nada mudou');
+  assert.deepEqual(avisosDaRepeticao(r), { mensagens: [`${AVISO_INDISPONIVEIS}: X-Bacon.`], abrirSacola: false });
+  // Sacola vazia e nada disponível também não abre.
+  assert.equal(avisosDaRepeticao(repetirPedido([], { itens: [] }, categorias)).abrirSacola, false);
 });
 
 test('novaChavePedido gera UUIDs diferentes', () => {

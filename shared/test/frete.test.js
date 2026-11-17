@@ -12,6 +12,15 @@ test('freteGratisDaConfig: só vale ligado e com mínimo positivo', () => {
   assert.equal(freteGratisDaConfig(null), null);
 });
 
+test('freteGratisDaConfig por canal: WhatsApp segue a opção (padrão: vale), o site sempre vale', () => {
+  const base = { freteGratisAtivo: true, freteGratisMinimoCentavos: 6900 };
+  assert.deepEqual(freteGratisDaConfig(base, { canal: 'WHATSAPP' }), LIGADO, 'sem o campo = vale');
+  assert.deepEqual(freteGratisDaConfig({ ...base, freteGratisWhatsapp: true }, { canal: 'WHATSAPP' }), LIGADO);
+  assert.equal(freteGratisDaConfig({ ...base, freteGratisWhatsapp: false }, { canal: 'WHATSAPP' }), null);
+  assert.deepEqual(freteGratisDaConfig({ ...base, freteGratisWhatsapp: false }, { canal: 'SITE' }), LIGADO);
+  assert.deepEqual(freteGratisDaConfig({ ...base, freteGratisWhatsapp: false }), LIGADO, 'padrão = site');
+});
+
 test('taxaDeEntrega: zera a partir do mínimo (inclusive), senão a do bairro', () => {
   assert.equal(taxaDeEntrega(500, 6899, LIGADO), 500);
   assert.equal(taxaDeEntrega(500, 6900, LIGADO), 0);

@@ -13,7 +13,9 @@ import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoService from './endereco.service.js';
 import { OPCOES_TRANSACAO, pedidoPublico, STATUS_ABERTOS } from './pedido.service.js';
 import { exigirCaixaAberto } from './caixa.service.js';
-import { calcularTempoEstimado, manualDeHoje, temSaldo } from './publico.service.js';
+import { calcularTempoEstimado, manualDeHoje, saldoDisponivel, temSaldo } from './publico.service.js';
+
+export { saldoDisponivel };
 import { calcularTurnoAtivo, calcularProximaAbertura } from './turno.service.js';
 
 export { STATUS_ABERTOS };
@@ -168,17 +170,6 @@ export async function adicionarEndereco(clienteId, endereco) {
 }
 
 // ───────── Cardápio do PDV ─────────
-
-/**
- * Quantas unidades dá para vender agora: menor entre o estoque próprio (se
- * controla) e o que cada insumo permite. null = sem limite de estoque.
- */
-export function saldoDisponivel(produto) {
-  const limites = [];
-  if (produto.controlaEstoque) limites.push(Math.max(0, produto.estoque ?? 0));
-  for (const pi of produto.insumos) limites.push(Math.max(0, Math.floor(pi.insumo.estoque / pi.quantidade)));
-  return limites.length ? Math.min(...limites) : null;
-}
 
 /**
  * Grade do lançamento: produtos do turno pedido, ou do ativo, ou (loja

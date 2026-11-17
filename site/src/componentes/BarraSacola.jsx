@@ -2,13 +2,13 @@ import { progressoFreteGratis } from '@restaurante/shared/frete';
 import { useCarrinho } from '../carrinho/CarrinhoContext.jsx';
 import { formatarPreco } from '../lib/dinheiro.js';
 import { logoUrl } from '../lib/logo.js';
-import { rotuloItens } from './Carrinho.jsx';
+import { rotuloItens } from '../sacola/sacola.js';
 
 /**
  * Linha de frete grátis acima da sacola. Usa o subtotal dos itens (sem a
  * taxa). Desligado na retaguarda (`freteGratis` null): não aparece.
  */
-function LinhaFreteGratis({ subtotalCentavos, freteGratis }) {
+export function LinhaFreteGratis({ subtotalCentavos, freteGratis }) {
   const p = progressoFreteGratis(subtotalCentavos, freteGratis);
   if (!p) return null;
   return (

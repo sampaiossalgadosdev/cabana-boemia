@@ -6,6 +6,9 @@ import * as publicoRepo from '../repositories/publico.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import { calcularTurnoAtivo, calcularProximaAbertura } from './turno.service.js';
 
+/** Máximo por linha de pedido (itemPedidoSchema) e na sacola do site. */
+export const MAX_POR_ITEM = 20;
+
 // Mesmos defaults do schema, caso a linha única ainda não exista (seed não rodou).
 const CONFIG_PADRAO = {
   nomeRestaurante: 'Cabana Boemia',
@@ -39,6 +42,17 @@ export function calcularTempoEstimado(config, agora) {
 }
 
 /** Estoque próprio > 0 (se controla) e todo insumo com saldo para 1 unidade. */
+/**
+ * Unidades possíveis agora pelo estoque próprio e pelos insumos (cada
+ * produto sozinho); null = sem controle de estoque.
+ */
+export function saldoDisponivel(produto) {
+  const limites = [];
+  if (produto.controlaEstoque) limites.push(Math.max(0, produto.estoque ?? 0));
+  for (const pi of produto.insumos) limites.push(Math.max(0, Math.floor(pi.insumo.estoque / pi.quantidade)));
+  return limites.length ? Math.min(...limites) : null;
+}
+
 export function temSaldo(produto) {
   if (produto.controlaEstoque && !((produto.estoque ?? 0) > 0)) return false;
   return produto.insumos.every((pi) => pi.insumo.estoque >= pi.quantidade);
@@ -86,6 +100,10 @@ export async function cardapio(agora = new Date()) {
       descricao: p.descricao,
       tipoPreco: p.tipoPreco,
       precoCentavos: p.precoCentavos,
+      sugerirNaSacola: p.sugerirNaSacola,
+      // Limite do "+" na sacola: o saldo, mas nunca acima do máximo por item, para
+      // não revelar o estoque (prévia; a API confere na baixa). Fechado: null.
+      maxSacola: turno ? Math.min(saldoDisponivel(p) ?? MAX_POR_ITEM, MAX_POR_ITEM) : null,
     });
   }
   return { ...base, categorias };

@@ -20,6 +20,7 @@ export function listarProdutosDoSite(turnoId, { somenteDisponiveisHoje = true } 
       descricao: true,
       tipoPreco: true,
       precoCentavos: true,
+      sugerirNaSacola: true,
       controlaEstoque: true,
       estoque: true,
       categoria: { select: { id: true, nome: true } },

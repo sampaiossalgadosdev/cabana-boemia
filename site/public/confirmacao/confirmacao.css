@@ -1,0 +1,76 @@
+/* Animação de pedido confirmado — Cabana Boemia (~4,3s) */
+html.cbc-travado, html.cbc-travado body { overflow: hidden; }
+
+.cbc {
+  --cbc-vermelho: #d7261e;
+  position: fixed; inset: 0; z-index: 99999;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 42%, #e8372c 0%, var(--cbc-vermelho) 45%, #a9180f 100%);
+  color: #fff; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  animation: cbc-entra .25s ease-out both, cbc-sai .3s ease-in 4s forwards;
+}
+.cbc.cbc-pular { animation: cbc-sai .2s ease-in forwards !important; }
+
+/* faixas de lanchinhos correndo no fundo */
+.cbc-faixa { position: absolute; left: 0; display: flex; width: max-content; opacity: .13; pointer-events: none; }
+.cbc-faixa svg { width: 54px; height: 54px; margin: 0 22px; flex: none; }
+.cbc-faixa.a { top: 7%;  animation: cbc-corre 7s linear infinite; }
+.cbc-faixa.b { top: 21%; animation: cbc-corre 9s linear infinite reverse; opacity: .08; }
+.cbc-faixa.c { bottom: 16%; animation: cbc-corre 8s linear infinite; opacity: .1; }
+.cbc-faixa.d { bottom: 2%;  animation: cbc-corre 6s linear infinite reverse; }
+
+.cbc-cena { width: min(64vw, 270px); overflow: visible; position: relative; z-index: 1; }
+.cbc-cena * { transform-box: fill-box; }
+
+.cbc-saco { transform-origin: 50% 100%; animation: cbc-saco-entra .4s cubic-bezier(.34,1.56,.64,1) both, cbc-quica 2s ease-out .05s both; }
+.cbc-cai { opacity: 0; animation: cbc-cai .38s cubic-bezier(.55,0,.9,.5) both; }
+.cbc-cai.i1 { animation-delay: .2s; }
+.cbc-cai.i2 { animation-delay: .5s; --r: -14deg; }
+.cbc-cai.i3 { animation-delay: .8s; --r: 12deg; }
+.cbc-cai.i4 { animation-delay: 1.1s; --r: -10deg; }
+.cbc-cai.i5 { animation-delay: 1.4s; --r: 6deg; }
+
+.cbc-boca { transform-origin: 50% 100%; animation: cbc-some-cima .2s ease-in 1.95s forwards; }
+.cbc-dobra { transform-origin: 50% 0%; opacity: 0; animation: cbc-dobra .35s cubic-bezier(.34,1.4,.64,1) 1.95s forwards; }
+.cbc-selo { transform-origin: 50% 50%; transform: scale(0); animation: cbc-pop .4s cubic-bezier(.34,1.7,.64,1) 2.2s forwards; }
+.cbc-ok { transform-origin: 50% 50%; transform: scale(0); animation: cbc-pop .4s cubic-bezier(.34,1.8,.64,1) 2.45s forwards; }
+.cbc-ok path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: cbc-risca .3s ease-out 2.65s forwards; }
+
+.cbc-texto { text-align: center; margin-top: 18px; position: relative; z-index: 1; padding: 0 24px; }
+.cbc-titulo { font-size: clamp(24px, 7vw, 32px); font-weight: 800; letter-spacing: -.01em; margin: 0;
+  opacity: 0; animation: cbc-sobe .4s cubic-bezier(.2,.8,.3,1.2) 2.5s forwards; }
+.cbc-sub { font-size: clamp(14px, 4vw, 17px); margin: 6px 0 0; opacity: 0; color: #ffe9c7;
+  animation: cbc-sobe .4s ease-out 2.65s forwards; }
+.cbc-num { display: inline-block; margin-top: 12px; padding: 5px 14px; border-radius: 999px;
+  background: rgba(255,255,255,.16); font-weight: 700; font-size: 14px; opacity: 0;
+  animation: cbc-sobe .4s ease-out 2.8s forwards; }
+.cbc-num:empty { display: none; }
+
+@keyframes cbc-entra { from { opacity: 0; } }
+@keyframes cbc-sai   { to { opacity: 0; visibility: hidden; } }
+@keyframes cbc-corre { to { transform: translateX(-50%); } }
+@keyframes cbc-saco-entra { from { transform: translateY(40px) scale(.6); opacity: 0; } }
+@keyframes cbc-quica {
+  0%, 24%, 31%, 39%, 46%, 54%, 61%, 69%, 76%, 84%, 91%, 100% { transform: none; }
+  27%, 42%, 57%, 72%, 87% { transform: scale(1.05, .93); }
+}
+@keyframes cbc-cai {
+  0%   { transform: translateY(-330px) rotate(var(--r, 10deg)); opacity: 0; }
+  10%  { opacity: 1; }
+  100% { transform: translateY(0) rotate(0); opacity: 1; }
+}
+@keyframes cbc-some-cima { to { transform: scaleY(0); } }
+@keyframes cbc-dobra {
+  0%   { transform: scaleY(-1); opacity: 1; }
+  100% { transform: scaleY(1);  opacity: 1; }
+}
+@keyframes cbc-pop  { to { transform: scale(1); } }
+@keyframes cbc-risca { to { stroke-dashoffset: 0; } }
+@keyframes cbc-sobe { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .cbc * { animation-duration: .01s !important; animation-delay: 0s !important; }
+  .cbc-faixa { animation: none !important; }
+  .cbc { animation: cbc-sai .3s ease-in 2.6s forwards !important; }
+}

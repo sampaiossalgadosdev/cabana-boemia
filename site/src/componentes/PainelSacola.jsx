@@ -4,6 +4,7 @@ import { subtotal } from '../carrinho/carrinho.js';
 import { useCliente } from '../cliente/ClienteContext.jsx';
 import * as api from '../lib/api.js';
 import { obterConfig } from '../lib/config.js';
+import { mostrarConfirmacao, preCarregarConfirmacao } from '../lib/confirmacao.js';
 import { formatarPreco } from '../lib/dinheiro.js';
 import { quandoAbre } from '../lib/horario.js';
 import { logoUrl } from '../lib/logo.js';
@@ -134,6 +135,8 @@ export function PainelSacola({
   const { itens, totalItens, adicionar, editar, remover, substituir } = useCarrinho();
   const [tela, setTela] = useState('sacola'); // 'sacola' | 'checkout'
   const [enviado, setEnviado] = useState(null);
+  const [confirmando, setConfirmando] = useState(false); // animação de pedido confirmado
+  const confirmandoRef = useRef(false);
   const [confirmandoLimpar, setConfirmandoLimpar] = useState(false);
   const [nomeRestaurante, setNomeRestaurante] = useState('Cabana Boemia');
   const [aviso, setAviso] = useState('');
@@ -161,8 +164,13 @@ export function PainelSacola({
 
   // Sacola esvaziou (último item removido, "Limpar"): fecha o painel.
   useEffect(() => {
-    if (aberto && !enviado && itens.length === 0) onFechar();
-  }, [aberto, enviado, itens.length, onFechar]);
+    if (aberto && !enviado && !confirmando && itens.length === 0) onFechar();
+  }, [aberto, enviado, confirmando, itens.length, onFechar]);
+
+  // Abriu o checkout: deixa a coroa da animação de confirmação no cache.
+  useEffect(() => {
+    if (aberto && tela === 'checkout') preCarregarConfirmacao();
+  }, [aberto, tela]);
 
   useEffect(() => {
     if (!aviso) return undefined;
@@ -186,10 +194,21 @@ export function PainelSacola({
     }), 1200);
   };
 
+  // Chamado só com a resposta de sucesso da API. A sacola é limpa na hora (o
+  // pedido já existe; recarregar no meio da animação não pode deixá-la cheia) e a
+  // tela "pedido enviado" entra quando a animação termina ou é pulada.
   const aoEnviar = (pedido) => {
-    setEnviado(pedido);
+    if (confirmandoRef.current) return; // segunda resposta (duplo clique, reenvio)
+    confirmandoRef.current = true;
+    setConfirmando(true);
     substituir([]);
     onPedidoEnviado?.(pedido);
+    // Dentro do <dialog> modal: no body ficaria por trás dele.
+    mostrarConfirmacao({ numero: pedido.numeroDia, dentro: ref.current }).then(() => {
+      confirmandoRef.current = false;
+      setConfirmando(false);
+      if (ref.current?.open) setEnviado(pedido);
+    });
   };
 
   const titulo = enviado ? 'PEDIDO ENVIADO' : tela === 'checkout' ? 'FINALIZAR' : 'SACOLA';
@@ -201,6 +220,9 @@ export function PainelSacola({
       className="painel-sacola"
       aria-label={titulo}
       onClose={onFechar}
+      onCancel={(e) => {
+        if (confirmandoRef.current) e.preventDefault(); // Esc não fecha durante a animação
+      }}
       onClick={(e) => {
         if (e.target === ref.current) onFechar();
       }}

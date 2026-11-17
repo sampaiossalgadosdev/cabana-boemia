@@ -15,10 +15,10 @@ html.cb-travado, html.cb-travado body { overflow: hidden; }
 #cb-splash:not(.cb-pronto), #cb-splash:not(.cb-pronto) * { animation-play-state: paused !important; }
 
 .cb-palco { width: min(84vw, 520px); animation: cb-encolhe .4s cubic-bezier(.5,0,.75,0) 1.7s forwards; }
-.cb-logo { position: relative; aspect-ratio: 763 / 272; animation: cb-pop .75s ease-out both; }
+.cb-logo { position: relative; aspect-ratio: 3055 / 1091; animation: cb-pop .75s ease-out both; }
 
 .cb-corpo, .cb-brilho {
-  position: absolute; left: 0; top: 4.78%; width: 100%; height: 95.22%;
+  position: absolute; left: 0; top: 5.68%; width: 100%; height: 94.32%;
 }
 .cb-corpo { display: block; filter: drop-shadow(0 10px 18px rgba(120, 20, 10, .25)); }
 
@@ -33,7 +33,7 @@ html.cb-travado, html.cb-travado body { overflow: hidden; }
 }
 
 .cb-coroa {
-  position: absolute; left: 40.24%; top: 0; width: 15.86%;
+  position: absolute; left: 40.39%; top: 0; width: 16.40%;
   filter: drop-shadow(0 3px 4px rgba(150, 110, 20, .35));
   transform-origin: 50% 100%;
   animation: cb-coroa .6s cubic-bezier(.34,1.56,.64,1) .5s both;

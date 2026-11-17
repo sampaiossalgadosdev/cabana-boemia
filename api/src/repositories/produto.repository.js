@@ -11,6 +11,7 @@ export const SELECT_PRODUTO = {
   ativo: true,
   disponivelHoje: true,
   vendidoNoSite: true,
+  sugerirNaSacola: true,
   controlaEstoque: true,
   estoque: true,
   estoqueMinimo: true,

@@ -198,6 +198,13 @@ describe('retaguarda: catálogo, cardápio do dia, turnos, bairros e configuraç
     assert.equal(ed.status, 200, JSON.stringify(ed.corpo));
     assert.equal(ed.corpo.produto.nome, 'X-Teste Duplo');
     assert.equal(ed.corpo.produto.precoCentavos, 3200);
+    assert.equal(prod.sugerirNaSacola, false, 'nasce sem sugestão');
+    assert.equal(ed.corpo.produto.sugerirNaSacola, false);
+    const sug = await api('PUT', `/retaguarda/produtos/${prod.id}`, novoProduto({ nome: 'X-Teste Duplo', sugerirNaSacola: true }));
+    assert.equal(sug.corpo.produto.sugerirNaSacola, true);
+    assert.equal((await api('GET', `/retaguarda/produtos/${prod.id}`)).corpo.produto.sugerirNaSacola, true);
+    assert.equal((await api('PUT', `/retaguarda/produtos/${prod.id}`, novoProduto({ nome: 'X-Teste Duplo', sugerirNaSacola: 'sim' }))).status, 400);
+    soCardapio();
     assert.equal(ed.corpo.produto.turnos.length, 2);
     assert.deepEqual(ed.corpo.produto.insumos, []);
     assert.equal(await prisma.produtoInsumo.count({ where: { produtoId: prod.id } }), 0);

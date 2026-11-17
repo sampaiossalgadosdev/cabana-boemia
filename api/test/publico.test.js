@@ -65,14 +65,39 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
     assert.equal(nomes.length, 26);
     assert.ok(!nomes.includes('Prato por kg'));
     assert.ok(!nomes.some((n) => n.startsWith('Marmita')));
-    // Não vaza dados internos de estoque.
+    // Não vaza dados internos de estoque: só o limite da sacola (até 20).
     assert.deepEqual(Object.keys(corpo.categorias[0].produtos[0]).sort(), [
       'descricao',
       'id',
+      'maxSacola',
       'nome',
       'precoCentavos',
+      'sugerirNaSacola',
       'tipoPreco',
     ]);
+  });
+
+  test('maxSacola: saldo do produto ou dos insumos, nunca acima de 20; fechado = null; sugerirNaSacola', async () => {
+    await prisma.produto.update({ where: { nome: 'Coca-Cola 2L' }, data: { estoque: 3, sugerirNaSacola: true } });
+    await prisma.produto.update({ where: { nome: 'Coca-Cola 1L' }, data: { estoque: 500 } });
+    await prisma.insumo.update({ where: { nome: 'Pão de lanche' }, data: { estoque: 4 } });
+    try {
+      const produtos = new Map((await get('/publico/cardapio')).corpo.categorias.flatMap((c) => c.produtos).map((p) => [p.nome, p]));
+      assert.equal(produtos.get('Coca-Cola 2L').maxSacola, 3);
+      assert.equal(produtos.get('Coca-Cola 2L').sugerirNaSacola, true);
+      assert.equal(produtos.get('Coca-Cola 1L').maxSacola, 20, 'estoque alto não aparece');
+      assert.equal(produtos.get('Coca-Cola 1L').sugerirNaSacola, false);
+      assert.equal(produtos.get('X-Bacon').maxSacola, 4, 'limitado pelo pão');
+      assert.equal(produtos.get('Pizza Bacon').maxSacola, 20, 'sem controle de estoque');
+
+      agora = QUINTA_18H59;
+      const fechado = (await get('/publico/cardapio')).corpo;
+      assert.equal(fechado.aberto, false);
+      assert.ok(fechado.categorias.flatMap((c) => c.produtos).every((p) => p.maxSacola === null));
+    } finally {
+      agora = SABADO_20H;
+      await prisma.produto.update({ where: { nome: 'Coca-Cola 2L' }, data: { sugerirNaSacola: false } });
+    }
   });
 
   test('lanche some do cardápio quando o pão zera', async () => {

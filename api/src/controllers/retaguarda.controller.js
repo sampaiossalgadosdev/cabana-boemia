@@ -60,6 +60,7 @@ const produtoSchema = z
     precoCentavos: centavos('Preço inválido'),
     ativo,
     vendidoNoSite: z.boolean().default(true),
+    sugerirNaSacola: z.boolean().default(false),
     controlaEstoque: z.boolean().default(false),
     estoqueMinimo: quantidadeEstoque('Estoque mínimo inválido').nullable().default(null),
     ordem: ordem.default(0),

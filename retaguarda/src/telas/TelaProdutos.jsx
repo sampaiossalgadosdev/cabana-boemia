@@ -115,6 +115,7 @@ function ListaProdutos({ dados, aoEditar }) {
                   <div className="etiquetas" style={{ marginTop: 4 }}>
                     {!p.ativo && <span className="etiqueta">Inativo</span>}
                     {!p.vendidoNoSite && <span className="etiqueta">Só no PDV</span>}
+                    {p.sugerirNaSacola && <span className="etiqueta">Sugerido na sacola</span>}
                     {!p.categoria.ativo && <span className="etiqueta etiqueta--aviso">Categoria inativa</span>}
                   </div>
                 </td>
@@ -167,6 +168,7 @@ const vazio = (dados) => ({
   precoCentavos: null,
   ativo: true,
   vendidoNoSite: true,
+  sugerirNaSacola: false,
   controlaEstoque: false,
   estoqueMinimo: '',
   ordem: 0,
@@ -182,6 +184,7 @@ const doProduto = (p) => ({
   precoCentavos: p.precoCentavos,
   ativo: p.ativo,
   vendidoNoSite: p.vendidoNoSite,
+  sugerirNaSacola: Boolean(p.sugerirNaSacola),
   controlaEstoque: p.controlaEstoque,
   estoqueMinimo: p.estoqueMinimo ?? '',
   ordem: p.ordem,
@@ -238,6 +241,7 @@ function FormProduto({ aberto, produto, dados, aoFechar, aoSalvar, irParaEstoque
       precoCentavos: f.precoCentavos,
       ativo: f.ativo,
       vendidoNoSite: f.vendidoNoSite,
+      sugerirNaSacola: f.sugerirNaSacola,
       controlaEstoque: porKg ? false : f.controlaEstoque,
       estoqueMinimo: !porKg && f.controlaEstoque && f.estoqueMinimo !== '' ? Number(f.estoqueMinimo) : null,
       ordem: Number(f.ordem),
@@ -391,6 +395,14 @@ function FormProduto({ aberto, produto, dados, aoFechar, aoSalvar, irParaEstoque
             </div>
             <div className="campo">
               <Interruptor ligado={f.vendidoNoSite} aoMudar={(v) => mudar('vendidoNoSite', v)} rotulo="Vendido no site" />
+            </div>
+            <div className="campo">
+              <Interruptor
+                ligado={f.sugerirNaSacola}
+                aoMudar={(v) => mudar('sugerirNaSacola', v)}
+                rotulo="Sugerir na sacola"
+              />
+              <span className="campo__ajuda">Aparece em "Peça também" na sacola do site. Nenhum marcado: o site sugere as bebidas.</span>
             </div>
           </div>
 

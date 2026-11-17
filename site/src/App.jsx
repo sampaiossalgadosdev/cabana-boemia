@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Cabecalho } from './componentes/Cabecalho.jsx';
 import { AvisoFechado, FaixaSemConexao } from './componentes/Faixas.jsx';
 import { AbasCategorias } from './componentes/AbasCategorias.jsx';
 import { ListaCardapio, EstadoCarregando } from './componentes/ListaCardapio.jsx';
 import { ModalProduto } from './componentes/ModalProduto.jsx';
-import { GavetaCarrinho } from './componentes/Carrinho.jsx';
+import { PainelSacola } from './componentes/PainelSacola.jsx';
 import { BarraSacola } from './componentes/BarraSacola.jsx';
 import { Navegacao } from './componentes/Navegacao.jsx';
 import { TelaPedidos } from './componentes/TelaPedidos.jsx';
@@ -35,6 +35,7 @@ export function App() {
   // Modal: { produto, item? } — item presente = editando uma linha do carrinho.
   const [modal, setModal] = useState(null);
   const [gavetaAberta, setGavetaAberta] = useState(false);
+  const fecharSacola = useCallback(() => setGavetaAberta(false), []);
   const aberturas = useRef(0);
 
   // Frete grátis: vem com o cardápio (recarregado a cada 30 s). Um 409
@@ -83,8 +84,8 @@ export function App() {
     }
   };
 
+  // Editar pela sacola: o modal do produto abre por cima do painel (que continua aberto).
   const editarDoCarrinho = (item) => {
-    setGavetaAberta(false);
     const produto = produtosPorId.get(item.produtoId) ?? {
       id: item.produtoId,
       nome: item.nome,
@@ -152,11 +153,15 @@ export function App() {
         <BarraSacola onAbrir={() => setGavetaAberta(true)} freteGratis={freteGratis} />
         <Navegacao aba={aba} onIr={irParaAba} variante="inferior" />
       </div>
-      <GavetaCarrinho
-        aberta={gavetaAberta}
-        onFechar={() => setGavetaAberta(false)}
+      <PainelSacola
+        aberto={gavetaAberta}
+        onFechar={fecharSacola}
+        onVoltarAoCardapio={() => {
+          setGavetaAberta(false);
+          irParaAba('inicio');
+        }}
         onEditar={editarDoCarrinho}
-        fechado={fechado}
+        cardapio={dados}
         onPedidoEnviado={recarregarUltimoPedido}
         onCardapioDesatualizado={recarregar}
         freteGratis={freteGratis}

@@ -45,9 +45,14 @@ const BASE_CSP = {
  * elementos que cria (sem isso o iframe do botão fica 0×0). Scripts continuam
  * restritos a 'self' + o client do Google.
  */
+// Script inline do <head> do site (site/index.html) que decide, antes do primeiro
+// paint, se a splash de abertura aparece. Liberado só por hash (nada de
+// 'unsafe-inline'); test/estaticos.test.js recalcula o hash a partir do index.html.
+export const HASH_SCRIPT_SPLASH = "'sha256-ldXn7X1EBTH8LVu/HR/BG/IWewXYvQMUzeaa1vXCfuY='";
+
 export const CSP_SITE = {
   ...BASE_CSP,
-  scriptSrc: ["'self'", `${GOOGLE_GSI}client`],
+  scriptSrc: ["'self'", HASH_SCRIPT_SPLASH, `${GOOGLE_GSI}client`],
   styleSrc: ["'self'", "'unsafe-inline'", `${GOOGLE_GSI}style`],
   connectSrc: ["'self'", GOOGLE_GSI],
   frameSrc: [GOOGLE_GSI],

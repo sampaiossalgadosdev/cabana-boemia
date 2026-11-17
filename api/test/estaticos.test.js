@@ -4,7 +4,10 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { criarApp } from '../src/app.js';
+import { HASH_SCRIPT_SPLASH } from '../src/lib/estaticos.js';
 
 /** Build falso: index.html + um asset com hash. */
 function criarDist(prefixo, marca) {
@@ -75,7 +78,7 @@ describe('site em /, retaguarda em /admin, API em /api', () => {
 
   test('CSP do site libera só o Google Identity Services; a retaguarda não carrega nada de fora', async () => {
     const csp = (await fetch(`${base}/checkout`)).headers.get('content-security-policy');
-    assert.equal(diretiva(csp, 'script-src'), "script-src 'self' https://accounts.google.com/gsi/client");
+    assert.equal(diretiva(csp, 'script-src'), `script-src 'self' ${HASH_SCRIPT_SPLASH} https://accounts.google.com/gsi/client`);
     assert.equal(diretiva(csp, 'frame-src'), 'frame-src https://accounts.google.com/gsi/');
     assert.equal(diretiva(csp, 'connect-src'), "connect-src 'self' https://accounts.google.com/gsi/");
     assert.equal(diretiva(csp, 'style-src'), "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style");
@@ -90,4 +93,12 @@ describe('site em /, retaguarda em /admin, API em /api', () => {
     // O popup do login Google continua funcionando (COOP).
     assert.equal((await fetch(`${base}/`)).headers.get('cross-origin-opener-policy'), 'same-origin-allow-popups');
   });
+});
+
+test('hash da CSP confere com o script inline da splash no site/index.html', () => {
+  const indice = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'site', 'index.html');
+  const inline = [...fs.readFileSync(indice, 'utf8').matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  assert.equal(inline.length, 1, 'o site deve ter exatamente um script inline (o da splash)');
+  const hash = `'sha256-${crypto.createHash('sha256').update(inline[0]).digest('base64')}'`;
+  assert.equal(hash, HASH_SCRIPT_SPLASH, 'mudou o script inline da splash: atualize HASH_SCRIPT_SPLASH');
 });

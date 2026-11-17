@@ -120,6 +120,16 @@ export function buscarPorChave(chaveIdempotencia, db = prisma) {
   return db.pedido.findUnique({ where: { chaveIdempotencia }, select: SELECT_PEDIDO });
 }
 
+/** Histórico do cliente, mais novo primeiro; `antesDeId` pagina (ids menores). */
+export function listarDoCliente(clienteId, { antesDeId, limite }, db = prisma) {
+  return db.pedido.findMany({
+    where: { clienteId, ...(antesDeId ? { id: { lt: antesDeId } } : {}) },
+    orderBy: { id: 'desc' },
+    take: limite,
+    select: SELECT_PEDIDO,
+  });
+}
+
 export function ultimoDoCliente(clienteId, db = prisma) {
   return db.pedido.findFirst({
     where: { clienteId },

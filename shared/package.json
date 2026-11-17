@@ -6,7 +6,8 @@
   "exports": {
     "./telefone": "./src/telefone.js",
     "./cupom": "./src/cupom.js",
-    "./itens": "./src/itens.js"
+    "./itens": "./src/itens.js",
+    "./frete": "./src/frete.js"
   },
   "scripts": {
     "dev": "echo \"[shared] dev ainda nao configurado\"",

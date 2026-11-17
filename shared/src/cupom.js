@@ -181,7 +181,9 @@ function blocoItens(m, pedido, { observacoes = true, itens = pedido.itens } = {}
 function blocoTotais(m, pedido) {
   if (pedido.taxaEntregaCentavos > 0 || pedido.enderecoTexto) {
     m.valor('Subtotal', formatarDinheiro(pedido.subtotalCentavos));
-    m.valor('Taxa de entrega', formatarDinheiro(pedido.taxaEntregaCentavos));
+    // Entrega sem taxa (frete grátis ou bairro sem taxa): "Grátis", não "R$ 0,00".
+    const gratis = pedido.enderecoTexto && pedido.taxaEntregaCentavos === 0;
+    m.valor('Taxa de entrega', gratis ? 'Grátis' : formatarDinheiro(pedido.taxaEntregaCentavos));
   }
   m.valor('TOTAL', formatarDinheiro(pedido.totalCentavos), { negrito: true });
 }

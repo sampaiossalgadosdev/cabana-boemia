@@ -17,7 +17,7 @@ const perfilSchema = z.object({
 /** Pedido do site (itens: ver itemPedidoSchema; o preço sempre sai do banco). */
 const pedidoSchema = z
   .object({
-    itens: z.array(itemPedidoSchema, { error: 'O carrinho está vazio' }).min(1, 'O carrinho está vazio').max(50),
+    itens: z.array(itemPedidoSchema, { error: 'A sacola está vazia' }).min(1, 'A sacola está vazia').max(50),
     enderecoId: z.number({ error: 'Escolha o endereço de entrega' }).int().positive(),
     formaPagamento: z.enum(pedidoService.FORMAS_PAGAMENTO, { error: 'Escolha a forma de pagamento' }),
     trocoParaCentavos: z.number().int().positive().nullish(),
@@ -26,6 +26,8 @@ const pedidoSchema = z
     totalEsperadoCentavos: z.number({ error: 'Informe o total do pedido' }).int().min(0),
   })
   .superRefine(trocoSoEmDinheiro);
+
+const historicoSchema = z.object({ antesDeId: z.coerce.number().int().positive().optional() });
 
 /**
  * @param {(idToken: string) => Promise<object>} verificarIdTokenGoogle
@@ -73,6 +75,10 @@ export function criarClienteController(verificarIdTokenGoogle, relogio = () => n
       const dados = validar(pedidoSchema, req.body);
       const { pedido, criado } = await pedidoService.criarPedidoDoSite(req.cliente, dados, { agora: relogio() });
       res.status(criado ? 201 : 200).json({ pedido });
+    },
+
+    async listarPedidos(req, res) {
+      res.json(await pedidoService.pedidosDoCliente(req.cliente.id, validar(historicoSchema, req.query)));
     },
 
     async ultimoPedido(req, res) {

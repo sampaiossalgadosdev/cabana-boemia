@@ -4,7 +4,12 @@ import { AvisoFechado, FaixaSemConexao } from './componentes/Faixas.jsx';
 import { AbasCategorias } from './componentes/AbasCategorias.jsx';
 import { ListaCardapio, EstadoCarregando } from './componentes/ListaCardapio.jsx';
 import { ModalProduto } from './componentes/ModalProduto.jsx';
-import { BarraCarrinho, GavetaCarrinho } from './componentes/Carrinho.jsx';
+import { GavetaCarrinho } from './componentes/Carrinho.jsx';
+import { BarraSacola } from './componentes/BarraSacola.jsx';
+import { Navegacao } from './componentes/Navegacao.jsx';
+import { TelaPedidos } from './componentes/TelaPedidos.jsx';
+import { TelaPerfil } from './componentes/TelaPerfil.jsx';
+import { useNavegacao } from './hooks/useNavegacao.js';
 import { useAvisos } from './componentes/Avisos.jsx';
 import { useCardapio } from './hooks/useCardapio.js';
 import { useCategoriaAtiva } from './hooks/useCategoriaAtiva.js';
@@ -21,15 +26,23 @@ export function App() {
   const carrinho = useCarrinho();
   const { avisar } = useAvisos();
   const { ultimoPedido, recarregarUltimoPedido } = useUltimoPedido();
+  const { aba, irPara: irParaAba } = useNavegacao();
 
   const categorias = dados?.categorias ?? SEM_CATEGORIAS;
   const fechado = dados ? !dados.aberto : false;
-  const { ativa, irPara } = useCategoriaAtiva(categorias);
+  const { ativa, irPara } = useCategoriaAtiva(categorias, aba === 'inicio');
 
   // Modal: { produto, item? } — item presente = editando uma linha do carrinho.
   const [modal, setModal] = useState(null);
   const [gavetaAberta, setGavetaAberta] = useState(false);
   const aberturas = useRef(0);
+
+  // Frete grátis: vem com o cardápio (recarregado a cada 30 s). Um 409
+  // PRECO_ALTERADO no checkout também traz a regra vigente (antes da recarga).
+  const [freteGratis, setFreteGratis] = useState(null);
+  useEffect(() => {
+    if (dados) setFreteGratis(dados.freteGratis ?? null);
+  }, [dados]);
 
   const produtosPorId = useMemo(
     () => new Map(categorias.flatMap((c) => c.produtos).map((p) => [p.id, p])),
@@ -58,19 +71,18 @@ export function App() {
     setModal(null);
   };
 
-  /** Só o que está no cardápio agora, com o preço de agora. */
-  const repetirUltimo = () => {
-    const r = repetirPedido(carrinho.itens, ultimoPedido, categorias);
+  /** Só o que está no cardápio agora, com o preço de agora (último pedido ou um do histórico). */
+  const repetir = (pedido) => {
+    const r = repetirPedido(carrinho.itens, pedido, categorias);
     if (r.adicionados) {
       carrinho.substituir(r.itens);
-      avisar(
-        r.adicionados === 1
-          ? '1 item do seu último pedido foi para o carrinho.'
-          : `${r.adicionados} itens do seu último pedido foram para o carrinho.`,
-      );
+      avisar(r.adicionados === 1 ? '1 item foi para a sacola.' : `${r.adicionados} itens foram para a sacola.`);
     }
     if (r.indisponiveis.length) avisar(`Indisponível agora: ${r.indisponiveis.join(', ')}.`);
-    if (r.adicionados) setGavetaAberta(true);
+    if (r.adicionados) {
+      irParaAba('inicio');
+      setGavetaAberta(true);
+    }
   };
 
   const editarDoCarrinho = (item) => {
@@ -84,44 +96,64 @@ export function App() {
   };
 
   return (
-    <div className="app">
-      <Cabecalho cardapio={dados} />
+    <div className={`app${carrinho.totalItens ? ' app--com-sacola' : ''}${freteGratis && carrinho.totalItens ? ' app--com-frete' : ''}`}>
+      <Cabecalho cardapio={dados}>
+        <Navegacao aba={aba} onIr={irParaAba} variante="topo" />
+      </Cabecalho>
 
-      <div className="conteudo">
-        {semConexao && dados && <FaixaSemConexao />}
-        {fechado && <AvisoFechado proximaAbertura={dados.proximaAbertura} />}
-        {!fechado && ultimoPedido?.itens.length > 0 && categorias.length > 0 && (
-          <div className="repetir">
-            <span>Bateu a vontade de novo?</span>
-            <button type="button" className="botao botao--secundario" onClick={repetirUltimo}>
-              Repetir último pedido
-            </button>
+      {aba === 'inicio' && (
+        <>
+          <div className="conteudo">
+            {semConexao && dados && <FaixaSemConexao />}
+            {fechado && <AvisoFechado proximaAbertura={dados.proximaAbertura} />}
+            {!fechado && ultimoPedido?.itens.length > 0 && categorias.length > 0 && (
+              <div className="repetir">
+                <span>Bateu a vontade de novo?</span>
+                <button type="button" className="botao botao--secundario" onClick={() => repetir(ultimoPedido)}>
+                  Repetir último pedido
+                </button>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {dados && categorias.length > 0 && (
-        <AbasCategorias categorias={categorias} ativa={ativa} onSelecionar={irPara} />
+          {dados && categorias.length > 0 && (
+            <AbasCategorias categorias={categorias} ativa={ativa} onSelecionar={irPara} />
+          )}
+
+          <main className="conteudo">
+            {dados ? (
+              <ListaCardapio categorias={categorias} desabilitado={fechado} onAdicionar={abrirModal} />
+            ) : semConexao ? (
+              <div className="vazio">
+                <p>Não foi possível carregar o cardápio.</p>
+                <button type="button" className="botao botao--secundario" onClick={recarregar}>
+                  Tentar de novo
+                </button>
+              </div>
+            ) : (
+              <EstadoCarregando />
+            )}
+          </main>
+        </>
       )}
 
-      <main className="conteudo">
-        {dados ? (
-          <ListaCardapio categorias={categorias} desabilitado={fechado} onAdicionar={abrirModal} />
-        ) : semConexao ? (
-          <div className="vazio">
-            <p>Não foi possível carregar o cardápio.</p>
-            <button type="button" className="botao botao--secundario" onClick={recarregar}>
-              Tentar de novo
-            </button>
-          </div>
-        ) : (
-          <EstadoCarregando />
-        )}
-      </main>
+      {aba === 'pedidos' && (
+        <main className="conteudo">
+          <TelaPedidos fechado={fechado || !dados} onRepetir={repetir} />
+        </main>
+      )}
+      {aba === 'perfil' && (
+        <main className="conteudo">
+          <TelaPerfil />
+        </main>
+      )}
 
       <RodapeLegal />
 
-      <BarraCarrinho onAbrir={() => setGavetaAberta(true)} />
+      <div className="rodape-fixo">
+        <BarraSacola onAbrir={() => setGavetaAberta(true)} freteGratis={freteGratis} />
+        <Navegacao aba={aba} onIr={irParaAba} variante="inferior" />
+      </div>
       <GavetaCarrinho
         aberta={gavetaAberta}
         onFechar={() => setGavetaAberta(false)}
@@ -129,6 +161,8 @@ export function App() {
         fechado={fechado}
         onPedidoEnviado={recarregarUltimoPedido}
         onCardapioDesatualizado={recarregar}
+        freteGratis={freteGratis}
+        onFreteGratis={setFreteGratis}
       />
       <ModalProduto
         key={modal?.chave ?? 0}

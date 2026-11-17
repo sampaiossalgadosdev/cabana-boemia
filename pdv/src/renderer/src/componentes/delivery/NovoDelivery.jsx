@@ -174,6 +174,7 @@ export function NovoDelivery({ aoConcluir, aoSair }) {
           cliente={cliente}
           endereco={endereco}
           linhas={linhas}
+          freteGratis={cardapio?.freteGratis ?? null}
           forma={forma}
           aoMudarForma={setForma}
           troco={troco}

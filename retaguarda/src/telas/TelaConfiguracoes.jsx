@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { errosPorCampo, formatarWhatsapp } from '../lib/formatar.js';
-import { Campo, EstadoCarga, useAvisar, useCarregar } from '../componentes/comuns.jsx';
+import { Campo, CampoDinheiro, EstadoCarga, Interruptor, useAvisar, useCarregar } from '../componentes/comuns.jsx';
 
-/** Nome do restaurante, WhatsApp (link de cancelamento do site) e tempo estimado padrão. */
+/** Nome do restaurante, WhatsApp (link de cancelamento do site), tempo estimado padrão, virada do dia e frete grátis. */
 export function TelaConfiguracoes() {
   const carga = useCarregar(() => api.config.obter());
   return (
@@ -31,6 +31,9 @@ function FormConfig({ config, aoSalvar }) {
       whatsappNumero: formatarWhatsapp(config.whatsappNumero),
       tempoEstimadoPadraoMin: String(config.tempoEstimadoPadraoMin),
       horaViradaDia: String(config.horaViradaDia ?? 4),
+      freteGratisAtivo: Boolean(config.freteGratisAtivo),
+      freteGratisMinimoCentavos: config.freteGratisMinimoCentavos ?? null,
+      freteGratisTexto: config.freteGratisMinimoCentavos == null ? '' : 'preenchido',
     });
   }, [config]);
   if (!f) return null;
@@ -43,6 +46,11 @@ function FormConfig({ config, aoSalvar }) {
     const erro = {};
     if (!f.nomeRestaurante.trim()) erro.nomeRestaurante = 'Informe o nome';
     if (!Number.isInteger(tempo) || tempo < 1 || tempo > 240) erro.tempoEstimadoPadraoMin = 'Entre 1 e 240 minutos';
+    // Mínimo: vazio só se desligado (fica guardado para religar); digitado precisa ser válido e > 0.
+    const minimo = f.freteGratisMinimoCentavos;
+    const digitouMinimo = f.freteGratisTexto.trim() !== '';
+    if (digitouMinimo && !(minimo > 0)) erro.freteGratisMinimoCentavos = 'Valor inválido, ex.: 69,00';
+    else if (f.freteGratisAtivo && !digitouMinimo) erro.freteGratisMinimoCentavos = 'Informe a partir de quanto o frete é grátis';
     setErros(erro);
     if (Object.keys(erro).length) return;
     setSalvando(true);
@@ -52,6 +60,8 @@ function FormConfig({ config, aoSalvar }) {
         whatsappNumero: f.whatsappNumero,
         tempoEstimadoPadraoMin: tempo,
         horaViradaDia: Number(f.horaViradaDia),
+        freteGratisAtivo: f.freteGratisAtivo,
+        freteGratisMinimoCentavos: digitouMinimo ? minimo : null,
       });
       avisar('Configurações salvas.');
       await aoSalvar();
@@ -120,6 +130,39 @@ function FormConfig({ config, aoSalvar }) {
                 </option>
               ))}
             </select>
+          )}
+        </Campo>
+        <Campo
+          rotulo="Frete grátis a partir de (R$)"
+          erro={erros.freteGratisMinimoCentavos}
+          ajuda={
+            f.freteGratisAtivo
+              ? 'Pedidos de entrega (site e WhatsApp) com itens a partir deste valor não pagam a taxa do bairro. O site mostra quanto falta.'
+              : 'Desligado: todo pedido paga a taxa do bairro e o site não mostra a barra de frete grátis.'
+          }
+        >
+          {(id, d) => (
+            <div className="linha-frete">
+              <Interruptor
+                ligado={f.freteGratisAtivo}
+                rotulo={f.freteGratisAtivo ? 'Ligado' : 'Desligado'}
+                aoMudar={(ligado) => {
+                  setF((x) => ({ ...x, freteGratisAtivo: ligado }));
+                  setErros((x) => ({ ...x, freteGratisMinimoCentavos: undefined }));
+                }}
+              />
+              <CampoDinheiro
+                id={id}
+                valor={f.freteGratisMinimoCentavos}
+                descritoPor={d}
+                placeholder="69,00"
+                invalido={Boolean(erros.freteGratisMinimoCentavos)}
+                aoMudar={(c, texto) => {
+                  setF((x) => ({ ...x, freteGratisMinimoCentavos: c, freteGratisTexto: texto }));
+                  setErros((x) => ({ ...x, freteGratisMinimoCentavos: undefined }));
+                }}
+              />
+            </div>
           )}
         </Campo>
         <button type="submit" className="botao botao--primario" disabled={salvando}>

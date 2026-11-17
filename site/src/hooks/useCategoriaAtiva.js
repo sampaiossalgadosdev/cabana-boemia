@@ -5,14 +5,16 @@ export const idSecao = (categoriaId) => `categoria-${categoriaId}`;
 /**
  * Aba ativa acompanha a rolagem (IntersectionObserver). Ao tocar numa aba,
  * rola até a seção e ignora o observer até a rolagem assentar.
+ * `visivel` = false enquanto outra aba (Pedidos/Perfil) desmonta as seções:
+ * ao voltar ao Início o observer é refeito com as seções novas.
  */
-export function useCategoriaAtiva(categorias) {
+export function useCategoriaAtiva(categorias, visivel = true) {
   const [ativa, setAtiva] = useState(categorias[0]?.id ?? null);
   const travadoAte = useRef(0);
   const chave = categorias.map((c) => c.id).join(',');
 
   useEffect(() => {
-    if (!categorias.length) return undefined;
+    if (!categorias.length || !visivel) return undefined;
     setAtiva((a) => (categorias.some((c) => c.id === a) ? a : categorias[0].id));
 
     const observer = new IntersectionObserver(
@@ -31,7 +33,7 @@ export function useCategoriaAtiva(categorias) {
       if (el) observer.observe(el);
     }
     return () => observer.disconnect();
-  }, [chave]); // `chave` resume `categorias`: só refaz quando as seções mudam
+  }, [chave, visivel]); // `chave` resume `categorias`: só refaz quando as seções mudam
 
   const irPara = useCallback((categoriaId) => {
     setAtiva(categoriaId);

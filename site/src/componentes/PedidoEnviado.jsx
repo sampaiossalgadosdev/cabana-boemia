@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { obterConfig } from '../lib/config.js';
 import { formatarPreco } from '../lib/dinheiro.js';
-import { linkCancelamento, rotuloPagamento } from '../pedido/pedido.js';
+import { linkCancelamento, rotuloPagamento, textoTaxa } from '../pedido/pedido.js';
 
 /** Tela de sucesso: número do pedido, tempo estimado e cancelamento pelo WhatsApp. */
 export function PedidoEnviado({ pedido, onFechar }) {
@@ -44,8 +44,8 @@ export function PedidoEnviado({ pedido, onFechar }) {
           </li>
         ))}
         <li>
-          <span>Entrega ({pedido.bairroNome})</span>
-          <span>{formatarPreco(pedido.taxaEntregaCentavos)}</span>
+          <span>Taxa de entrega ({pedido.bairroNome})</span>
+          <span>{textoTaxa(pedido.taxaEntregaCentavos)}</span>
         </li>
         <li className="sucesso__total">
           <span>Total</span>

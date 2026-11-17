@@ -6,24 +6,7 @@ import { formatarPreco } from '../lib/dinheiro.js';
 import { subtotal } from '../carrinho/carrinho.js';
 import { useCarrinho } from '../carrinho/CarrinhoContext.jsx';
 
-const rotuloItens = (n) => (n === 1 ? '1 item' : `${n} itens`);
-
-/** Barra fixa no rodapé; some com o carrinho vazio. */
-export function BarraCarrinho({ onAbrir }) {
-  const { totalItens, totalCentavos } = useCarrinho();
-  if (!totalItens) return null;
-  return (
-    <div className="barra-carrinho">
-      <button type="button" className="barra-carrinho__botao" onClick={onAbrir}>
-        <span className="barra-carrinho__contador" aria-hidden="true">
-          {totalItens}
-        </span>
-        <span className="barra-carrinho__texto">Ver carrinho · {rotuloItens(totalItens)}</span>
-        <span className="barra-carrinho__total">{formatarPreco(totalCentavos)}</span>
-      </button>
-    </div>
-  );
-}
+export const rotuloItens = (n) => (n === 1 ? '1 item' : `${n} itens`);
 
 function ItemCarrinho({ item, onEditar, onRemover }) {
   return (
@@ -53,15 +36,24 @@ function ItemCarrinho({ item, onEditar, onRemover }) {
 }
 
 /**
- * Gaveta do carrinho. "Continuar" passa para o checkout na mesma gaveta
+ * Gaveta da sacola. "Continuar" passa para o checkout na mesma gaveta
  * (login, telefone, dados, pagamento); ao enviar, mostra o pedido recebido.
  */
-export function GavetaCarrinho({ aberta, onFechar, onEditar, fechado = false, onPedidoEnviado, onCardapioDesatualizado }) {
+export function GavetaCarrinho({
+  aberta,
+  onFechar,
+  onEditar,
+  fechado = false,
+  onPedidoEnviado,
+  onCardapioDesatualizado,
+  freteGratis = null,
+  onFreteGratis,
+}) {
   const { itens, totalItens, totalCentavos, remover, substituir } = useCarrinho();
   const [etapa, setEtapa] = useState('itens');
   const [enviado, setEnviado] = useState(null);
 
-  // Fechou a gaveta ou o carrinho esvaziou (ex.: item saiu do cardápio): volta aos itens.
+  // Fechou a gaveta ou a sacola esvaziou (ex.: item saiu do cardápio): volta aos itens.
   useEffect(() => {
     if (!aberta || itens.length === 0) setEtapa('itens');
     if (!aberta) setEnviado(null);
@@ -86,13 +78,13 @@ export function GavetaCarrinho({ aberta, onFechar, onEditar, fechado = false, on
   return (
     <Dialogo
       aberto={aberta}
-      titulo={noCheckout ? 'Finalizar pedido' : 'Seu carrinho'}
+      titulo={noCheckout ? 'Finalizar pedido' : 'Sua sacola'}
       onFechar={onFechar}
       rodape={
         itens.length > 0 &&
         (noCheckout ? (
           <button type="button" className="botao botao--secundario botao--bloco" onClick={() => setEtapa('itens')}>
-            Voltar ao carrinho
+            Voltar à sacola
           </button>
         ) : (
           <>
@@ -114,9 +106,14 @@ export function GavetaCarrinho({ aberta, onFechar, onEditar, fechado = false, on
       }
     >
       {itens.length === 0 ? (
-        <p className="vazio">Seu carrinho está vazio.</p>
+        <p className="vazio">Sua sacola está vazia.</p>
       ) : noCheckout ? (
-        <Checkout onPedidoEnviado={aoEnviar} onCardapioDesatualizado={onCardapioDesatualizado} />
+        <Checkout
+          onPedidoEnviado={aoEnviar}
+          onCardapioDesatualizado={onCardapioDesatualizado}
+          freteGratis={freteGratis}
+          onFreteGratis={onFreteGratis}
+        />
       ) : (
         <ul className="itens-carrinho">
           {itens.map((item) => (

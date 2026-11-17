@@ -20,6 +20,7 @@
   --cor-desabilitado: #d9d2c9;
   --cor-texto-desabilitado: #6e655d;
   --cor-aviso-fundo: #fbe5da; /* laranja clarinho sobre creme */
+  --cor-sucesso: #2e7d4f; /* frete grátis atingido */
 
   /* Tipografia: cursiva SÓ no nome do restaurante */
   --fonte-marca: 'Dancing Script', cursive;

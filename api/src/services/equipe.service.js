@@ -1,4 +1,5 @@
 /** Operações da equipe logada (PDV): fila do dia, finalizar pedido, tempo estimado. */
+import { freteGratisDaConfig } from '@restaurante/shared/frete';
 import { ErroHttp } from '../lib/erros.js';
 import { diaOperacional } from '../lib/fuso.js';
 import { horaVirada } from './diaOperacional.service.js';
@@ -184,10 +185,11 @@ export function saldoDisponivel(produto) {
  * fechada) do da próxima abertura. Esgotado vem marcado (a grade desabilita);
  * fora de "disponível hoje" vem marcado mas pode ser lançado (só o site bloqueia).
  * `porKg`: produtos por quilo do turno (preço do quilo), para o salão.
+ * `freteGratis`: regra vigente (`{ minimoCentavos }` ou null), para a prévia do delivery.
  * @param {{ turnoId?: number }} filtro
  */
 export async function cardapioDaEquipe({ turnoId } = {}, agora = new Date()) {
-  const turnos = await turnoRepo.listarAtivosComHorarios();
+  const [turnos, config] = await Promise.all([turnoRepo.listarAtivosComHorarios(), configRepo.buscar()]);
   const ativo = calcularTurnoAtivo(turnos, agora);
   let turno = null;
   if (turnoId) {
@@ -203,6 +205,8 @@ export async function cardapioDaEquipe({ turnoId } = {}, agora = new Date()) {
     turno,
     turnoAtivo: ativo,
     turnos: turnos.map((t) => ({ id: t.id, nome: t.nome })),
+    // Prévia do delivery (a taxa oficial é a da API): null = frete grátis desligado.
+    freteGratis: freteGratisDaConfig(config),
   };
   if (!turno) return { ...base, categorias: [], porKg: [] };
 

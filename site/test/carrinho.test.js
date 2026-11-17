@@ -97,7 +97,7 @@ describe('conciliar com o cardápio atualizado', () => {
     assert.deepEqual(r.itens.map((i) => i.nome), ['Coca-Cola 1L']);
     assert.deepEqual(r.removidos, ['X-Bacon'], 'nome aparece uma vez só');
     assert.deepEqual(mensagensDaConciliacao(r), [
-      'X-Bacon saiu do cardápio e foi removido do seu carrinho.',
+      'X-Bacon saiu do cardápio e foi removido da sua sacola.',
     ]);
   });
 
@@ -105,7 +105,7 @@ describe('conciliar com o cardápio atualizado', () => {
     const itens = adicionar(adicionar([], XBACON, 1), COCA, 1);
     const r = conciliar(itens, cardapio());
     assert.deepEqual(mensagensDaConciliacao(r), [
-      'X-Bacon e Coca-Cola 1L saíram do cardápio e foram removidos do seu carrinho.',
+      'X-Bacon e Coca-Cola 1L saíram do cardápio e foram removidos da sua sacola.',
     ]);
   });
 

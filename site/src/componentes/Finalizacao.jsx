@@ -6,6 +6,7 @@ import { mensagensDaConciliacao } from '../carrinho/carrinho.js';
 import { sessaoExpirou } from '../cliente/sessao.js';
 import * as api from '../lib/api.js';
 import { formatarPreco } from '../lib/dinheiro.js';
+import { FormEndereco, textoEndereco } from './FormEndereco.jsx';
 import {
   FORMAS_PAGAMENTO,
   resumoDoPedido,
@@ -14,97 +15,13 @@ import {
   erroDoTroco,
   novaChavePedido,
   aplicarPrecosNovos,
+  textoTaxa,
 } from '../pedido/pedido.js';
 
 const ERRO_GENERICO = 'Não foi possível enviar agora. Confira sua conexão e tente de novo.';
 
 /** Erros da API que significam "o cardápio mudou": recarregar e conciliar o carrinho. */
 const CARDAPIO_MUDOU = new Set(['ESTOQUE_INSUFICIENTE', 'PRODUTO_INDISPONIVEL', 'LOJA_FECHADA']);
-
-const textoEndereco = (e) =>
-  `${e.rua}, ${e.numero}${e.complemento ? ` - ${e.complemento}` : ''}`;
-
-function NovoEndereco({ bairros, onSalvo, onCancelar }) {
-  const { token } = useCliente();
-  const [dados, setDados] = useState({ rua: '', numero: '', complemento: '', referencia: '', bairroId: '' });
-  const [erros, setErros] = useState({});
-  const [salvando, setSalvando] = useState(false);
-  const mudar = (campo) => (e) => setDados((d) => ({ ...d, [campo]: e.target.value }));
-
-  const salvar = async (e) => {
-    e.preventDefault();
-    const novos = {};
-    if (!dados.rua.trim()) novos.rua = 'Informe a rua';
-    if (!dados.numero.trim()) novos.numero = 'Informe o número';
-    if (!dados.bairroId) novos.bairroId = 'Escolha o bairro';
-    setErros(novos);
-    if (Object.keys(novos).length) return;
-
-    setSalvando(true);
-    try {
-      const { endereco } = await api.criarEndereco(token, { ...dados, bairroId: Number(dados.bairroId) });
-      onSalvo(endereco);
-    } catch (err) {
-      const porCampo = Object.fromEntries((err.detalhes ?? []).map((d) => [d.campo, d.mensagem]));
-      setErros(Object.keys(porCampo).length ? porCampo : { geral: err.status ? err.message : ERRO_GENERICO });
-    } finally {
-      setSalvando(false);
-    }
-  };
-
-  const campo = (id, rotulo, props = {}) => (
-    <div className="campo">
-      <label className="campo__rotulo" htmlFor={`end-${id}`}>
-        {rotulo}
-      </label>
-      <input
-        id={`end-${id}`}
-        value={dados[id]}
-        onChange={mudar(id)}
-        aria-invalid={Boolean(erros[id])}
-        {...props}
-      />
-      {erros[id] && <p className="erro">{erros[id]}</p>}
-    </div>
-  );
-
-  return (
-    <form className="checkout-passo" onSubmit={salvar} noValidate aria-label="Novo endereço">
-      <h3 className="checkout-passo__titulo">Endereço de entrega</h3>
-      {campo('rua', 'Rua', { autoComplete: 'address-line1', maxLength: 120 })}
-      {campo('numero', 'Número', { inputMode: 'numeric', maxLength: 20 })}
-      <div className="campo">
-        <label className="campo__rotulo" htmlFor="end-bairroId">
-          Bairro
-        </label>
-        <select id="end-bairroId" value={dados.bairroId} onChange={mudar('bairroId')} aria-invalid={Boolean(erros.bairroId)}>
-          <option value="">Escolha…</option>
-          {bairros.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.nome} · entrega {formatarPreco(b.taxaCentavos)}
-            </option>
-          ))}
-        </select>
-        {erros.bairroId && <p className="erro">{erros.bairroId}</p>}
-      </div>
-      {campo('complemento', 'Complemento (opcional)', { maxLength: 120 })}
-      {campo('referencia', 'Ponto de referência (opcional)', { maxLength: 200 })}
-      {erros.geral && (
-        <p className="erro" role="alert">
-          {erros.geral}
-        </p>
-      )}
-      <button type="submit" className="botao botao--primario botao--bloco checkout-passo__acao" disabled={salvando}>
-        {salvando ? 'Salvando…' : 'Salvar endereço'}
-      </button>
-      {onCancelar && (
-        <button type="button" className="botao botao--texto botao--bloco" onClick={onCancelar}>
-          Cancelar
-        </button>
-      )}
-    </form>
-  );
-}
 
 function EscolherEndereco({ enderecos, selecionado, onEscolher, onNovo }) {
   return (
@@ -139,7 +56,7 @@ function EscolherEndereco({ enderecos, selecionado, onEscolher, onNovo }) {
  * Depois do login e do telefone: confirmar dados (um toque), pagamento,
  * resumo com taxa e envio. O total aqui é prévia; vale o que a API devolver.
  */
-export function Finalizacao({ onEditarTelefone, onPedidoEnviado, onCardapioDesatualizado }) {
+export function Finalizacao({ onEditarTelefone, onPedidoEnviado, onCardapioDesatualizado, freteGratis = null, onFreteGratis }) {
   const { token, cliente, sair } = useCliente();
   const { itens, substituir } = useCarrinho();
 
@@ -177,7 +94,10 @@ export function Finalizacao({ onEditarTelefone, onPedidoEnviado, onCardapioDesat
   }, [token, sair]);
 
   const endereco = enderecos?.find((e) => e.id === enderecoId) ?? null;
-  const resumo = useMemo(() => resumoDoPedido(itens, endereco?.bairro.taxaCentavos ?? 0), [itens, endereco]);
+  const resumo = useMemo(
+    () => resumoDoPedido(itens, endereco?.bairro.taxaCentavos ?? 0, freteGratis),
+    [itens, endereco, freteGratis],
+  );
   const trocoCentavos = forma === 'DINHEIRO' && precisaTroco ? lerReais(trocoTexto) : null;
   const erroTroco =
     forma === 'DINHEIRO' && precisaTroco
@@ -198,7 +118,7 @@ export function Finalizacao({ onEditarTelefone, onPedidoEnviado, onCardapioDesat
 
   if (modoEndereco === 'novo' || (!endereco && modoEndereco !== 'escolher')) {
     return (
-      <NovoEndereco
+      <FormEndereco
         bairros={bairros}
         onCancelar={enderecos.some((e) => e.bairro.ativo) ? () => setModoEndereco(null) : null}
         onSalvo={(novo) => {
@@ -298,12 +218,17 @@ export function Finalizacao({ onEditarTelefone, onPedidoEnviado, onCardapioDesat
         const r = aplicarPrecosNovos(itens, err.detalhes?.itens);
         if (r.alterados.length) substituir(r.itens);
         const linhas = mensagensDaConciliacao({ removidos: [], precosAlterados: r.alterados });
-        const taxa = err.detalhes?.taxaEntregaCentavos;
-        if (Number.isInteger(taxa) && taxa !== endereco.bairro.taxaCentavos) {
+        // Taxa do bairro e regra de frete grátis vigentes: a prévia passa a bater com a API.
+        const d = err.detalhes ?? {};
+        if (Number.isInteger(d.taxaBairroCentavos) && d.taxaBairroCentavos !== endereco.bairro.taxaCentavos) {
           setEnderecos((lista) =>
-            lista.map((e) => (e.id === enderecoId ? { ...e, bairro: { ...e.bairro, taxaCentavos: taxa } } : e)),
+            lista.map((e) => (e.id === enderecoId ? { ...e, bairro: { ...e.bairro, taxaCentavos: d.taxaBairroCentavos } } : e)),
           );
-          linhas.push(`A taxa de entrega mudou para ${formatarPreco(taxa)}.`);
+        }
+        if ('freteGratis' in d) onFreteGratis?.(d.freteGratis);
+        const taxa = d.taxaEntregaCentavos;
+        if (Number.isInteger(taxa) && taxa !== resumo.taxaEntregaCentavos) {
+          linhas.push(taxa === 0 ? 'Seu pedido ganhou frete grátis.' : `A taxa de entrega mudou para ${formatarPreco(taxa)}.`);
         }
         onCardapioDesatualizado();
         return setErro(
@@ -368,8 +293,10 @@ export function Finalizacao({ onEditarTelefone, onPedidoEnviado, onCardapioDesat
           <dd>{formatarPreco(resumo.subtotalCentavos)}</dd>
         </div>
         <div>
-          <dt>Entrega ({endereco.bairro.nome})</dt>
-          <dd>{formatarPreco(resumo.taxaEntregaCentavos)}</dd>
+          <dt>Taxa de entrega ({endereco.bairro.nome})</dt>
+          <dd className={resumo.taxaEntregaCentavos === 0 ? 'resumo__gratis' : undefined}>
+            {textoTaxa(resumo.taxaEntregaCentavos)}
+          </dd>
         </div>
         <div className="resumo__total">
           <dt>Total</dt>

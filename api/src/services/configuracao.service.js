@@ -1,18 +1,27 @@
 /**
- * Configurações gerais (retaguarda): nome do restaurante, WhatsApp e tempo
- * estimado padrão. O tempo manual do dia continua no PDV (/equipe/config).
+ * Configurações gerais (retaguarda): nome do restaurante, WhatsApp, tempo
+ * estimado padrão, virada do dia e frete grátis. O tempo manual do dia continua no PDV (/equipe/config).
  */
 import { dddValido } from '@restaurante/shared/telefone';
 import { avisarCardapioAtualizado } from '../lib/eventos.js';
 import * as configRepo from '../repositories/configuracao.repository.js';
 
-const PADRAO = { nomeRestaurante: 'Cabana Boemia', whatsappNumero: '', tempoEstimadoPadraoMin: 40, horaViradaDia: 4 };
+const PADRAO = {
+  nomeRestaurante: 'Cabana Boemia',
+  whatsappNumero: '',
+  tempoEstimadoPadraoMin: 40,
+  horaViradaDia: 4,
+  freteGratisAtivo: false,
+  freteGratisMinimoCentavos: null,
+};
 
 const publica = (c) => ({
   nomeRestaurante: c.nomeRestaurante,
   whatsappNumero: c.whatsappNumero,
   tempoEstimadoPadraoMin: c.tempoEstimadoPadraoMin,
   horaViradaDia: c.horaViradaDia,
+  freteGratisAtivo: c.freteGratisAtivo ?? false,
+  freteGratisMinimoCentavos: c.freteGratisMinimoCentavos ?? null,
 });
 
 /**
@@ -33,7 +42,10 @@ export async function obter() {
   return publica((await configRepo.buscar()) ?? PADRAO);
 }
 
-/** @param {{ nomeRestaurante: string, whatsappNumero: string, tempoEstimadoPadraoMin: number, horaViradaDia: number }} dados (já validados) */
+/**
+ * @param {{ nomeRestaurante: string, whatsappNumero: string, tempoEstimadoPadraoMin: number, horaViradaDia: number,
+ *   freteGratisAtivo: boolean, freteGratisMinimoCentavos: number | null }} dados (já validados; ligado exige mínimo)
+ */
 export async function atualizar(dados) {
   const config = await configRepo.atualizarGerais(dados);
   avisarCardapioAtualizado('config');

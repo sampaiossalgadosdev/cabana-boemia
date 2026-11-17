@@ -49,9 +49,34 @@ button:disabled {
   white-space: nowrap;
 }
 
+/*
+ * Espaço reservado no rodapé para o que fica fixo (navegação + sacola), para
+ * o conteúdo nunca ficar escondido atrás. As alturas mudam com a sacola e a
+ * linha de frete grátis; os avisos flutuantes usam as mesmas variáveis.
+ */
+:root {
+  --altura-nav: 62px;
+  --altura-sacola: 0px;
+  --altura-rodape-fixo: calc(var(--altura-nav) + var(--altura-sacola) + env(safe-area-inset-bottom));
+}
+
+:root:has(.app--com-sacola) {
+  --altura-sacola: 80px;
+}
+
+:root:has(.app--com-frete) {
+  --altura-sacola: 116px;
+}
+
+@media (min-width: 900px) {
+  :root {
+    --altura-nav: 0px; /* telas largas: navegação no cabeçalho */
+  }
+}
+
 .app {
   min-height: 100dvh;
-  padding-bottom: 96px; /* espaço para a barra do carrinho */
+  padding-bottom: calc(var(--altura-rodape-fixo) + 16px);
 }
 
 .conteudo {
@@ -349,52 +374,360 @@ button:disabled {
   }
 }
 
-/* ───────── Barra do carrinho ───────── */
+/* ───────── Rodapé fixo: sacola + navegação ───────── */
 
-.barra-carrinho {
+.rodape-fixo {
   position: fixed;
   inset: auto 0 0;
   z-index: 20;
-  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, var(--cor-fundo) 70%, transparent);
 }
 
-.barra-carrinho__botao {
+.barra-sacola {
+  padding: 0 12px 8px;
+  background: linear-gradient(to top, var(--cor-fundo) 55%, transparent);
+}
+
+@media (min-width: 900px) {
+  .barra-sacola {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+}
+
+.barra-sacola__cartao {
+  max-width: calc(var(--largura-max) - 32px);
+  margin: 0 auto;
+  padding: 10px 12px;
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: 0 6px 20px rgb(17 17 17 / 18%);
+  border: 1px solid var(--cor-borda);
+}
+
+.barra-sacola__linha {
   display: flex;
   align-items: center;
-  gap: 12px;
-  width: 100%;
-  max-width: calc(var(--largura-max) - 32px);
-  min-height: 56px;
-  margin: 0 auto;
-  padding: 0 18px;
-  border: 0;
-  border-radius: var(--raio);
-  background: var(--cor-preto);
-  color: var(--cor-creme);
-  box-shadow: 0 6px 20px rgb(17 17 17 / 25%);
-  text-align: left;
+  gap: 8px;
 }
 
-.barra-carrinho__contador {
-  display: grid;
-  place-items: center;
-  min-width: 28px;
+.barra-sacola__logo {
+  flex: none;
   height: 28px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--cor-dourado);
-  color: var(--cor-preto);
+  width: auto;
+  border-radius: 6px;
+  border: 1.5px solid var(--cor-dourado);
+}
+
+.barra-sacola__resumo {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap; /* telas muito estreitas: "N itens" desce, sem estourar */
+  align-items: baseline;
+  column-gap: 5px;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  color: var(--cor-texto-suave);
+}
+
+.barra-sacola__resumo strong {
+  font-size: 1.05rem;
   font-weight: 800;
+  color: var(--cor-texto);
+}
+
+.barra-sacola__botao {
+  flex: none;
+  min-height: 44px;
+  padding: 0 16px;
+}
+
+/* Frete grátis: texto + barra de progresso (subtotal / mínimo). */
+.frete-gratis {
+  margin-bottom: 10px;
+}
+
+.frete-gratis__texto {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  color: var(--cor-texto-suave);
+}
+
+.frete-gratis__texto strong {
+  color: var(--cor-texto);
+}
+
+.frete-gratis--atingido .frete-gratis__texto {
+  color: var(--cor-sucesso);
+  font-weight: 700;
+}
+
+.frete-gratis__trilho {
+  height: 6px;
+  border-radius: 999px;
+  background: #efe5d8;
+  overflow: hidden;
+}
+
+.frete-gratis__barra {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cor-dourado), var(--cor-laranja));
+  transform-origin: left center;
+  transition: transform 0.45s ease;
+}
+
+.frete-gratis--atingido .frete-gratis__barra {
+  background: var(--cor-sucesso);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frete-gratis__barra {
+    transition: none;
+  }
+}
+
+/* Navegação: barra inferior no celular, abas no cabeçalho em telas largas. */
+.navegacao__lista {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.navegacao__lista li {
+  flex: 1;
+}
+
+.navegacao__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: var(--altura-nav);
+  color: var(--cor-texto-suave);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.navegacao__item--ativa {
+  color: var(--cor-acao);
+  font-weight: 800;
+}
+
+.navegacao--inferior {
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--cor-superficie);
+  border-top: 1px solid var(--cor-borda);
+  box-shadow: 0 -2px 12px rgb(17 17 17 / 6%);
+}
+
+.navegacao--inferior .navegacao__lista {
+  max-width: var(--largura-max);
+  margin: 0 auto;
+}
+
+.navegacao--topo {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .navegacao--inferior {
+    display: none;
+  }
+
+  .navegacao--topo {
+    display: block;
+    margin-top: 16px;
+  }
+
+  .navegacao--topo .navegacao__lista {
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .navegacao--topo .navegacao__lista li {
+    flex: none;
+  }
+
+  .navegacao--topo .navegacao__item {
+    flex-direction: row;
+    gap: 8px;
+    height: 40px;
+    padding: 0 16px;
+    border-radius: 999px;
+    color: var(--cor-creme);
+    font-size: 0.95rem;
+  }
+
+  .navegacao--topo .navegacao__icone {
+    width: 20px;
+    height: 20px;
+  }
+
+  .navegacao--topo .navegacao__item--ativa {
+    background: var(--cor-creme);
+    color: var(--cor-vermelho-escuro);
+  }
+}
+
+/* ───────── Pedidos e Perfil ───────── */
+
+.pagina-cliente {
+  padding-top: 20px;
+}
+
+.pagina-cliente__titulo {
+  margin: 0 0 14px;
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.lista-pedidos,
+.perfil-enderecos {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.cartao-pedido {
+  padding: 14px 16px;
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+}
+
+.cartao-pedido__topo {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+}
+
+.cartao-pedido__numero {
+  font-weight: 800;
+}
+
+.cartao-pedido__data {
+  font-size: 0.85rem;
+  color: var(--cor-texto-suave);
+}
+
+.cartao-pedido__itens {
+  margin: 6px 0 12px;
+  font-size: 0.95rem;
+}
+
+.cartao-pedido__rodape {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cartao-pedido__total {
+  display: block;
+  font-size: 1.05rem;
+  color: var(--cor-preco);
+}
+
+.cartao-pedido__pagamento {
+  font-size: 0.85rem;
+  color: var(--cor-texto-suave);
+}
+
+.cartao-pedido__selo,
+.perfil-endereco__selo {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.cartao-pedido__selo {
+  background: var(--cor-aviso-fundo);
+  color: var(--cor-laranja);
+}
+
+.cartao-pedido--cancelado .cartao-pedido__itens,
+.cartao-pedido--cancelado .cartao-pedido__total {
+  color: var(--cor-texto-suave);
+}
+
+.perfil-cartao {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+}
+
+.perfil-cartao__titulo {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.perfil-dados {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 6px;
+}
+
+.perfil-dados dt {
+  font-size: 0.8rem;
+  color: var(--cor-texto-suave);
+}
+
+.perfil-dados dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.perfil-endereco {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--cor-borda);
+}
+
+.perfil-endereco small {
+  display: block;
+  color: var(--cor-texto-suave);
+}
+
+.perfil-endereco__selo {
+  background: #f3ead0;
+  color: #6e5414;
+}
+
+.perfil-endereco__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0 0 -8px;
   font-size: 0.9rem;
 }
 
-.barra-carrinho__texto {
-  flex: 1;
+.perfil-endereco__acoes > span {
+  padding-left: 8px;
   font-weight: 600;
 }
 
-.barra-carrinho__total {
+.botao--perigo {
+  color: var(--cor-vermelho);
+}
+
+.resumo__gratis {
+  color: var(--cor-sucesso);
   font-weight: 800;
 }
 
@@ -618,7 +951,7 @@ button:disabled {
 
 .avisos {
   position: fixed;
-  inset: auto 0 84px;
+  inset: auto 0 calc(var(--altura-rodape-fixo) + 10px);
   z-index: 30;
   display: grid;
   gap: 8px;

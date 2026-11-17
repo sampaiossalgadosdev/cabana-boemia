@@ -194,13 +194,14 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
     );
   });
 
-  test('GET /publico/config: nome, whatsapp e client ID do Google', async () => {
+  test('GET /publico/config: nome, whatsapp, client ID do Google e frete grátis (desligado)', async () => {
     await prisma.configuracao.update({ where: { id: 1 }, data: { whatsappNumero: '5543999990000' } });
     const { corpo } = await get('/publico/config');
     assert.deepEqual(corpo, {
       nome: 'Cabana Boemia',
       whatsapp: '5543999990000',
       googleClientId: process.env.GOOGLE_CLIENT_ID,
+      freteGratis: null,
     });
   });
 });

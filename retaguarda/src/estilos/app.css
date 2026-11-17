@@ -1185,3 +1185,11 @@ textarea.entrada {
     font-size: 20px;
   }
 }
+
+/* Configurações › frete grátis: interruptor + valor na mesma linha. */
+.linha-frete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}

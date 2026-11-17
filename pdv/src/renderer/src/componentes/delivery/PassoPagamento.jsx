@@ -1,5 +1,5 @@
 import { FORMAS_PAGAMENTO, NOME_PAGAMENTO, formatarPreco, formatarTelefone } from '../../lib/formatar.js';
-import { avaliarTroco, textoEndereco, totais } from '../../lib/lancamento.js';
+import { avaliarTroco, textoEndereco, textoTaxaEntrega, totais } from '../../lib/lancamento.js';
 
 /** Passo 3: forma, troco, taxa do bairro, total e Confirmar. */
 export function PassoPagamento({ cliente, endereco, linhas, freteGratis = null, forma, aoMudarForma, troco, aoMudarTroco, enviando, erro, aoConfirmar }) {
@@ -38,7 +38,7 @@ export function PassoPagamento({ cliente, endereco, linhas, freteGratis = null, 
           <dt>Subtotal</dt>
           <dd>{formatarPreco(t.subtotalCentavos)}</dd>
           <dt>Entrega ({endereco.bairro.nome})</dt>
-          <dd>{endereco.bairro.taxaCentavos > 0 && t.taxaEntregaCentavos === 0 ? 'Grátis' : formatarPreco(t.taxaEntregaCentavos)}</dd>
+          <dd>{textoTaxaEntrega(t.taxaEntregaCentavos, formatarPreco)}</dd>
           <dt className="pedido__total">Total</dt>
           <dd className="pedido__total resumo__total">{formatarPreco(t.totalCentavos)}</dd>
         </dl>

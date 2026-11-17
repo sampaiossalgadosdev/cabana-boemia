@@ -15,7 +15,7 @@ import { useCardapio } from './hooks/useCardapio.js';
 import { useCategoriaAtiva } from './hooks/useCategoriaAtiva.js';
 import { useCarrinho } from './carrinho/CarrinhoContext.jsx';
 import { conciliar, mensagensDaConciliacao } from './carrinho/carrinho.js';
-import { repetirPedido } from './pedido/pedido.js';
+import { avisosDaRepeticao, repetirPedido } from './pedido/pedido.js';
 import { useUltimoPedido } from './hooks/useUltimoPedido.js';
 import { RodapeLegal } from './componentes/PaginaLegal.jsx';
 
@@ -74,12 +74,10 @@ export function App() {
   /** Só o que está no cardápio agora, com o preço de agora (último pedido ou um do histórico). */
   const repetir = (pedido) => {
     const r = repetirPedido(carrinho.itens, pedido, categorias);
-    if (r.adicionados) {
-      carrinho.substituir(r.itens);
-      avisar(r.adicionados === 1 ? '1 item foi para a sacola.' : `${r.adicionados} itens foram para a sacola.`);
-    }
-    if (r.indisponiveis.length) avisar(`Indisponível agora: ${r.indisponiveis.join(', ')}.`);
-    if (r.adicionados) {
+    const { mensagens, abrirSacola } = avisosDaRepeticao(r);
+    if (r.adicionados) carrinho.substituir(r.itens);
+    mensagens.forEach(avisar);
+    if (abrirSacola) {
       irParaAba('inicio');
       setGavetaAberta(true);
     }

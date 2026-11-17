@@ -11,3 +11,6 @@ api/public/
 
 # Ícone gerado da logo pelo npm run dist -w pdv.
 pdv/recursos/icon.png
+
+# Prints de testes manuais (Chrome headless / PDV), só locais.
+prints-teste/

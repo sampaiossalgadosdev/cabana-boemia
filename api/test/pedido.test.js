@@ -420,6 +420,25 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
       });
     after(() => prisma.configuracao.update({ where: { id: 1 }, data: { freteGratisAtivo: false, freteGratisMinimoCentavos: null } }));
 
+    test('padrão (antes do dono configurar): desligado no banco e pedido alto paga a taxa do bairro', async () => {
+      // A coluna nasce NOT NULL DEFAULT false: linhas que já existiam ganham false no ALTER TABLE.
+      const [col] = await prisma.$queryRaw`
+        SELECT column_default, is_nullable FROM information_schema.columns
+        WHERE table_name = 'Configuracao' AND column_name = 'freteGratisAtivo'`;
+      assert.equal(col.column_default, 'false');
+      assert.equal(col.is_nullable, 'NO');
+      const config = await prisma.configuracao.findUnique({ where: { id: 1 } });
+      assert.equal(config.freteGratisAtivo, false);
+      assert.equal(config.freteGratisMinimoCentavos, null);
+      assert.equal((await api('GET', '/publico/config')).corpo.freteGratis, null);
+
+      const c = await novoCliente();
+      const r = await pedir(c, [item('X-Bacon', 10)]); // R$ 160,00 de itens
+      assert.equal(r.status, 201, JSON.stringify(r.corpo));
+      assert.equal(r.corpo.pedido.taxaEntregaCentavos, 500);
+      assert.equal(r.corpo.pedido.totalCentavos, 16000 + 500);
+    });
+
     test('subtotal >= mínimo: taxa 0 no pedido; abaixo do mínimo: taxa do bairro', async () => {
       await ligar(4100); // R$ 41,00
       const c = await novoCliente();
@@ -471,6 +490,53 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
       const r = await pedir(c, [item('X-Bacon', 3)], { totalEsperadoCentavos: 4800 + 500 });
       assert.equal(r.status, 201, JSON.stringify(r.corpo));
       assert.equal(r.corpo.pedido.taxaEntregaCentavos, 500);
+    });
+
+    test('WhatsApp pelo PDV acima do mínimo: prévia (GET /equipe/cardapio) e pedido com taxa 0; cupom "Taxa de entrega Grátis"', async () => {
+      await ligar(4100);
+      const { montarCupom, cupomParaTexto } = await import('@restaurante/shared/cupom');
+      const cardapio = await api('GET', '/equipe/cardapio', { token: tokenDono });
+      assert.deepEqual(cardapio.corpo.freteGratis, { minimoCentavos: 4100 });
+
+      const c = await novoCliente();
+      const r = await api('POST', '/equipe/pedidos', {
+        token: tokenDono,
+        corpo: { clienteId: c.cliente.id, enderecoId: c.endereco.id, itens: [{ produtoId: p['X-Bacon'].id, quantidade: 3 }], formaPagamento: 'PIX' },
+      });
+      assert.equal(r.status, 201, JSON.stringify(r.corpo));
+      assert.equal(r.corpo.pedido.taxaEntregaCentavos, 0);
+
+      // O cupom sai do trabalho que o agente busca na fila, montado como no PDV.
+      const fila = await api('GET', '/equipe/impressoes/pendentes', { token: tokenDono });
+      const trabalho = fila.corpo.trabalhos.find((t) => t.pedido?.id === r.corpo.pedido.id);
+      for (const colunas of [48, 32]) {
+        const texto = cupomParaTexto(montarCupom(trabalho, { colunas, restaurante: 'Cabana Boemia' }), colunas);
+        assert.match(texto, /Taxa de entrega +Grátis/);
+        assert.match(texto, /TOTAL +R\$ 48,00/);
+      }
+    });
+
+    test('opção "vale também para o WhatsApp" desligada: WhatsApp paga a taxa, o site continua com frete grátis', async () => {
+      await ligar(4100);
+      await prisma.configuracao.update({ where: { id: 1 }, data: { freteGratisWhatsapp: false } });
+      try {
+        assert.equal((await api('GET', '/equipe/cardapio', { token: tokenDono })).corpo.freteGratis, null);
+        const zap = await criarPedido({
+          canal: 'WHATSAPP',
+          itens: [{ produtoId: p['X-Bacon'].id, quantidade: 3 }],
+          cliente: { nome: 'Seu João', telefone: '43988887777' },
+          endereco: { texto: 'Rua A, 10', bairroId: centro.id },
+          pagamento: { forma: 'PIX' },
+        });
+        assert.equal(zap.pedido.taxaEntregaCentavos, 500);
+
+        const c = await novoCliente();
+        const site = await pedir(c, [item('X-Bacon', 3)], { totalEsperadoCentavos: 4800 });
+        assert.equal(site.status, 201, JSON.stringify(site.corpo));
+        assert.equal(site.corpo.pedido.taxaEntregaCentavos, 0);
+      } finally {
+        await prisma.configuracao.update({ where: { id: 1 }, data: { freteGratisWhatsapp: true } });
+      }
     });
 
     test('GET /publico/config e /publico/cardapio expõem a regra (null desligado)', async () => {

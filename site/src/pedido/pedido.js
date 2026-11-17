@@ -101,7 +101,10 @@ export function linkCancelamento(whatsapp, numeroPedido, nome) {
 
 /**
  * "Repetir pedido" (o último ou um do histórico): joga na sacola só o que está no cardápio AGORA,
- * com o preço de agora (não o do pedido antigo).
+ * com o preço de agora (não o do pedido antigo) e a mesma observação. O
+ * cardápio público já tira o que está inativo, sem saldo (bebidas, pão dos
+ * lanches), fora do turno, fora de hoje ou fora do site: esses viram
+ * `indisponiveis`.
  * @returns {{ itens: any[], adicionados: number, indisponiveis: string[] }}
  */
 export function repetirPedido(itensCarrinho, ultimoPedido, categorias) {
@@ -119,6 +122,20 @@ export function repetirPedido(itensCarrinho, ultimoPedido, categorias) {
     adicionados += item.quantidade;
   }
   return { itens, adicionados, indisponiveis };
+}
+
+export const AVISO_INDISPONIVEIS = 'Alguns itens não estão disponíveis e não foram adicionados';
+
+/**
+ * Avisos depois de repetir um pedido e se a sacola deve abrir: só abre se
+ * algo entrou (nada disponível = só o aviso, sem sacola vazia).
+ * @param {{ adicionados: number, indisponiveis: string[] }} r resultado de repetirPedido
+ */
+export function avisosDaRepeticao({ adicionados, indisponiveis }) {
+  const mensagens = [];
+  if (adicionados) mensagens.push(adicionados === 1 ? '1 item foi para a sacola.' : `${adicionados} itens foram para a sacola.`);
+  if (indisponiveis.length) mensagens.push(`${AVISO_INDISPONIVEIS}: ${indisponiveis.join(', ')}.`);
+  return { mensagens, abrirSacola: adicionados > 0 };
 }
 
 /** Uma chave por tentativa de pedido: reenviar (toque duplo, rede caiu) não duplica. */

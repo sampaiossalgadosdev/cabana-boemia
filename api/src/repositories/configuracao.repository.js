@@ -17,9 +17,25 @@ export function definirTempoManual({ tempoEstimadoManualMin, tempoManualDefinido
 
 /** Dados gerais editados pelo dono; cria a linha única se faltar. */
 export function atualizarGerais(
-  { nomeRestaurante, whatsappNumero, tempoEstimadoPadraoMin, horaViradaDia, freteGratisAtivo, freteGratisMinimoCentavos },
+  {
+    nomeRestaurante,
+    whatsappNumero,
+    tempoEstimadoPadraoMin,
+    horaViradaDia,
+    freteGratisAtivo,
+    freteGratisMinimoCentavos,
+    freteGratisWhatsapp,
+  },
   db = prisma,
 ) {
-  const dados = { nomeRestaurante, whatsappNumero, tempoEstimadoPadraoMin, horaViradaDia, freteGratisAtivo, freteGratisMinimoCentavos };
+  const dados = {
+    nomeRestaurante,
+    whatsappNumero,
+    tempoEstimadoPadraoMin,
+    horaViradaDia,
+    freteGratisAtivo,
+    freteGratisMinimoCentavos,
+    freteGratisWhatsapp,
+  };
   return db.configuracao.upsert({ where: { id: 1 }, update: dados, create: { id: 1, ...dados } });
 }

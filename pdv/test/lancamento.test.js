@@ -13,6 +13,7 @@ import {
   lerReais,
   pareceTelefone,
   totais,
+  textoTaxaEntrega,
 } from '../src/renderer/src/lib/lancamento.js';
 
 const produto = (extra = {}) => ({
@@ -104,6 +105,9 @@ describe('carrinho do lançamento', () => {
     // Frete grátis (mesma regra da API): a partir do mínimo, a taxa some.
     assert.deepEqual(totais(linhas, 500, { minimoCentavos: 3300 }), { subtotalCentavos: 3300, taxaEntregaCentavos: 0, totalCentavos: 3300 });
     assert.deepEqual(totais(linhas, 500, { minimoCentavos: 3301 }), { subtotalCentavos: 3300, taxaEntregaCentavos: 500, totalCentavos: 3800 });
+    const fmt = (c) => `R$ ${(c / 100).toFixed(2)}`;
+    assert.equal(textoTaxaEntrega(totais(linhas, 500, { minimoCentavos: 3300 }).taxaEntregaCentavos, fmt), 'Grátis');
+    assert.equal(textoTaxaEntrega(500, fmt), 'R$ 5.00');
     linhas = atualizarPrecos(linhas, new Map([[1, { ...a, precoCentavos: 1300 }]]));
     assert.deepEqual(linhas.map((l) => [l.produtoId, l.precoCentavos]), [[1, 1300], [2, 900]]);
   });

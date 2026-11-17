@@ -13,6 +13,7 @@ const PADRAO = {
   horaViradaDia: 4,
   freteGratisAtivo: false,
   freteGratisMinimoCentavos: null,
+  freteGratisWhatsapp: true,
 };
 
 const publica = (c) => ({
@@ -22,6 +23,7 @@ const publica = (c) => ({
   horaViradaDia: c.horaViradaDia,
   freteGratisAtivo: c.freteGratisAtivo ?? false,
   freteGratisMinimoCentavos: c.freteGratisMinimoCentavos ?? null,
+  freteGratisWhatsapp: c.freteGratisWhatsapp ?? true,
 });
 
 /**
@@ -44,7 +46,7 @@ export async function obter() {
 
 /**
  * @param {{ nomeRestaurante: string, whatsappNumero: string, tempoEstimadoPadraoMin: number, horaViradaDia: number,
- *   freteGratisAtivo: boolean, freteGratisMinimoCentavos: number | null }} dados (já validados; ligado exige mínimo)
+ *   freteGratisAtivo: boolean, freteGratisMinimoCentavos: number | null, freteGratisWhatsapp?: boolean }} dados (já validados; ligado exige mínimo)
  */
 export async function atualizar(dados) {
   const config = await configRepo.atualizarGerais(dados);

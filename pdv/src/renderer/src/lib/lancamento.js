@@ -108,6 +108,9 @@ export function totais(linhas, taxaBairroCentavos = 0, freteGratis = null) {
   return { subtotalCentavos, taxaEntregaCentavos, totalCentavos: subtotalCentavos + taxaEntregaCentavos };
 }
 
+/** Valor da linha "Entrega" na prévia: "Grátis" sem taxa (frete grátis ou bairro sem taxa), como no cupom. */
+export const textoTaxaEntrega = (centavos, formatar) => (centavos === 0 ? 'Grátis' : formatar(centavos));
+
 export const itensParaApi = (linhas) =>
   consolidar(linhas).map((l) => ({ produtoId: l.produtoId, quantidade: l.quantidade, observacao: l.observacao || null }));
 

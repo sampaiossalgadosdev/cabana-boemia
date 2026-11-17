@@ -34,6 +34,7 @@ function FormConfig({ config, aoSalvar }) {
       freteGratisAtivo: Boolean(config.freteGratisAtivo),
       freteGratisMinimoCentavos: config.freteGratisMinimoCentavos ?? null,
       freteGratisTexto: config.freteGratisMinimoCentavos == null ? '' : 'preenchido',
+      freteGratisWhatsapp: config.freteGratisWhatsapp ?? true,
     });
   }, [config]);
   if (!f) return null;
@@ -62,6 +63,7 @@ function FormConfig({ config, aoSalvar }) {
         horaViradaDia: Number(f.horaViradaDia),
         freteGratisAtivo: f.freteGratisAtivo,
         freteGratisMinimoCentavos: digitouMinimo ? minimo : null,
+        freteGratisWhatsapp: f.freteGratisWhatsapp,
       });
       avisar('Configurações salvas.');
       await aoSalvar();
@@ -137,7 +139,7 @@ function FormConfig({ config, aoSalvar }) {
           erro={erros.freteGratisMinimoCentavos}
           ajuda={
             f.freteGratisAtivo
-              ? 'Pedidos de entrega (site e WhatsApp) com itens a partir deste valor não pagam a taxa do bairro. O site mostra quanto falta.'
+              ? 'Pedidos de entrega com itens a partir deste valor não pagam a taxa do bairro. O site mostra quanto falta.'
               : 'Desligado: todo pedido paga a taxa do bairro e o site não mostra a barra de frete grátis.'
           }
         >
@@ -165,6 +167,17 @@ function FormConfig({ config, aoSalvar }) {
             </div>
           )}
         </Campo>
+        <div className="campo">
+          <label className="opcao">
+            <input
+              type="checkbox"
+              checked={f.freteGratisWhatsapp}
+              onChange={(e) => setF((x) => ({ ...x, freteGratisWhatsapp: e.target.checked }))}
+            />
+            <span>Frete grátis vale também para os pedidos do WhatsApp lançados no PDV</span>
+          </label>
+          <p className="campo__ajuda">Desmarcado: só os pedidos feitos pelo site ganham frete grátis.</p>
+        </div>
         <button type="submit" className="botao botao--primario" disabled={salvando}>
           {salvando ? 'Salvando…' : 'Salvar'}
         </button>

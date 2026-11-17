@@ -173,6 +173,7 @@ const configSchema = z.object({
     .max(MAX_CENTAVOS, 'Valor muito alto')
     .nullable()
     .optional(),
+  freteGratisWhatsapp: z.boolean({ error: 'Valor inválido' }).optional(),
 }).superRefine((d, ctx) => {
   // Ligado (ou sem dizer, com o banco talvez ligado) exige o mínimo junto.
   if ((d.freteGratisAtivo || (d.freteGratisAtivo === undefined && d.freteGratisMinimoCentavos === null)) && d.freteGratisMinimoCentavos == null) {

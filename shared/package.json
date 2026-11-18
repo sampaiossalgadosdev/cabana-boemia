@@ -7,7 +7,8 @@
     "./telefone": "./src/telefone.js",
     "./cupom": "./src/cupom.js",
     "./itens": "./src/itens.js",
-    "./frete": "./src/frete.js"
+    "./frete": "./src/frete.js",
+    "./horarios": "./src/horarios.js"
   },
   "scripts": {
     "dev": "echo \"[shared] dev ainda nao configurado\"",

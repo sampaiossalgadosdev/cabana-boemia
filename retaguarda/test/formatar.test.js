@@ -4,7 +4,6 @@ import {
   formatarDataHora,
   formatarWhatsapp,
   comSinal,
-  descreverHorario,
   horariosParaApi,
   errosPorCampo,
   paraBusca,
@@ -25,12 +24,6 @@ test('comSinal', () => {
   assert.equal(comSinal(5), '+5');
   assert.equal(comSinal(-3), '−3');
   assert.equal(comSinal(0), '0');
-});
-
-test('descreverHorario: meia-noite e virada do dia', () => {
-  assert.equal(descreverHorario({ inicio: '11:00', fim: '14:00' }), '11:00 às 14:00');
-  assert.equal(descreverHorario({ inicio: '19:00', fim: '00:00' }), '19:00 até meia-noite');
-  assert.equal(descreverHorario({ inicio: '22:00', fim: '02:00' }), '22:00 até 02:00 do dia seguinte');
 });
 
 test('horariosParaApi ordena e recusa linha incompleta ou com início = fim', () => {

@@ -878,47 +878,101 @@ textarea.entrada {
   background: #fdf9f3;
 }
 
-.dia-horarios {
+/* Turnos e horários: uma linha por dia, uma coluna por turno. Abaixo de
+   680 px de cartão, as colunas viram blocos com o nome do turno. */
+.horarios {
+  container-type: inline-size;
+}
+
+.horarios__linha {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
-  gap: 8px 16px;
-  align-items: start;
-  padding: 12px 16px;
+  grid-template-columns: 110px repeat(var(--colunas-turno, 2), minmax(0, 1fr));
   border-bottom: 1px solid var(--cor-borda);
 }
 
-.dia-horarios:last-child {
+.horarios__linha:last-child {
   border-bottom: 0;
 }
 
-.dia-horarios__nome {
-  padding-top: 8px;
+.horarios__dia {
+  padding: 20px 16px 12px;
   font-weight: 700;
 }
 
-.dia-horarios__lista {
+.horarios__celula {
   display: grid;
+  align-content: start;
+  justify-items: start;
   gap: 8px;
+  padding: 12px 16px;
+  border-left: 1px solid var(--cor-borda);
+}
+
+.horarios__cabecalho {
+  background: #fdf9f3;
+}
+
+.horarios__cabecalho .horarios__celula {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.horarios__turno {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.horarios__rotulo-movel {
+  display: none;
+}
+
+.horarios__fechado {
+  padding: 8px 0 0;
 }
 
 .faixa-horario {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 120px) auto minmax(0, 120px) auto;
   align-items: center;
   gap: 8px;
 }
 
 .faixa-horario .entrada {
-  width: 120px;
+  width: 100%;
+  min-width: 96px;
 }
 
-@media (max-width: 560px) {
-  .dia-horarios {
-    grid-template-columns: 1fr;
+@container (max-width: 679px) {
+  .horarios__cabecalho {
+    display: none;
   }
 
-  .dia-horarios__nome {
-    padding-top: 0;
+  .horarios__linha {
+    grid-template-columns: 1fr;
+    padding: 12px 16px;
+    gap: 12px;
+  }
+
+  .horarios__dia {
+    padding: 0;
+  }
+
+  .horarios__celula {
+    padding: 0 0 0 12px;
+    border-left: 3px solid var(--cor-borda);
+  }
+
+  .horarios__rotulo-movel {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--cor-texto-suave);
+  }
+
+  .horarios__fechado {
+    padding: 0;
   }
 }
 

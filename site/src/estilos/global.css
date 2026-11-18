@@ -232,33 +232,103 @@ button:disabled {
   background: rgb(0 0 0 / 22%);
 }
 
-.dica-instalar {
-  flex-basis: 100%;
+.convite-instalar {
+  position: fixed;
+  inset: auto 12px calc(var(--altura-rodape-fixo) + 12px);
+  z-index: 25; /* abaixo dos avisos (30) */
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 16px;
+  border-radius: var(--raio);
+  border-top: 4px solid var(--cor-dourado);
+  background: var(--cor-superficie);
+  color: var(--cor-texto);
+  box-shadow: 0 10px 30px rgb(17 17 17 / 22%), 0 2px 6px rgb(17 17 17 / 10%);
+  animation: convite-sobe 0.35s ease-out;
+}
+
+@keyframes convite-sobe {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .convite-instalar {
+    animation: none;
+  }
+}
+
+.convite-instalar__topo {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin: 2px 0 0;
-  font-size: 0.8rem;
-  line-height: 1.35;
-  color: rgb(251 243 232 / 88%);
+  align-items: flex-start;
+  gap: 12px;
 }
 
-.dica-instalar strong {
-  color: var(--cor-creme);
-}
-
-.dica-instalar__fechar {
+.convite-instalar__icone {
   flex: none;
-  width: 28px;
-  height: 28px;
+  border-radius: 12px;
+  border: 1px solid var(--cor-borda);
+}
+
+.convite-instalar__titulo {
+  margin: 2px 0 2px;
+  font-size: 1.05rem;
+  color: var(--cor-vermelho-escuro);
+}
+
+.convite-instalar__texto {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: var(--cor-texto-suave);
+}
+
+.convite-instalar__fechar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: -6px -6px 0 auto;
   border: 0;
   border-radius: 50%;
-  background: rgb(0 0 0 / 22%);
-  color: var(--cor-creme);
-  font-size: 1.1rem;
+  background: transparent;
+  color: var(--cor-texto-suave);
+  font-size: 1.4rem;
   line-height: 1;
   cursor: pointer;
+}
+
+.convite-instalar__passos {
+  margin: 12px 0 0;
+  padding-left: 22px;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.convite-instalar__passos li + li {
+  margin-top: 4px;
+}
+
+.convite-instalar__passos li::marker {
+  color: var(--cor-vermelho);
+  font-weight: 700;
+}
+
+.convite-instalar__nota {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-fundo);
+  font-size: 0.85rem;
+  color: var(--cor-texto-suave);
+}
+
+.convite-instalar__acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 /* ───────── Faixas de aviso ───────── */

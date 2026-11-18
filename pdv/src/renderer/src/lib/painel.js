@@ -104,10 +104,10 @@ export function filtrarPedidos(pedidos, { status = 'andamento', tipo = 'todos', 
   );
 }
 
-/** Mais urgente primeiro: pelo prazo (sem prazo, a criação); empate pela ordem de chegada. */
+/** Último que chegou primeiro (decisão do dono): pela criação, mais nova no topo; empate pelo id maior. */
 export function ordenarPedidos(pedidos) {
-  const chave = (p) => (prazoDoPedido(p) ?? new Date(p.criadoEm)).getTime();
-  return [...pedidos].sort((a, b) => chave(a) - chave(b) || a.id - b.id);
+  const chave = (p) => new Date(p.criadoEm).getTime() || 0;
+  return [...pedidos].sort((a, b) => chave(b) - chave(a) || b.id - a.id);
 }
 
 /**

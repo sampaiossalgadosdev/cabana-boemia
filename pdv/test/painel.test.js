@@ -77,13 +77,14 @@ describe('painel de delivery', () => {
     assert.deepEqual(ids({ status: 'todos', tipo: 'delivery', busca: 'maria' }), [5]);
   });
 
-  test('ordem: mais urgente primeiro (prazo), empate por chegada', () => {
+  test('ordem: o último que chegou aparece primeiro (prazo não importa), empate pelo id maior', () => {
     const lista = [
-      pedido({ id: 1, tempoEstimadoMin: 60 }), // prazo 21:00
-      pedido({ id: 2, encomenda: true, agendadoPara: '2026-11-14T23:30:00.000Z', tempoEstimadoMin: null }), // 20:30
-      pedido({ id: 3, tempoEstimadoMin: 30 }), // 20:30
+      pedido({ id: 1, criadoEm: '2026-11-14T22:00:00.000Z', tempoEstimadoMin: 10 }),
+      pedido({ id: 2, criadoEm: '2026-11-14T22:40:00.000Z', tempoEstimadoMin: 60 }),
+      pedido({ id: 3, encomenda: true, agendadoPara: '2026-11-14T22:45:00.000Z', criadoEm: '2026-11-14T22:20:00.000Z', tempoEstimadoMin: null }),
+      pedido({ id: 4, criadoEm: '2026-11-14T22:40:00.000Z' }),
     ];
-    assert.deepEqual(ordenarPedidos(lista).map((p) => p.id), [2, 3, 1]);
+    assert.deepEqual(ordenarPedidos(lista).map((p) => p.id), [4, 2, 3, 1]);
   });
 
   test('evento do socket: só site/WhatsApp do dia na tela; atualização mantém quem registrou', () => {

@@ -46,7 +46,10 @@ export async function pedirInstalacao() {
   try {
     evento.prompt();
     const { outcome } = await evento.userChoice;
-    gravarEscolha({ android: outcome === 'accepted' ? 'instalado' : 'dispensado' });
+    // Recusou: some o botão do cabeçalho e o cartão descansa (CONVITE_PAUSA_MS).
+    gravarEscolha(
+      outcome === 'accepted' ? { android: 'instalado' } : { android: 'dispensado', conviteFechadoEm: Date.now() },
+    );
   } catch {
     // prompt indisponível: só esconde o botão
   }

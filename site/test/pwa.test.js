@@ -10,11 +10,15 @@ import { gerarIcones, ICONES, CREME } from '../scripts/gerar-icones.mjs';
 import { MODELO, montarSw, swDoBuild } from '../pwa/plugin-sw.js';
 import {
   CHAVE_INSTALACAO,
-  ehSafariDoIos,
+  CONVITE_APOS_MS,
+  CONVITE_PAUSA_MS,
+  detectarNavegador,
   estaComoApp,
   gravarEscolha,
   lerEscolha,
-  oQueMostrar,
+  mostrarBotaoCabecalho,
+  mostrarConvite,
+  passosDoConvite,
 } from '../src/lib/instalacao.js';
 
 const site = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -227,21 +231,33 @@ describe('service worker', () => {
 });
 
 describe('convite para instalar', () => {
-  const IPHONE_SAFARI =
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1';
-  const IPHONE_CHROME =
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0 Mobile/15E148 Safari/604.1';
-  const IPAD = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15';
-  const ANDROID =
-    'Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+  const UA = {
+    iphoneSafari:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1',
+    iphoneChrome:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0 Mobile/15E148 Safari/604.1',
+    iphoneInstagram:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 350.0.0',
+    ipad: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
+    android: 'Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+    samsung:
+      'Mozilla/5.0 (Linux; Android 14; SM-A546E) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36',
+    androidFacebook:
+      'Mozilla/5.0 (Linux; Android 14; K; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/131.0 Mobile Safari/537.36 [FB_IAB/FB4A;FBAV/490.0.0]',
+    windows: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  };
 
-  test('Safari do iPhone/iPad sim; Chrome do iPhone, Android e Mac não', () => {
-    assert.equal(ehSafariDoIos({ userAgent: IPHONE_SAFARI, platform: 'iPhone' }), true);
-    assert.equal(ehSafariDoIos({ userAgent: IPAD, platform: 'MacIntel', maxTouchPoints: 5 }), true);
-    assert.equal(ehSafariDoIos({ userAgent: IPAD, platform: 'MacIntel', maxTouchPoints: 0 }), false);
-    assert.equal(ehSafariDoIos({ userAgent: IPHONE_CHROME, platform: 'iPhone' }), false);
-    assert.equal(ehSafariDoIos({ userAgent: ANDROID, platform: 'Linux armv8l' }), false);
-    assert.equal(ehSafariDoIos(), false);
+  test('detecta o navegador de quem está vendo', () => {
+    assert.equal(detectarNavegador({ userAgent: UA.iphoneSafari }), 'ios-safari');
+    assert.equal(detectarNavegador({ userAgent: UA.ipad, platform: 'MacIntel', maxTouchPoints: 5 }), 'ios-safari');
+    assert.equal(detectarNavegador({ userAgent: UA.ipad, platform: 'MacIntel', maxTouchPoints: 0 }), 'computador');
+    assert.equal(detectarNavegador({ userAgent: UA.iphoneChrome }), 'ios-outro');
+    assert.equal(detectarNavegador({ userAgent: UA.iphoneInstagram }), 'app-interno');
+    assert.equal(detectarNavegador({ userAgent: UA.android }), 'android');
+    assert.equal(detectarNavegador({ userAgent: UA.samsung }), 'android-samsung');
+    assert.equal(detectarNavegador({ userAgent: UA.androidFacebook }), 'app-interno');
+    assert.equal(detectarNavegador({ userAgent: UA.windows }), 'computador');
+    assert.equal(detectarNavegador(), 'computador');
   });
 
   test('aberto como app (Android ou iOS) é detectado; erro = não é app', () => {
@@ -252,25 +268,55 @@ describe('convite para instalar', () => {
     assert.equal(estaComoApp({ navigator: {}, matchMedia: () => { throw new Error('x'); } }), false);
   });
 
-  test('o que mostrar', () => {
-    const base = { comoApp: false, safariIos: false, podeInstalar: false, escolha: {} };
-    assert.equal(oQueMostrar(base), null);
-    assert.equal(oQueMostrar({ ...base, podeInstalar: true }), 'botao');
-    assert.equal(oQueMostrar({ ...base, podeInstalar: true, escolha: { android: 'dispensado' } }), null);
-    assert.equal(oQueMostrar({ ...base, podeInstalar: true, escolha: { android: 'instalado' } }), null);
-    assert.equal(oQueMostrar({ ...base, safariIos: true }), 'dica-ios');
-    assert.equal(oQueMostrar({ ...base, safariIos: true, escolha: { ios: 'fechado' } }), null);
-    // Já como app: nada, nem botão nem dica.
-    assert.equal(oQueMostrar({ ...base, comoApp: true, podeInstalar: true, safariIos: true }), null);
+  test('botão do cabeçalho: só com a instalação oferecida pelo navegador', () => {
+    const base = { comoApp: false, podeInstalar: true, escolha: {} };
+    assert.equal(mostrarBotaoCabecalho(base), true);
+    assert.equal(mostrarBotaoCabecalho({ ...base, podeInstalar: false }), false);
+    assert.equal(mostrarBotaoCabecalho({ ...base, comoApp: true }), false);
+    assert.equal(mostrarBotaoCabecalho({ ...base, escolha: { android: 'dispensado' } }), false);
+    assert.equal(mostrarBotaoCabecalho({ ...base, escolha: { android: 'instalado' } }), false);
+  });
+
+  test('cartão: 10 s depois de entrar, só no celular, nunca já como app; "Agora não" descansa 7 dias', () => {
+    assert.equal(CONVITE_APOS_MS, 10_000);
+    const agora = Date.UTC(2026, 10, 18, 15);
+    const base = { comoApp: false, navegador: 'android', escolha: {}, agora };
+    for (const navegador of ['ios-safari', 'ios-outro', 'app-interno', 'android', 'android-samsung']) {
+      assert.equal(mostrarConvite({ ...base, navegador }), true, navegador);
+    }
+    assert.equal(mostrarConvite({ ...base, navegador: 'computador' }), false);
+    assert.equal(mostrarConvite({ ...base, comoApp: true }), false);
+    assert.equal(mostrarConvite({ ...base, escolha: { android: 'instalado' } }), false);
+    assert.equal(mostrarConvite({ ...base, escolha: { conviteFechadoEm: agora - 60_000 } }), false);
+    assert.equal(mostrarConvite({ ...base, escolha: { conviteFechadoEm: agora - CONVITE_PAUSA_MS + 1 } }), false);
+    assert.equal(mostrarConvite({ ...base, escolha: { conviteFechadoEm: agora - CONVITE_PAUSA_MS } }), true);
+    assert.equal(mostrarConvite({ ...base, escolha: { conviteFechadoEm: 'lixo' } }), true);
+  });
+
+  test('passos certos para cada navegador; com instalação oferecida, só o botão', () => {
+    const tudo = (n) => passosDoConvite(n, false).passos.join(' ');
+    assert.match(tudo('ios-safari'), /Compartilhar.*Adicionar à Tela de Início/);
+    assert.match(tudo('ios-outro'), /Compartilhar.*Adicionar à Tela de Início/);
+    assert.match(passosDoConvite('ios-outro', false).nota, /Safari/);
+    assert.match(tudo('app-interno'), /Abrir no navegador/);
+    assert.match(tudo('android'), /menu ⋮.*Instalar app ou Adicionar à tela inicial/);
+    assert.match(passosDoConvite('android', false).nota, /WhatsApp.*Abrir no Chrome/);
+    assert.match(tudo('android-samsung'), /Adicionar página a.*Tela inicial/);
+    for (const n of ['ios-safari', 'android', 'android-samsung']) {
+      const comBotao = passosDoConvite(n, true);
+      assert.equal(comBotao.botaoInstalar, true, n);
+      assert.deepEqual(comBotao.passos, [], n);
+      assert.equal(passosDoConvite(n, false).botaoInstalar, false, n);
+    }
   });
 
   test('escolha lembrada no localStorage; storage quebrado ou corrompido não derruba', () => {
     const dados = new Map();
     const storage = { getItem: (k) => dados.get(k) ?? null, setItem: (k, v) => dados.set(k, v) };
     assert.deepEqual(lerEscolha(storage), {});
-    assert.equal(gravarEscolha({ ios: 'fechado' }, storage), true);
+    assert.equal(gravarEscolha({ conviteFechadoEm: 123 }, storage), true);
     gravarEscolha({ android: 'dispensado' }, storage);
-    assert.deepEqual(lerEscolha(storage), { ios: 'fechado', android: 'dispensado' });
+    assert.deepEqual(lerEscolha(storage), { conviteFechadoEm: 123, android: 'dispensado' });
 
     dados.set(CHAVE_INSTALACAO, '{quebrado');
     assert.deepEqual(lerEscolha(storage), {});
@@ -279,6 +325,6 @@ describe('convite para instalar', () => {
 
     const quebrado = { getItem: () => { throw new Error('bloqueado'); }, setItem: () => { throw new Error('cheio'); } };
     assert.deepEqual(lerEscolha(quebrado), {});
-    assert.equal(gravarEscolha({ ios: 'fechado' }, quebrado), false);
+    assert.equal(gravarEscolha({ conviteFechadoEm: 1 }, quebrado), false);
   });
 });

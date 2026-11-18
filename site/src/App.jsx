@@ -18,6 +18,7 @@ import { conciliar, mensagensDaConciliacao } from './carrinho/carrinho.js';
 import { avisosDaRepeticao, repetirPedido } from './pedido/pedido.js';
 import { useUltimoPedido } from './hooks/useUltimoPedido.js';
 import { RodapeLegal } from './componentes/PaginaLegal.jsx';
+import { ConviteInstalar } from './componentes/InstalarApp.jsx';
 
 const SEM_CATEGORIAS = [];
 
@@ -174,6 +175,7 @@ export function App() {
         onConfirmar={confirmarModal}
         onFechar={() => setModal(null)}
       />
+      <ConviteInstalar />
     </div>
   );
 }

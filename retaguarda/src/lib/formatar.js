@@ -27,13 +27,6 @@ export const comSinal = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : 
 
 export const NOMES_MOVIMENTACAO = { VENDA: 'Venda', ESTORNO: 'Estorno', ENTRADA: 'Entrada', AJUSTE: 'Ajuste' };
 
-/** "fim antes do início" cruza a meia-noite; "00:00" é o fim do dia. */
-export function descreverHorario({ inicio, fim }) {
-  if (fim === '00:00') return `${inicio} até meia-noite`;
-  if (fim < inicio) return `${inicio} até ${fim} do dia seguinte`;
-  return `${inicio} às ${fim}`;
-}
-
 /**
  * Horários por dia → lista para a API, ordenada (dia, início). Linhas sem
  * início ou fim são erro do formulário (devolve `erro`).

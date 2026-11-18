@@ -14,6 +14,7 @@ import { prisma } from '../lib/prisma.js';
 import { ErroHttp } from '../lib/erros.js';
 import { avisarCardapioAtualizado } from '../lib/eventos.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
+import { acharSobreposicao, mensagemSobreposicao } from '@restaurante/shared/horarios';
 
 const DIA = 1440;
 
@@ -95,35 +96,8 @@ export async function proximaAbertura(agora = new Date(), db) {
 
 // ───────── Retaguarda: horários ─────────
 
-const SEMANA = 7 * DIA;
-export const NOMES_DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
-
-/** Trechos [ini, fim) em minutos da semana (domingo 00:00 = 0); quem passa de sábado volta ao domingo. */
-function trechosNaSemana(h) {
-  const { ini, fim } = intervalo(h);
-  const a = h.diaSemana * DIA + ini;
-  const b = h.diaSemana * DIA + fim;
-  return b <= SEMANA ? [[a, b]] : [[a, SEMANA], [0, b - SEMANA]];
-}
-
-/**
- * Função pura: primeiro par de horários que se cruza (do mesmo turno ou de
- * turnos diferentes), ou null. Só um turno pode estar ativo por vez.
- * @param {{ turno: { id: number, nome: string }, horario: { diaSemana: number, inicio: string, fim: string } }[]} lista
- */
-export function acharSobreposicao(lista) {
-  const trechos = lista.flatMap((item) => trechosNaSemana(item.horario).map(([a, b]) => ({ a, b, item })));
-  for (let i = 0; i < trechos.length; i++) {
-    for (let j = i + 1; j < trechos.length; j++) {
-      const x = trechos[i];
-      const y = trechos[j];
-      if (x.item !== y.item && x.a < y.b && y.a < x.b) return [x.item, y.item];
-    }
-  }
-  return null;
-}
-
-const descrever = ({ turno, horario: h }) => `${turno.nome} (${NOMES_DIAS[h.diaSemana]} ${h.inicio}–${h.fim})`;
+// Regra de sobreposição mora no shared (a retaguarda avisa antes de gravar).
+export { acharSobreposicao };
 
 /** Todos os turnos com horários (inclusive inativos). */
 export function listarTurnos() {
@@ -152,7 +126,7 @@ export async function definirHorarios(turnoId, horarios) {
     ];
     const conflito = acharSobreposicao(lista);
     if (conflito) {
-      throw new ErroHttp(422, `Horários se cruzam: ${descrever(conflito[0])} e ${descrever(conflito[1])}.`, {
+      throw new ErroHttp(422, mensagemSobreposicao(conflito), {
         codigo: 'HORARIO_SOBREPOSTO',
         detalhes: conflito.map(({ turno: t, horario: h }) => ({
           turnoId: t.id,

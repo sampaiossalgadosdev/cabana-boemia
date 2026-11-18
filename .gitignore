@@ -14,3 +14,6 @@ pdv/recursos/icon.png
 
 # Prints de testes manuais (Chrome headless / PDV), só locais.
 prints-teste/
+
+# Ícones do PWA gerados da logo pelo dev/build do site (site/scripts/gerar-icones.mjs).
+site/public/icones/

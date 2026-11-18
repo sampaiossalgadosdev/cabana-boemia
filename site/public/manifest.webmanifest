@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "Cabana Boemia",
+  "short_name": "Cabana",
+  "description": "Cardápio e pedidos da Cabana Boemia, Abatiá-PR.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#9E0B22",
+  "background_color": "#FBF3E8",
+  "categories": ["food"],
+  "icons": [
+    { "src": "/icones/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icones/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icones/icone-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

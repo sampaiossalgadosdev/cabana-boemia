@@ -1,5 +1,6 @@
 import { NomeRestaurante } from './NomeRestaurante.jsx';
 import { quandoAbre } from '../lib/horario.js';
+import { InstalarApp } from './InstalarApp.jsx';
 
 function StatusTurno({ cardapio }) {
   if (!cardapio) return <span className="selo">Carregando…</span>;
@@ -37,6 +38,7 @@ export function Cabecalho({ cardapio, children }) {
         <div className="cabecalho__info" aria-live="polite">
           <StatusTurno cardapio={cardapio} />
           {cardapio?.aberto && <TempoEstimado minutos={cardapio.tempoEstimadoMin} />}
+          <InstalarApp />
         </div>
         {children}
       </div>

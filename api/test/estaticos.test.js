@@ -10,11 +10,15 @@ import { criarApp } from '../src/app.js';
 import { HASH_SCRIPT_SPLASH } from '../src/lib/estaticos.js';
 
 /** Build falso: index.html + um asset com hash. */
-function criarDist(prefixo, marca) {
+function criarDist(prefixo, marca, { pwa = false } = {}) {
   const dist = fs.mkdtempSync(path.join(os.tmpdir(), prefixo));
   fs.mkdirSync(path.join(dist, 'assets'));
   fs.writeFileSync(path.join(dist, 'index.html'), `<!doctype html><div id="${marca}"></div>`);
   fs.writeFileSync(path.join(dist, 'assets', 'app-abc123.js'), 'console.log(1)');
+  if (pwa) {
+    fs.writeFileSync(path.join(dist, 'sw.js'), 'self.addEventListener("fetch", () => {})');
+    fs.writeFileSync(path.join(dist, 'manifest.webmanifest'), '{"name":"x"}');
+  }
   return dist;
 }
 
@@ -27,7 +31,7 @@ describe('site em /, retaguarda em /admin, API em /api', () => {
   let base;
 
   before(async () => {
-    site = criarDist('site-dist-', 'site');
+    site = criarDist('site-dist-', 'site', { pwa: true });
     admin = criarDist('admin-dist-', 'admin');
     servidor = http.createServer(criarApp({ log: false, distSite: site, distRetaguarda: admin }));
     await new Promise((resolve) => servidor.listen(0, resolve));
@@ -57,6 +61,25 @@ describe('site em /, retaguarda em /admin, API em /api', () => {
       assert.equal(res.status, 404, rota);
       assert.equal((await res.json()).erro.codigo, 'NAO_ENCONTRADO', rota);
     }
+  });
+
+  test('PWA: sw.js e manifest sem cache longo, com o tipo certo e a CSP do site', async () => {
+    const sw = await fetch(`${base}/sw.js`);
+    assert.equal(sw.status, 200);
+    assert.equal(sw.headers.get('cache-control'), 'no-cache');
+    assert.match(sw.headers.get('content-type'), /javascript/);
+    assert.equal(sw.headers.get('service-worker-allowed'), '/');
+    const manifest = await fetch(`${base}/manifest.webmanifest`);
+    assert.equal(manifest.status, 200);
+    assert.equal(manifest.headers.get('cache-control'), 'no-cache');
+    assert.match(manifest.headers.get('content-type'), /^application\/manifest\+json/);
+    const csp = (await fetch(`${base}/`)).headers.get('content-security-policy');
+    assert.equal(diretiva(csp, 'manifest-src'), "manifest-src 'self'");
+    assert.equal(diretiva(csp, 'worker-src'), "worker-src 'self'");
+    // Na retaguarda não existe service worker.
+    assert.equal((await fetch(`${base}/admin/sw.js`)).status, 404);
+    // Um sw.js em /api nunca existe (o site não sequestra a API).
+    assert.equal((await fetch(`${base}/api/sw.js`)).status, 404);
   });
 
   test('/admin continua sendo a retaguarda (não o site)', async () => {

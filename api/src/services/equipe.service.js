@@ -11,7 +11,7 @@ import * as configRepo from '../repositories/configuracao.repository.js';
 import * as equipeRepo from '../repositories/equipe.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoService from './endereco.service.js';
-import { OPCOES_TRANSACAO, pedidoPublico, STATUS_ABERTOS } from './pedido.service.js';
+import { OPCOES_TRANSACAO, pedidoDaEquipe, STATUS_ABERTOS } from './pedido.service.js';
 import { exigirCaixaAberto } from './caixa.service.js';
 import { calcularTempoEstimado, manualDeHoje, saldoDisponivel, temSaldo } from './publico.service.js';
 
@@ -35,7 +35,7 @@ export async function listarPedidosDoDia({ dataRef, canais, somenteAbertos = tru
     canais,
     status: somenteAbertos ? STATUS_ABERTOS : undefined,
   });
-  return { dataRef: dia, pedidos: pedidos.map(pedidoPublico) };
+  return { dataRef: dia, pedidos: pedidos.map(pedidoDaEquipe) };
 }
 
 /**
@@ -51,12 +51,15 @@ export async function finalizarPedido(id, { formaPagamento }, agora = new Date()
     const caixaId = await exigirCaixaAberto(tx);
     const atual = await pedidoRepo.buscarPorId(id, tx);
     if (!atual) throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+    // Já pago ("pago agora" no PDV): vale a forma em que foi pago; a informada é ignorada.
+    // O caixa do pagamento é o aberto agora (com pedido aberto o caixa não fecha).
+    const forma = atual.pagoEm ? atual.formaPagamento : formaPagamento;
 
     const count = await pedidoRepo.finalizarSeAberto(
       id,
       {
-        formaPagamento,
-        trocoParaCentavos: formaPagamento === 'DINHEIRO' ? atual.trocoParaCentavos : null,
+        formaPagamento: forma,
+        trocoParaCentavos: forma === 'DINHEIRO' ? atual.trocoParaCentavos : null,
         finalizadoEm: agora,
         caixaId,
       },
@@ -72,9 +75,9 @@ export async function finalizarPedido(id, { formaPagamento }, agora = new Date()
     return pedidoRepo.buscarPorId(id, tx);
   }, OPCOES_TRANSACAO);
 
-  const publico = pedidoPublico(pedido);
-  emitirParaEquipe('pedido:atualizado', publico);
-  return publico;
+  const equipe = pedidoDaEquipe(pedido);
+  emitirParaEquipe('pedido:atualizado', equipe);
+  return equipe;
 }
 
 const CONFIG_PADRAO = { tempoEstimadoPadraoMin: 40, tempoEstimadoManualMin: null, tempoManualDefinidoEm: null };
@@ -106,23 +109,40 @@ export async function definirTempoEstimado(minutos, agora = new Date()) {
 
 export const BUSCA_LIMITE = 10;
 
-/** Cliente com endereços (principal primeiro) e a taxa de cada bairro. */
+/**
+ * Cliente com endereços (principal primeiro) e a taxa de cada bairro.
+ * `doSite`: cadastro feito pelo login do Google (nome e e-mail são do cliente).
+ */
 function clienteDaEquipe(c) {
   return {
     id: c.id,
     nome: c.nome,
+    email: c.email ?? null,
     telefone: c.telefone,
+    observacao: c.observacao ?? null,
+    doSite: Boolean(c.googleId),
     enderecos: c.enderecos.map((e) => ({
       id: e.id,
       rua: e.rua,
       numero: e.numero,
       complemento: e.complemento,
       referencia: e.referencia,
+      cep: e.cep ?? null,
+      cidade: e.cidade ?? null,
+      estado: e.estado ?? null,
       principal: e.principal,
       bairro: e.bairro,
     })),
   };
 }
+
+const clienteJaExiste = (existente) =>
+  new ErroHttp(409, `Já existe cliente com este telefone: ${existente.nome}`, {
+    codigo: 'CLIENTE_JA_EXISTE',
+    detalhes: { cliente: clienteDaEquipe(existente) },
+  });
+
+const clienteNaoEncontrado = () => new ErroHttp(404, 'Cliente não encontrado', { codigo: 'NAO_ENCONTRADO' });
 
 /**
  * Busca por nome, ignorando acento e maiúsculas ("joao" acha "João", pela
@@ -139,33 +159,55 @@ export async function buscarClientes(busca) {
 }
 
 /**
- * Cadastro rápido: cliente + endereço principal, numa transação. Telefone já
- * cadastrado = 409 CLIENTE_JA_EXISTE com o cliente existente (o PDV seleciona ele).
+ * Cadastro rápido: cliente (+ endereço principal, se vier), numa transação.
+ * Sem endereço: encomenda retirada no balcão. Telefone já cadastrado = 409
+ * CLIENTE_JA_EXISTE com o cliente existente (o PDV seleciona ele).
  */
-export async function criarCliente({ nome, telefone, endereco }) {
+export async function criarCliente({ nome, telefone, email = null, observacao = null, endereco = null }) {
   const existente = await equipeRepo.buscarClientePorTelefone(telefone);
-  if (existente) {
-    throw new ErroHttp(409, `Já existe cliente com este telefone: ${existente.nome}`, {
-      codigo: 'CLIENTE_JA_EXISTE',
-      detalhes: { cliente: clienteDaEquipe(existente) },
-    });
-  }
+  if (existente) throw clienteJaExiste(existente);
   const id = await prisma.$transaction(async (tx) => {
-    const bairro = await pedidoRepo.buscarBairro(endereco.bairroId, tx);
-    if (!bairro?.ativo) throw new ErroHttp(422, 'Não entregamos neste bairro', { codigo: 'BAIRRO_INVALIDO' });
-    const cliente = await equipeRepo.criarCliente({ nome, telefone }, tx);
-    await tx.endereco.create({ data: { ...endereco, clienteId: cliente.id, principal: true } });
+    if (endereco) {
+      const bairro = await pedidoRepo.buscarBairro(endereco.bairroId, tx);
+      if (!bairro?.ativo) throw new ErroHttp(422, 'Não entregamos neste bairro', { codigo: 'BAIRRO_INVALIDO' });
+    }
+    const cliente = await equipeRepo.criarCliente({ nome, telefone, email, observacao }, tx);
+    if (endereco) await tx.endereco.create({ data: { ...endereco, clienteId: cliente.id, principal: true } });
     return cliente.id;
   });
   return clienteDaEquipe(await equipeRepo.buscarClientePorId(id));
 }
 
+/**
+ * Edição pelo PDV. Cadastro do site (login Google): nome e e-mail são do
+ * cliente e não mudam aqui; o telefone só é preenchido se estiver vazio; a
+ * observação (anotação da equipe) muda sempre. Telefone de outro cliente = 409.
+ */
+export async function atualizarCliente(id, { nome, telefone, email = null, observacao = null }) {
+  const atual = await equipeRepo.buscarClientePorId(id);
+  if (!atual) throw clienteNaoEncontrado();
+  const dados = { observacao };
+  if (!atual.googleId) Object.assign(dados, { nome, telefone, email });
+  else if (!atual.telefone) dados.telefone = telefone;
+  if (dados.telefone && dados.telefone !== atual.telefone) {
+    const outro = await equipeRepo.buscarClientePorTelefone(dados.telefone, undefined, id);
+    if (outro) throw clienteJaExiste(outro);
+  }
+  await equipeRepo.atualizarCliente(id, dados);
+  return clienteDaEquipe(await equipeRepo.buscarClientePorId(id));
+}
+
 /** Endereço novo para cliente existente (vira o principal: é para onde vai agora). */
 export async function adicionarEndereco(clienteId, endereco) {
-  if (!(await equipeRepo.buscarClientePorId(clienteId))) {
-    throw new ErroHttp(404, 'Cliente não encontrado', { codigo: 'NAO_ENCONTRADO' });
-  }
+  if (!(await equipeRepo.buscarClientePorId(clienteId))) throw clienteNaoEncontrado();
   await enderecoService.criar(clienteId, { ...endereco, principal: true });
+  return clienteDaEquipe(await equipeRepo.buscarClientePorId(clienteId));
+}
+
+/** Corrige um endereço do cliente (de outro cliente = 404); vira o principal, como o novo. */
+export async function atualizarEndereco(clienteId, enderecoId, endereco) {
+  if (!(await equipeRepo.buscarClientePorId(clienteId))) throw clienteNaoEncontrado();
+  await enderecoService.atualizar(clienteId, enderecoId, { ...endereco, principal: true });
   return clienteDaEquipe(await equipeRepo.buscarClientePorId(clienteId));
 }
 

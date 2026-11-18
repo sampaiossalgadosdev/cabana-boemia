@@ -148,7 +148,15 @@ function criarMontador(colunas) {
 function origem(pedido) {
   const canal = NOME_CANAL[pedido.canal] ?? pedido.canal;
   if (pedido.canal === 'SALAO') return pedido.mesaRotulo ? `${canal} - Mesa ${pedido.mesaRotulo}` : canal;
-  return `${canal} - Delivery`;
+  return `${canal} - ${pedido.encomenda ? 'Encomenda' : 'Delivery'}`;
+}
+
+/** Encomenda: horário marcado e retirada no balcão, em destaque logo abaixo da origem. */
+function blocoEncomenda(m, pedido) {
+  if (!pedido.encomenda) return;
+  if (pedido.agendadoPara) m.centro(`PARA ${formatarDataHora(pedido.agendadoPara)}`, { negrito: true });
+  if (pedido.retirarNoBalcao) m.centro('RETIRAR NO BALCÃO', { negrito: true });
+  m.separador();
 }
 
 function blocoCliente(m, pedido) {
@@ -175,22 +183,34 @@ function blocoItens(m, pedido, { observacoes = true, itens = pedido.itens } = {}
       m.texto(item.observacao, { negrito: true, primeiraLinha: `${' '.repeat(qtd.length)}OBS: `, recuo: qtd.length + 5 });
     }
   }
+  // Observação do pedido inteiro (lançado no PDV), também em destaque.
+  if (observacoes && pedido.observacao) {
+    m.texto(pedido.observacao, { negrito: true, primeiraLinha: 'OBS DO PEDIDO: ', recuo: 15 });
+  }
   m.separador();
 }
 
 function blocoTotais(m, pedido) {
-  if (pedido.taxaEntregaCentavos > 0 || pedido.enderecoTexto) {
-    m.valor('Subtotal', formatarDinheiro(pedido.subtotalCentavos));
+  const entrega = pedido.taxaEntregaCentavos > 0 || pedido.enderecoTexto;
+  if (entrega || pedido.descontoCentavos > 0) m.valor('Subtotal', formatarDinheiro(pedido.subtotalCentavos));
+  if (entrega) {
     // Entrega sem taxa (frete grátis ou bairro sem taxa): "Grátis", não "R$ 0,00".
     const gratis = pedido.enderecoTexto && pedido.taxaEntregaCentavos === 0;
     m.valor('Taxa de entrega', gratis ? 'Grátis' : formatarDinheiro(pedido.taxaEntregaCentavos));
   }
+  if (pedido.descontoCentavos > 0) m.valor('Desconto', `-${formatarDinheiro(pedido.descontoCentavos)}`);
   m.valor('TOTAL', formatarDinheiro(pedido.totalCentavos), { negrito: true });
 }
 
 function blocoPagamento(m, pedido) {
   if (!pedido.formaPagamento) return;
-  m.valor('Pagamento', NOME_PAGAMENTO[pedido.formaPagamento] ?? pedido.formaPagamento, { negrito: true });
+  const forma = NOME_PAGAMENTO[pedido.formaPagamento] ?? pedido.formaPagamento;
+  // Já pago no balcão ("pago agora"): o entregador não cobra nem leva troco.
+  if (pedido.pagoEm) {
+    m.valor('Pagamento', `${forma} - JÁ PAGO`, { negrito: true });
+    return;
+  }
+  m.valor('Pagamento', forma, { negrito: true });
   if (pedido.formaPagamento === 'DINHEIRO' && pedido.trocoParaCentavos) {
     m.valor('Troco para', formatarDinheiro(pedido.trocoParaCentavos));
     m.valor('Levar de troco', formatarDinheiro(pedido.trocoParaCentavos - pedido.totalCentavos), { negrito: true });
@@ -202,6 +222,7 @@ function cabecalho(m, restaurante, titulo, pedido) {
   if (titulo) m.grande(titulo);
   m.grande(`PEDIDO #${pedido.numeroDia}`);
   m.centro(origem(pedido)).separador();
+  blocoEncomenda(m, pedido);
 }
 
 const hora = (instante) => formatarDataHora(instante).slice(11);
@@ -271,6 +292,7 @@ function cupomRelatorioDia(m, trabalho, restaurante) {
   m.valor('TOTAL VENDIDO', formatarDinheiro(r.totalCentavos), { negrito: true });
   m.valor('Ticket médio', formatarDinheiro(r.ticketMedioCentavos));
   m.valor('Taxas de entrega', formatarDinheiro(r.taxaEntregaCentavos));
+  if (r.descontoCentavos > 0) m.valor('Descontos', `-${formatarDinheiro(r.descontoCentavos)}`);
   m.separador();
   m.texto('Por forma de pagamento', { negrito: true });
   for (const f of r.porFormaPagamento) {

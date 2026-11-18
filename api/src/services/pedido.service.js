@@ -17,6 +17,7 @@ import * as pedidoRepo from '../repositories/pedido.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoRepo from '../repositories/endereco.repository.js';
 import * as clienteRepo from '../repositories/cliente.repository.js';
+import * as caixaRepo from '../repositories/caixa.repository.js';
 import { calcularTurnoAtivo } from './turno.service.js';
 import { calcularTempoEstimado } from './publico.service.js';
 import { garantirTelefone } from './cliente.service.js';
@@ -33,8 +34,17 @@ export const canalExigeLojaAberta = (canal) => canal === 'SITE';
 /** Comanda do salão nasce aberta; site e WhatsApp já confirmados (é quando baixa o estoque). */
 const STATUS_INICIAL = { SITE: 'CONFIRMADO', WHATSAPP: 'CONFIRMADO', SALAO: 'ABERTO' };
 
-/** Status de pedido "ainda aberto" (na fila; pode ser finalizado ou cancelado). */
-export const STATUS_ABERTOS = ['ABERTO', 'CONFIRMADO'];
+/**
+ * Status de pedido "ainda aberto" (no painel; pode ser finalizado ou cancelado).
+ * EM_PREPARO e SAIU_ENTREGA: andamento do delivery/encomenda, só no PDV.
+ */
+export const STATUS_ABERTOS = ['ABERTO', 'CONFIRMADO', 'EM_PREPARO', 'SAIU_ENTREGA'];
+
+/** Status que a equipe escolhe no painel (delivery/encomenda abertos). */
+export const STATUS_ANDAMENTO = ['ABERTO', 'EM_PREPARO', 'SAIU_ENTREGA'];
+
+/** Teto da taxa de entrega digitada no PDV (R$ 1.000,00): acima disso é erro de digitação. */
+export const TAXA_MANUAL_MAX_CENTAVOS = 100_000;
 
 export const OPCOES_TRANSACAO = { maxWait: 10_000, timeout: 15_000 };
 
@@ -111,6 +121,38 @@ export function calcularValores(itens, produtosPorId, taxaEntregaCentavos = 0) {
   });
   const subtotalCentavos = linhas.reduce((s, l) => s + l.totalCentavos, 0);
   return { linhas, subtotalCentavos, taxaEntregaCentavos, totalCentavos: subtotalCentavos + taxaEntregaCentavos };
+}
+
+/**
+ * Ajustes da equipe (nunca do site): taxa digitada no lugar da do bairro e
+ * desconto (até o subtotal dos itens). total = subtotal + taxa − desconto.
+ */
+export function aplicarAjustes(valores, { descontoCentavos = 0, taxaManualCentavos = null } = {}) {
+  const taxaEntregaCentavos = taxaManualCentavos ?? valores.taxaEntregaCentavos;
+  if (descontoCentavos > valores.subtotalCentavos) {
+    const mensagem = 'O desconto não pode ser maior que o valor dos itens';
+    throw new ErroHttp(400, mensagem, { codigo: 'DESCONTO_INVALIDO', detalhes: [{ campo: 'descontoCentavos', mensagem }] });
+  }
+  return {
+    ...valores,
+    taxaEntregaCentavos,
+    descontoCentavos,
+    totalCentavos: valores.subtotalCentavos + taxaEntregaCentavos - descontoCentavos,
+  };
+}
+
+/**
+ * Encomenda: horário no futuro e no MESMO dia operacional de agora (decisão
+ * do dono: por enquanto, só encomendas para hoje). 422 AGENDAMENTO_INVALIDO.
+ */
+export function validarAgendamento(agendadoPara, agora, horaVirada) {
+  const erro = (mensagem) =>
+    new ErroHttp(422, mensagem, { codigo: 'AGENDAMENTO_INVALIDO', detalhes: [{ campo: 'agendadoPara', mensagem }] });
+  if (!(agendadoPara instanceof Date) || Number.isNaN(agendadoPara.getTime())) throw erro('Informe a data e o horário');
+  if (agendadoPara.getTime() <= agora.getTime()) throw erro('O horário da encomenda já passou');
+  if (diaOperacional(agendadoPara, horaVirada) !== diaOperacional(agora, horaVirada)) {
+    throw erro('Por enquanto, encomendas só para o expediente de hoje');
+  }
 }
 
 /**
@@ -206,11 +248,17 @@ export function pedidoPublico(p) {
     bairroNome: p.bairroNome,
     subtotalCentavos: p.subtotalCentavos,
     taxaEntregaCentavos: p.taxaEntregaCentavos,
+    descontoCentavos: p.descontoCentavos ?? 0,
     totalCentavos: p.totalCentavos,
     formaPagamento: p.formaPagamento,
     trocoParaCentavos: p.trocoParaCentavos,
+    pagoEm: p.pagoEm ?? null,
     mesaRotulo: p.mesaRotulo,
     tempoEstimadoMin: p.tempoEstimadoMin,
+    encomenda: p.encomenda ?? false,
+    agendadoPara: p.agendadoPara ?? null,
+    retirarNoBalcao: p.retirarNoBalcao ?? false,
+    observacao: p.observacao ?? null,
     criadoEm: p.criadoEm,
     itens: p.itens.map((i) => ({
       id: i.id,
@@ -222,6 +270,20 @@ export function pedidoPublico(p) {
       totalCentavos: i.totalCentavos,
       observacao: i.observacao,
     })),
+  };
+}
+
+/**
+ * Pedido como a equipe vê (lista do PDV e eventos do socket): o público +
+ * dia operacional, quem registrou e quando encerrou. Nunca vai para o site.
+ */
+export function pedidoDaEquipe(p) {
+  return {
+    ...pedidoPublico(p),
+    dataRef: p.dataRef ? new Date(p.dataRef).toISOString().slice(0, 10) : null,
+    registradoPor: p.criadoPor?.nome ?? null,
+    finalizadoEm: p.finalizadoEm ?? null,
+    canceladoEm: p.canceladoEm ?? null,
   };
 }
 
@@ -295,6 +357,10 @@ export async function estornarVendas(tx, vendas, usuarioId = null) {
  *   cliente?: { id?: number, nome: string, telefone?: string | null } | null,
  *   endereco?: { texto: string, bairroId: number } | null,
  *   pagamento?: { forma?: string | null, trocoParaCentavos?: number | null },
+ *   entrega?: { encomenda?: boolean, agendadoPara?: Date | null, retirarNoBalcao?: boolean },
+ *   ajustes?: { descontoCentavos?: number, taxaManualCentavos?: number | null },  // só equipe (WHATSAPP)
+ *   observacao?: string | null,
+ *   pagoAgora?: boolean,  // só equipe: grava pagoEm + caixaId (exige caixa aberto)
  *   usuarioId?: number | null,
  *   mesaRotulo?: string | null,
  *   chaveIdempotencia?: string | null,
@@ -309,6 +375,10 @@ export async function criarPedido({
   cliente = null,
   endereco = null,
   pagamento = {},
+  entrega = {},
+  ajustes = {},
+  observacao = null,
+  pagoAgora = false,
   usuarioId = null,
   mesaRotulo = null,
   chaveIdempotencia = null,
@@ -320,6 +390,29 @@ export async function criarPedido({
   if (canal === 'SITE' && !Number.isInteger(totalEsperadoCentavos)) {
     throw new ErroHttp(400, 'Informe o total do pedido', { codigo: 'VALIDACAO' });
   }
+  const ent = {
+    encomenda: entrega.encomenda === true,
+    agendadoPara: entrega.agendadoPara ?? null,
+    retirarNoBalcao: entrega.retirarNoBalcao === true,
+  };
+  const aj = { descontoCentavos: ajustes.descontoCentavos ?? 0, taxaManualCentavos: ajustes.taxaManualCentavos ?? null };
+  // Encomenda, retirada, desconto, taxa digitada e "pago agora" são da equipe no
+  // delivery: o site nunca manda (preço e taxa do site saem só do banco).
+  const temExtras = ent.encomenda || ent.retirarNoBalcao || aj.descontoCentavos !== 0 || aj.taxaManualCentavos != null || pagoAgora;
+  if (canal !== 'WHATSAPP' && temExtras) {
+    throw new ErroHttp(400, 'Opção não permitida neste canal', { codigo: 'VALIDACAO' });
+  }
+  if (ent.retirarNoBalcao && (!ent.encomenda || endereco)) {
+    throw new ErroHttp(400, 'Retirada no balcão é só para encomenda, sem endereço', { codigo: 'VALIDACAO' });
+  }
+  if (!Number.isInteger(aj.descontoCentavos) || aj.descontoCentavos < 0) {
+    throw new ErroHttp(400, 'Desconto inválido', { codigo: 'DESCONTO_INVALIDO' });
+  }
+  const taxa = aj.taxaManualCentavos;
+  if (taxa != null && (!Number.isInteger(taxa) || taxa < 0 || taxa > TAXA_MANUAL_MAX_CENTAVOS)) {
+    throw new ErroHttp(400, 'Taxa de entrega inválida', { codigo: 'VALIDACAO' });
+  }
+  if (ent.retirarNoBalcao) aj.taxaManualCentavos = 0; // retirada nunca tem taxa
 
   if (chaveIdempotencia) {
     const existente = await pedidoRepo.buscarPorChave(chaveIdempotencia);
@@ -336,6 +429,10 @@ export async function criarPedido({
           cliente,
           endereco,
           pagamento,
+          entrega: ent,
+          ajustes: aj,
+          observacao,
+          pagoAgora,
           usuarioId,
           mesaRotulo,
           chaveIdempotencia,
@@ -359,10 +456,9 @@ export async function criarPedido({
   }
 
   // Só depois do commit: a equipe nunca recebe pedido que não existe.
-  const pedido = pedidoPublico(resultado.pedido);
-  emitirParaEquipe('pedido:novo', pedido);
+  emitirParaEquipe('pedido:novo', pedidoDaEquipe(resultado.pedido));
   emitirParaEquipe('impressao:nova', resultado.trabalho);
-  return { pedido, criado: true };
+  return { pedido: pedidoPublico(resultado.pedido), criado: true };
 }
 
 function reaproveitar(existente, cliente) {
@@ -373,6 +469,16 @@ function reaproveitar(existente, cliente) {
 }
 
 async function criarNaTransacao(tx, d) {
+  // 0. "Pago agora": trava o caixa aberto antes de tudo (mesma ordem de travas
+  //    da finalização: caixa → resto). O pedido já entra neste caixa.
+  let caixaId = null;
+  if (d.pagoAgora) {
+    caixaId = await caixaRepo.travarAbertoCompartilhado(tx);
+    if (!caixaId) {
+      throw new ErroHttp(409, 'O caixa está fechado. Abra o caixa para continuar.', { codigo: 'CAIXA_FECHADO' });
+    }
+  }
+
   // 1. Loja aberta agora? (só o SITE; a equipe lança fora do horário)
   const turno = calcularTurnoAtivo(await turnoRepo.listarAtivosComHorarios(tx), d.agora);
   if (!turno && canalExigeLojaAberta(d.canal)) {
@@ -409,7 +515,12 @@ async function criarNaTransacao(tx, d) {
   const freteGratis = freteGratisDaConfig(config, { canal: d.canal });
   const doItens = calcularValores(d.itens, produtosPorId);
   const taxa = bairro ? taxaDeEntrega(bairro.taxaCentavos, doItens.subtotalCentavos, freteGratis) : 0;
-  const valores = { ...doItens, taxaEntregaCentavos: taxa, totalCentavos: doItens.subtotalCentavos + taxa };
+  // Ajustes (desconto, taxa digitada) só chegam pela equipe; no site ficam zerados.
+  const valores = aplicarAjustes(
+    { ...doItens, taxaEntregaCentavos: taxa, totalCentavos: doItens.subtotalCentavos + taxa },
+    d.ajustes,
+  );
+  if (d.entrega.encomenda) validarAgendamento(d.entrega.agendadoPara, d.agora, horaViradaDe(config));
   if (d.canal === 'SITE') {
     conferirTotalEsperado(d.totalEsperadoCentavos, valores, { taxaBairroCentavos: bairro?.taxaCentavos ?? null, freteGratis });
   }
@@ -437,11 +548,19 @@ async function criarNaTransacao(tx, d) {
       bairroNome: bairro?.nome ?? null,
       subtotalCentavos: valores.subtotalCentavos,
       taxaEntregaCentavos: valores.taxaEntregaCentavos,
+      descontoCentavos: valores.descontoCentavos,
       totalCentavos: valores.totalCentavos,
       formaPagamento: d.pagamento?.forma ?? null,
       trocoParaCentavos: d.pagamento?.trocoParaCentavos ?? null,
       mesaRotulo: d.mesaRotulo,
-      tempoEstimadoMin: config ? calcularTempoEstimado(config, d.agora) : null,
+      // Encomenda tem horário marcado: sem "tempo estimado".
+      tempoEstimadoMin: config && !d.entrega.encomenda ? calcularTempoEstimado(config, d.agora) : null,
+      encomenda: d.entrega.encomenda,
+      agendadoPara: d.entrega.encomenda ? d.entrega.agendadoPara : null,
+      retirarNoBalcao: d.entrega.retirarNoBalcao,
+      observacao: d.observacao,
+      pagoEm: d.pagoAgora ? d.agora : null,
+      caixaId,
       criadoPorId: d.usuarioId,
       chaveIdempotencia: d.chaveIdempotencia,
     },
@@ -514,25 +633,89 @@ export async function ultimoPedidoDoCliente(clienteId) {
  * atômica, número do dia, impressão. Sem trava de horário (canal da equipe).
  */
 export async function criarPedidoDoWhatsapp(
-  { clienteId, enderecoId, itens, formaPagamento, trocoParaCentavos, chaveIdempotencia },
+  {
+    clienteId,
+    enderecoId,
+    itens,
+    formaPagamento,
+    trocoParaCentavos,
+    chaveIdempotencia,
+    encomenda = false,
+    agendadoPara = null,
+    retirarNoBalcao = false,
+    descontoCentavos = 0,
+    taxaEntregaCentavos = null,
+    observacao = null,
+    pagoAgora = false,
+  },
   { usuarioId, agora } = {},
 ) {
   const cliente = await clienteRepo.buscarPorId(clienteId);
   if (!cliente) throw new ErroHttp(422, 'Escolha o cliente', { codigo: 'CLIENTE_INVALIDO' });
-  const endereco = await enderecoRepo.buscarDoCliente(cliente.id, enderecoId);
-  if (!endereco) {
-    throw new ErroHttp(422, 'Escolha um endereço de entrega do cliente', { codigo: 'ENDERECO_INVALIDO' });
+  // Retirada no balcão (só encomenda) não tem endereço; o resto exige um endereço do cliente.
+  let endereco = null;
+  if (!retirarNoBalcao) {
+    endereco = enderecoId ? await enderecoRepo.buscarDoCliente(cliente.id, enderecoId) : null;
+    if (!endereco) {
+      throw new ErroHttp(422, 'Escolha um endereço de entrega do cliente', { codigo: 'ENDERECO_INVALIDO' });
+    }
   }
   return criarPedido({
     canal: 'WHATSAPP',
     itens,
     cliente: { id: cliente.id, nome: cliente.nome, telefone: cliente.telefone },
-    endereco: { texto: formatarEndereco(endereco), bairroId: endereco.bairro.id },
+    endereco: endereco && { texto: formatarEndereco(endereco), bairroId: endereco.bairro.id },
     pagamento: { forma: formaPagamento, trocoParaCentavos: trocoParaCentavos ?? null },
+    entrega: { encomenda, agendadoPara, retirarNoBalcao },
+    ajustes: { descontoCentavos, taxaManualCentavos: taxaEntregaCentavos },
+    observacao,
+    pagoAgora,
     usuarioId,
     chaveIdempotencia,
     agora,
   });
+}
+
+// ───────── Andamento no painel do PDV ─────────
+
+function pedidoEncerrado(status) {
+  return new ErroHttp(409, `Pedido já está ${status === 'CANCELADO' ? 'cancelado' : 'finalizado'}`, {
+    codigo: 'PEDIDO_ENCERRADO',
+  });
+}
+
+/**
+ * Andamento do delivery/encomenda (Em aberto, Em preparo, Saiu para entrega).
+ * Só pedido do site/WhatsApp (comanda do salão = 404); UPDATE condicionado
+ * ao status aberto (já encerrado = 409 PEDIDO_ENCERRADO).
+ */
+export async function alterarStatus(id, status) {
+  if (!STATUS_ANDAMENTO.includes(status)) throw new ErroHttp(400, 'Status inválido', { codigo: 'VALIDACAO' });
+  const pedido = await prisma.$transaction(async (tx) => {
+    const atual = await pedidoRepo.buscarStatus(id, tx);
+    if (!atual || atual.canal === 'SALAO') throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+    if ((await pedidoRepo.atualizarSeAberto(id, { status }, STATUS_ABERTOS, tx)) === 0) throw pedidoEncerrado(atual.status);
+    return pedidoRepo.buscarPorId(id, tx);
+  }, OPCOES_TRANSACAO);
+  const equipe = pedidoDaEquipe(pedido);
+  emitirParaEquipe('pedido:atualizado', equipe);
+  return equipe;
+}
+
+/** Novo horário de uma encomenda aberta (mesmas regras da criação: futuro e no mesmo dia operacional). */
+export async function alterarAgendamento(id, agendadoPara, agora = new Date()) {
+  const pedido = await prisma.$transaction(async (tx) => {
+    const atual = await pedidoRepo.buscarPorId(id, tx);
+    if (!atual || atual.canal === 'SALAO') throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+    if (!STATUS_ABERTOS.includes(atual.status)) throw pedidoEncerrado(atual.status);
+    if (!atual.encomenda) throw new ErroHttp(409, 'Este pedido não é encomenda', { codigo: 'NAO_E_ENCOMENDA' });
+    validarAgendamento(agendadoPara, agora, horaViradaDe(await pedidoRepo.buscarConfiguracao(tx)));
+    if ((await pedidoRepo.atualizarSeAberto(id, { agendadoPara }, STATUS_ABERTOS, tx)) === 0) throw pedidoEncerrado(atual.status);
+    return pedidoRepo.buscarPorId(id, tx);
+  }, OPCOES_TRANSACAO);
+  const equipe = pedidoDaEquipe(pedido);
+  emitirParaEquipe('pedido:atualizado', equipe);
+  return equipe;
 }
 
 // ───────── Cancelamento ─────────
@@ -566,8 +749,7 @@ export async function cancelarPedido(id, { usuarioId = null, agora = new Date() 
     if (count === 0) {
       const atual = await pedidoRepo.buscarStatus(id, tx);
       if (!atual) throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
-      const situacao = atual.status === 'CANCELADO' ? 'cancelado' : 'finalizado';
-      throw new ErroHttp(409, `Pedido já está ${situacao}`, { codigo: 'PEDIDO_ENCERRADO' });
+      throw pedidoEncerrado(atual.status);
     }
 
     await estornarVendas(tx, await pedidoRepo.vendasDoPedido(id, tx), usuarioId);
@@ -580,8 +762,8 @@ export async function cancelarPedido(id, { usuarioId = null, agora = new Date() 
     return { pedido, trabalho };
   }, OPCOES_TRANSACAO);
 
-  const publico = pedidoPublico(pedido);
-  emitirParaEquipe('pedido:atualizado', publico);
+  const equipe = pedidoDaEquipe(pedido);
+  emitirParaEquipe('pedido:atualizado', equipe);
   if (trabalho) emitirParaEquipe('impressao:nova', trabalho);
-  return publico;
+  return equipe;
 }

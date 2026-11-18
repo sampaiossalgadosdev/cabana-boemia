@@ -1,0 +1,363 @@
+/* Painel de delivery/encomendas (tela inicial do Delivery). Só cores do tokens.css. */
+
+.visualmente-oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.botao-icone {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 2px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+  color: var(--cor-texto);
+  cursor: pointer;
+}
+.botao-icone:hover:not(:disabled) {
+  border-color: var(--cor-vermelho);
+  color: var(--cor-vermelho);
+}
+.botao-icone:focus-visible {
+  outline: 3px solid var(--cor-dourado);
+  outline-offset: 2px;
+}
+.botao-icone--ativo {
+  border-color: var(--cor-vermelho);
+  background: var(--cor-vermelho);
+  color: var(--cor-branco);
+}
+
+.campo select:focus-visible,
+.campo textarea:focus-visible {
+  outline: 3px solid var(--cor-dourado);
+  outline-offset: 2px;
+}
+.campo textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+  font: inherit;
+  font-weight: 400;
+  resize: vertical;
+}
+
+/* ───────── Filtros ───────── */
+
+/* Painel ocupa a altura da tela: filtros em cima e as duas caixas até embaixo,
+   com o mesmo respiro (20 px) em cima, entre as partes e embaixo. */
+.painel-delivery {
+  display: grid;
+  /* Esquerda (≈60%): filtros em cima da lista. Direita (≈40%): logo + botão, do topo até embaixo. */
+  grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 20px;
+  height: calc(100vh - var(--altura-barra) - 42px);
+}
+.painel-delivery__filtros {
+  grid-column: 1;
+  grid-row: 1;
+}
+/* O corpo só agrupa no JSX: lista e lado viram células da grade do painel. */
+.painel-delivery__corpo {
+  display: contents;
+}
+.lista-pedidos {
+  grid-column: 1;
+  grid-row: 2;
+}
+.painel-delivery__lado {
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+.painel-delivery__filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+}
+.campo--inline {
+  gap: 4px;
+  font-size: 14px;
+}
+.campo--inline input,
+.campo--inline select {
+  min-height: 44px;
+}
+.campo--busca {
+  position: relative;
+  flex: 1 1 280px;
+}
+.campo--busca input {
+  width: 100%;
+  padding-left: 40px;
+}
+.campo__icone {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  color: var(--cor-texto-suave);
+  pointer-events: none;
+}
+
+/* ───────── Lista (≈60%) + lado da logo (≈40%) ───────── */
+
+
+
+.lista-pedidos {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+  overflow: hidden;
+}
+.lista-pedidos__titulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 14px 18px;
+  border-bottom: 3px solid var(--cor-dourado);
+  font-size: 20px;
+}
+.lista-pedidos .aviso {
+  margin: 12px 16px 0;
+}
+.lista-pedidos__vazia {
+  margin: 0;
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--cor-texto-suave);
+}
+/* Muitos pedidos: a lista rola por dentro da caixa. */
+.lista-pedidos__itens {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.linha-pedido {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 12px 18px;
+  border-left: 4px solid transparent;
+  background: var(--cor-superficie);
+}
+/* Fundo alternado para facilitar a leitura. */
+.linha-pedido:nth-child(even) {
+  background: var(--cor-creme);
+}
+.linha-pedido--novo {
+  border-left-color: var(--cor-laranja);
+  animation: chegar 0.6s ease-out 3;
+}
+.linha-pedido__info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.linha-pedido__info p {
+  margin: 0;
+}
+.linha-pedido__titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.linha-pedido__titulo .selo {
+  text-transform: none;
+}
+.linha-pedido__texto {
+  color: var(--cor-texto-suave);
+  overflow-wrap: anywhere;
+}
+.linha-pedido__tempo {
+  font-weight: 600;
+}
+.linha-pedido__tempo--agendado {
+  color: var(--cor-ok);
+}
+.linha-pedido__atraso {
+  color: var(--cor-vermelho);
+  font-weight: 800;
+}
+.linha-pedido__registro {
+  font-size: 12px;
+  color: var(--cor-texto-suave);
+}
+.linha-pedido__lado {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+}
+.linha-pedido__valor {
+  margin: 0;
+  text-align: right;
+}
+.linha-pedido__valor span {
+  display: block;
+  font-size: 13px;
+  color: var(--cor-texto-suave);
+}
+.linha-pedido__valor strong {
+  font-size: 20px;
+  color: var(--cor-vermelho-escuro);
+}
+
+/* Status com ícone e cor. */
+.status-pedido {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-weight: 700;
+}
+.status-pedido--aberto {
+  color: var(--cor-laranja);
+}
+.status-pedido--preparo {
+  color: var(--cor-ok);
+}
+.status-pedido--saiu {
+  color: var(--cor-preto);
+}
+.status-pedido--saiu svg {
+  color: var(--cor-dourado);
+}
+.status-pedido--finalizado {
+  color: var(--cor-texto-suave);
+}
+.status-pedido--cancelado {
+  color: var(--cor-vermelho-escuro);
+}
+.selo--pago {
+  background: var(--cor-ok);
+  color: var(--cor-branco);
+}
+
+/* Logo e NOVO PEDIDO centralizados na vertical. */
+.painel-delivery__lado {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 24px;
+  padding: 32px 24px;
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+}
+.painel-delivery__logo {
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+}
+/* ≈40% menor que antes (84 px de altura, largura toda, fonte 26). */
+.botao--novo-pedido {
+  width: 60%;
+  min-width: 220px;
+  min-height: 52px;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+/* ───────── Opções do pedido (diálogo) ───────── */
+
+.detalhe-pedido {
+  width: min(680px, calc(100vw - 32px));
+}
+.detalhe-pedido .painel__corpo {
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+.detalhe-pedido h2 {
+  font-size: 20px;
+  text-transform: uppercase;
+}
+.detalhe-pedido__cliente {
+  display: grid;
+  gap: 2px;
+}
+.detalhe-pedido__acao {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-creme);
+}
+.detalhe-pedido__botoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.detalhe-pedido .segmentado {
+  display: inline-flex;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1000px) {
+  .painel-delivery {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    height: auto;
+  }
+  .painel-delivery__filtros,
+  .lista-pedidos,
+  .painel-delivery__lado {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .painel-delivery__lado {
+    order: -1;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    padding: 16px;
+  }
+  .lista-pedidos {
+    max-height: none;
+  }
+}
+
+/* Filtros numa linha só (coluna da lista): Atualizar só com o ícone. */
+.painel-delivery__filtros {
+  flex-wrap: nowrap;
+}
+.painel-delivery__filtros .campo--busca {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.painel-delivery__atualizar {
+  flex: none;
+  color: var(--cor-vermelho);
+}
+@media (max-width: 1000px) {
+  .painel-delivery__filtros {
+    flex-wrap: wrap;
+  }
+}

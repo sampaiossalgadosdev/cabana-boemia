@@ -139,6 +139,49 @@ describe('cupom.js', () => {
     }
   });
 
+  test('encomenda retirada no balcão, com desconto, observação do pedido e já paga', () => {
+    const trabalho = structuredClone(pedidoSite);
+    Object.assign(trabalho.pedido, {
+      canal: 'WHATSAPP',
+      encomenda: true,
+      agendadoPara: '2026-11-14T23:30:00.000Z', // 20:30 em São Paulo
+      retirarNoBalcao: true,
+      enderecoTexto: null,
+      bairroNome: null,
+      taxaEntregaCentavos: 0,
+      descontoCentavos: 700,
+      totalCentavos: 6000,
+      formaPagamento: 'PIX',
+      trocoParaCentavos: null,
+      pagoEm: '2026-11-14T22:00:00.000Z',
+      observacao: 'Bolo com vela de 30 anos',
+      tempoEstimadoMin: null,
+    });
+    for (const colunas of [48, 32]) {
+      const linhas = montarCupom(trabalho, { colunas });
+      for (const l of linhas) assert.equal(l.texto.length, l.grande ? colunas / 2 : colunas);
+      const texto = cupomParaTexto(linhas, colunas);
+      assert.match(texto, /WhatsApp - Encomenda/);
+      assert.match(texto, /PARA 14\/11\/2026 20:30/);
+      assert.match(texto, /RETIRAR NO BALCÃO/);
+      assert.match(texto, /OBS DO PEDIDO: Bolo/);
+      assert.match(texto, /Desconto +-R\$ 7,00/);
+      assert.doesNotMatch(texto, /Taxa de entrega/);
+      assert.match(texto, /Pix - JÁ PAGO/);
+      assert.doesNotMatch(texto, /Troco|Previsão/);
+      assert.ok(linhas.some((l) => l.negrito && l.texto.includes('RETIRAR NO BALC')));
+    }
+    // Cancelamento não repete a observação do pedido.
+    const cancel = cupomParaTexto(montarCupom({ ...trabalho, tipo: 'CANCELAMENTO' }, { colunas: 48 }), 48);
+    assert.doesNotMatch(cancel, /OBS DO PEDIDO/);
+  });
+
+  test('relatório do dia mostra descontos só quando houver', () => {
+    const com = cupomParaTexto(montarCupom({ ...relatorioDia, relatorio: { ...relatorioDia.relatorio, descontoCentavos: 1250 } }), 48);
+    assert.match(com, /Descontos +-R\$ 12,50/);
+    assert.doesNotMatch(cupomParaTexto(montarCupom(relatorioDia), 48), /Descontos/);
+  });
+
   test('largura e tipo inválidos são recusados', () => {
     assert.throws(() => montarCupom(pedidoSite, { colunas: 40 }), /Largura inválida/);
     assert.throws(() => montarCupom({ ...pedidoSite, tipo: 'OUTRO' }), /Tipo de cupom inválido/);

@@ -32,6 +32,8 @@ enum CanalPedido {
 enum StatusPedido {
   ABERTO
   CONFIRMADO
+  EM_PREPARO // delivery/encomenda: só uso interno do PDV (o cliente não vê)
+  SAIU_ENTREGA
   FINALIZADO
   CANCELADO
 }
@@ -113,6 +115,7 @@ model Cliente {
   nomeBusca    String
   email        String?
   telefone     String?
+  observacao   String?  @db.VarChar(300) // anotação da equipe (PDV)
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
@@ -130,6 +133,9 @@ model Endereco {
   complemento String?
   referencia  String?
   bairroId    Int
+  cep         String?  @db.VarChar(8) // só dígitos (PDV; o site não usa)
+  cidade      String?  @db.VarChar(60)
+  estado      String?  @db.VarChar(30)
   principal   Boolean  @default(false) // no máximo um por cliente (garantido no service)
   criadoEm    DateTime @default(now())
 
@@ -291,7 +297,14 @@ model Pedido {
   atualizadoEm        DateTime        @updatedAt
   finalizadoEm        DateTime?
   canceladoEm         DateTime?
-  caixaId             Int? // caixa em que foi FINALIZADO (gravado na finalização)
+  caixaId             Int? // caixa em que foi FINALIZADO (ou pago antes, no "pago agora")
+  /// Encomenda: entrega/retirada agendada (mesmo dia operacional). CHECK: encomenda = (agendadoPara não nulo).
+  encomenda           Boolean         @default(false)
+  agendadoPara        DateTime?
+  retirarNoBalcao     Boolean         @default(false) // só encomenda, sem endereço nem taxa (CHECK)
+  descontoCentavos    Int             @default(0) // só pedidos da equipe; total = subtotal + taxa − desconto
+  observacao          String?         @db.VarChar(200) // observação do pedido inteiro
+  pagoEm              DateTime? // "pago agora" no PDV: forma e caixaId gravados na criação
 
   cliente    Cliente?            @relation(fields: [clienteId], references: [id])
   caixa      Caixa?              @relation(fields: [caixaId], references: [id], onDelete: Restrict)

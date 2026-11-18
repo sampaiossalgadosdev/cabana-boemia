@@ -133,6 +133,7 @@ function Conteudo({ r, caixas }) {
         Fora dos totais: {r.cancelados.quantidade} pedido(s) cancelado(s) ({formatarReais(r.cancelados.totalCentavos)})
         {' · '}
         {r.itensRemovidos.quantidade} item(ns) removido(s) de comandas ({formatarReais(r.itensRemovidos.totalCentavos)})
+        {r.descontoCentavos > 0 && ` · Descontos dados no PDV: ${formatarReais(r.descontoCentavos)} (já descontados do total)`}
       </p>
 
       <div className="grade-relatorio">

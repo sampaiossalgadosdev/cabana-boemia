@@ -79,7 +79,7 @@ describe('armazém do refresh (safeStorage)', () => {
 });
 
 describe('handlers IPC', () => {
-  function montar({ logado = false } = {}) {
+  function montar({ logado = false, consultarCep } = {}) {
     const chamadas = [];
     const api = {
       logado: () => logado,
@@ -100,7 +100,7 @@ describe('handlers IPC', () => {
     const cfg = criarConfig({ caminho, apiUrlPadrao: 'http://x' });
     const config = { ...cfg, definirApiUrl: (u) => validarApiUrl(u) };
     const listarImpressoras = async () => ['EPSON TM-T20', 'Microsoft Print to PDF'];
-    return { h: criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao: '0.1.0' }), chamadas, agente, caminho };
+    return { h: criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao: '0.1.0', consultarCep }), chamadas, agente, caminho };
   }
 
   test('finalizar valida id e forma de pagamento antes de chamar a API', async () => {
@@ -156,6 +156,14 @@ describe('handlers IPC', () => {
           { produtoId: 3, quantidade: 2, observacao: 'sem cebola' },
           { produtoId: 4, quantidade: 1, observacao: null },
         ],
+        // Delivery comum: sem encomenda, sem desconto, taxa do bairro (null), paga na entrega.
+        encomenda: false,
+        agendadoPara: null,
+        retirarNoBalcao: false,
+        descontoCentavos: 0,
+        taxaEntregaCentavos: null,
+        observacao: null,
+        pagoAgora: false,
       },
     ]);
     for (const ruim of [null, { clienteId: 0, enderecoId: 1, itens: [], formaPagamento: 'PIX' }, { clienteId: 1, enderecoId: 1, itens: [], formaPagamento: 'FIADO' }]) {
@@ -259,8 +267,101 @@ describe('handlers IPC', () => {
     assert.deepEqual(chamadas[0][2], {
       nome: 'Ana',
       telefone: '43999990000',
-      endereco: { rua: 'R', numero: '1', complemento: null, referencia: 'praça', bairroId: 5 },
+      email: null,
+      observacao: null,
+      endereco: { rua: 'R', numero: '1', complemento: null, referencia: 'praça', bairroId: 5, cep: null, cidade: null, estado: null },
     });
+  });
+
+  test('cadastro sem endereço (retirada no balcão), edição de cliente e de endereço', async () => {
+    const { h, chamadas } = montar();
+    await h['clientes:criar']({ nome: 'Dai', telefone: '43999990000', email: 'd@x.com', observacao: 'vip', endereco: null });
+    await h['clientes:atualizar'](3, { nome: 'Dai', telefone: '43999990000', email: '', observacao: '', googleId: 'x' });
+    await h['clientes:atualizarEndereco'](3, 9, { rua: 'R', numero: '1', bairroId: 2, cep: '86460-000', cidade: 'Abatiá', estado: 'Paraná' });
+    assert.deepEqual(chamadas.map((c) => c.slice(0, 2)), [
+      ['POST', '/equipe/clientes'],
+      ['PUT', '/equipe/clientes/3'],
+      ['PUT', '/equipe/clientes/3/enderecos/9'],
+    ]);
+    assert.equal(chamadas[0][2].endereco, null);
+    assert.equal(chamadas[0][2].email, 'd@x.com');
+    assert.deepEqual(chamadas[1][2], { nome: 'Dai', telefone: '43999990000', email: null, observacao: null });
+    assert.equal(chamadas[2][2].cep, '86460-000');
+    assert.equal((await executar(h['clientes:atualizarEndereco'], [3, 0, {}])).ok, false);
+  });
+
+  test('painel: listar por dia, status e horário só com valores aceitos', async () => {
+    const { h, chamadas } = montar();
+    await h['pedidos:listar']('hoje');
+    await h['pedidos:listar']('2026-11-14');
+    await h['pedidos:status'](5, 'EM_PREPARO');
+    await h['pedidos:agendamento'](5, '2026-11-14T22:30:00-03:00');
+    for (const [canal, args] of [
+      ['pedidos:listar', ['ontem']],
+      ['pedidos:status', [5, 'FINALIZADO']],
+      ['pedidos:status', [0, 'ABERTO']],
+      ['pedidos:agendamento', [5, 'amanhã']],
+    ]) {
+      assert.equal((await executar(h[canal], args)).ok, false, `${canal} ${JSON.stringify(args)}`);
+    }
+    assert.deepEqual(chamadas, [
+      ['GET', '/equipe/pedidos?dataRef=hoje&canal=SITE,WHATSAPP&status=todos'],
+      ['GET', '/equipe/pedidos?dataRef=2026-11-14&canal=SITE,WHATSAPP&status=todos'],
+      ['PATCH', '/equipe/pedidos/5/status', { status: 'EM_PREPARO' }],
+      ['PATCH', '/equipe/pedidos/5/agendamento', { agendadoPara: '2026-11-15T01:30:00.000Z' }],
+    ]);
+  });
+
+  test('pedido da equipe: encomenda, retirada, desconto, taxa e pago agora; nada de preço', async () => {
+    const { h, chamadas } = montar();
+    await h['pedidos:criar']({
+      clienteId: 1, enderecoId: 4, itens: [{ produtoId: 2, quantidade: 1, precoCentavos: 1 }], formaPagamento: 'PIX',
+      encomenda: true, agendadoPara: '2026-11-14T22:30:00-03:00', retirarNoBalcao: true, taxaEntregaCentavos: 500,
+      descontoCentavos: 200, observacao: 'bolo', pagoAgora: true, totalCentavos: 1,
+    });
+    assert.deepEqual(chamadas[0][2], {
+      clienteId: 1,
+      enderecoId: null,
+      itens: [{ produtoId: 2, quantidade: 1, observacao: null }],
+      formaPagamento: 'PIX',
+      trocoParaCentavos: null,
+      chaveIdempotencia: undefined,
+      encomenda: true,
+      agendadoPara: '2026-11-15T01:30:00.000Z',
+      retirarNoBalcao: true,
+      descontoCentavos: 200,
+      taxaEntregaCentavos: null,
+      observacao: 'bolo',
+      pagoAgora: true,
+    });
+    // Delivery: retirada ignorada (só encomenda), taxa digitada vai; endereço obrigatório.
+    await h['pedidos:criar']({ clienteId: 1, enderecoId: 4, itens: [], formaPagamento: 'PIX', retirarNoBalcao: true, taxaEntregaCentavos: 700 });
+    assert.equal(chamadas[1][2].retirarNoBalcao, false);
+    assert.equal(chamadas[1][2].taxaEntregaCentavos, 700);
+    assert.equal(chamadas[1][2].agendadoPara, null);
+    assert.equal((await executar(h['pedidos:criar'], [{ clienteId: 1, itens: [], formaPagamento: 'PIX' }])).ok, false);
+    assert.equal((await executar(h['pedidos:criar'], [{ clienteId: 1, enderecoId: 4, itens: [], formaPagamento: 'PIX', encomenda: true }])).ok, false);
+  });
+
+  test('CEP: consulta injetada; só dígitos chegam ao ViaCEP; erros viram mensagem', async () => {
+    const { criarConsultaCep } = await import('../src/main/cep.js');
+    const urls = [];
+    const consultar = criarConsultaCep({
+      fetch: async (url) => {
+        urls.push(url);
+        if (url.includes('00000000')) return { ok: true, json: async () => ({ erro: 'true' }) };
+        if (url.includes('11111111')) throw new Error('sem rede');
+        return { ok: true, json: async () => ({ logradouro: 'Rua X', bairro: 'Centro', localidade: 'Abatiá', uf: 'PR' }) };
+      },
+    });
+    assert.deepEqual(await consultar('86.460-000'), { cep: '86460000', rua: 'Rua X', bairro: 'Centro', cidade: 'Abatiá', estado: 'Paraná' });
+    assert.deepEqual(urls, ['https://viacep.com.br/ws/86460000/json/']);
+    await assert.rejects(consultar('123'), (e) => e.codigo === 'VALIDACAO');
+    await assert.rejects(consultar('00000-000'), (e) => e.codigo === 'CEP_NAO_ENCONTRADO');
+    await assert.rejects(consultar('11111-111'), (e) => e.codigo === 'CEP_INDISPONIVEL');
+
+    const { h } = montar({ consultarCep: async (cep) => ({ cep }) });
+    assert.deepEqual(await h['cep:consultar']('86460000'), { cep: '86460000' });
   });
 
   test('erro da API leva os detalhes até o renderer', async () => {

@@ -25,12 +25,21 @@ export const SELECT_PEDIDO = {
   bairroNome: true,
   subtotalCentavos: true,
   taxaEntregaCentavos: true,
+  descontoCentavos: true,
   totalCentavos: true,
   formaPagamento: true,
   trocoParaCentavos: true,
+  pagoEm: true,
   mesaRotulo: true,
   tempoEstimadoMin: true,
+  encomenda: true,
+  agendadoPara: true,
+  retirarNoBalcao: true,
+  observacao: true,
   criadoEm: true,
+  finalizadoEm: true,
+  canceladoEm: true,
+  criadoPor: { select: { nome: true } },
   itens: { where: { canceladoEm: null }, select: SELECT_ITEM, orderBy: { id: 'asc' } },
 };
 
@@ -167,7 +176,13 @@ export async function finalizarSeAberto(id, { formaPagamento, trocoParaCentavos,
 }
 
 export function buscarStatus(id, db = prisma) {
-  return db.pedido.findUnique({ where: { id }, select: { id: true, status: true } });
+  return db.pedido.findUnique({ where: { id }, select: { id: true, status: true, canal: true, pagoEm: true } });
+}
+
+/** Atualiza só se ainda estiver aberto (UPDATE condicionado ao status). Devolve o count. */
+export async function atualizarSeAberto(id, dados, statusAbertos, db = prisma) {
+  const { count } = await db.pedido.updateMany({ where: { id, status: { in: statusAbertos } }, data: dados });
+  return count;
 }
 
 /**

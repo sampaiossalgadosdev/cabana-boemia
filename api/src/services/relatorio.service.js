@@ -4,7 +4,8 @@
  * - Venda = pedido FINALIZADO com finalizadoEm em [D virada, D+1 virada) local
  *   (o dinheiro entrou no expediente D; mesmo critério dos caixas do dia).
  * - Itens: só os NÃO cancelados de pedidos finalizados. A comanda recalcula o
- *   total sem os itens removidos, então Σ itens + Σ taxa = Σ total.
+ *   total sem os itens removidos, então Σ itens + Σ taxa − Σ desconto = Σ total
+ *   (desconto só existe em pedido lançado pela equipe no delivery).
  * - Cancelados (por canceladoEm no dia) e itens removidos aparecem à parte,
  *   fora dos totais.
  */
@@ -76,6 +77,7 @@ export async function relatorioDoDia(data, agora = new Date()) {
     ticketMedioCentavos: ticketMedio(totalCentavos, quantidadePedidos),
     subtotalCentavos: resumo._sum.subtotalCentavos ?? 0,
     taxaEntregaCentavos: resumo._sum.taxaEntregaCentavos ?? 0,
+    descontoCentavos: resumo._sum.descontoCentavos ?? 0,
     porFormaPagamento: completar(formas, 'formaPagamento', ORDEM_FORMAS.filter((f) => FORMAS_PAGAMENTO.includes(f))),
     porCanal: completar(canais, 'canal', CANAIS),
     topPorQuantidade: [...linhas].sort(porQuantidade).slice(0, TOP),

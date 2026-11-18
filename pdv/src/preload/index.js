@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('pdv', {
   },
   pedidos: {
     listarFila: () => chamar('pedidos:fila'),
+    listar: (dataRef) => chamar('pedidos:listar', String(dataRef ?? 'hoje')),
+    alterarStatus: (id, status) => chamar('pedidos:status', Number(id), String(status ?? '')),
+    alterarAgendamento: (id, agendadoPara) => chamar('pedidos:agendamento', Number(id), String(agendadoPara ?? '')),
     finalizar: (id, formaPagamento) => chamar('pedidos:finalizar', Number(id), String(formaPagamento ?? '')),
     cancelar: (id) => chamar('pedidos:cancelar', Number(id)),
     criar: (dados) => chamar('pedidos:criar', dados),
@@ -72,7 +75,13 @@ contextBridge.exposeInMainWorld('pdv', {
   clientes: {
     buscar: (busca) => chamar('clientes:buscar', String(busca ?? '')),
     criar: (dados) => chamar('clientes:criar', dados),
+    atualizar: (clienteId, dados) => chamar('clientes:atualizar', Number(clienteId), dados),
     adicionarEndereco: (clienteId, endereco) => chamar('clientes:adicionarEndereco', Number(clienteId), endereco),
+    atualizarEndereco: (clienteId, enderecoId, endereco) =>
+      chamar('clientes:atualizarEndereco', Number(clienteId), Number(enderecoId), endereco),
+  },
+  cep: {
+    consultar: (cep) => chamar('cep:consultar', String(cep ?? '')),
   },
   tempo: {
     obter: () => chamar('tempo:obter'),

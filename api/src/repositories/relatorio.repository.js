@@ -7,7 +7,7 @@ export function resumo(inicio, fim, db = prisma) {
   return db.pedido.aggregate({
     where: finalizadosEntre(inicio, fim),
     _count: { _all: true },
-    _sum: { totalCentavos: true, taxaEntregaCentavos: true, subtotalCentavos: true },
+    _sum: { totalCentavos: true, taxaEntregaCentavos: true, subtotalCentavos: true, descontoCentavos: true },
   });
 }
 

@@ -7,6 +7,18 @@ export const formatarPreco = (centavos) => moeda.format((centavos ?? 0) / 100);
 /** ISO (UTC) → "19:42" no horário de São Paulo. */
 export const formatarHora = (iso) => hora.format(new Date(iso));
 
+const dataHora = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/** ISO (UTC) → "14/11/2026 19:42" no horário de São Paulo. */
+export const formatarDataHora = (iso) => dataHora.format(new Date(iso)).replace(',', '');
+
 /** "43999990000" → "(43) 99999-0000". */
 export function formatarTelefone(t) {
   const d = String(t ?? '').replace(/\D/g, '');

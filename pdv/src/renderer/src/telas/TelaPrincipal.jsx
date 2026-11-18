@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { CAIXA_FECHADO_EVENTO, chamar, pdv } from '../lib/pdv.js';
 import { definirHoraVirada } from '../lib/caixa.js';
 import { BarraSuperior } from '../componentes/BarraSuperior.jsx';
-import { FilaPedidos } from '../componentes/FilaPedidos.jsx';
-import { NovoDelivery } from '../componentes/delivery/NovoDelivery.jsx';
+import { PainelDelivery } from '../componentes/painel/PainelDelivery.jsx';
+import { NovoPedido } from '../componentes/novo-pedido/NovoPedido.jsx';
 import { Salao } from '../componentes/salao/Salao.jsx';
 import { TelaAbrirCaixa } from '../componentes/caixa/TelaAbrirCaixa.jsx';
 import { PainelCaixa } from '../componentes/caixa/PainelCaixa.jsx';
@@ -19,6 +19,8 @@ export function TelaPrincipal({ usuario, aoSair }) {
   // undefined = ainda não sabe (carregando/sem rede): não bloqueia a tela.
   const [caixa, setCaixa] = useState(undefined);
   const [painelCaixa, setPainelCaixa] = useState(false);
+  // Aumenta a cada pedido lançado: o painel recarrega a lista (além do evento do socket).
+  const [recarga, setRecarga] = useState(0);
 
   const carregarCaixa = useCallback(async () => {
     try {
@@ -53,7 +55,7 @@ export function TelaPrincipal({ usuario, aoSair }) {
     return pdv.aoEvento('socket:status', setStatus);
   }, []);
 
-  // F2: novo delivery de qualquer lugar da tela principal.
+  // F2: novo pedido (delivery/encomenda) de qualquer lugar da tela principal.
   useEffect(() => {
     function aoTeclar(e) {
       // Com o painel da impressora aberto (modal), F2 não abre nada por trás.
@@ -85,7 +87,8 @@ export function TelaPrincipal({ usuario, aoSair }) {
     <div className="principal">
       <BarraSuperior aba={aba} aoTrocarAba={setAba} statusConexao={status} usuario={usuario}
         aoSair={sair} saindo={saindo} caixa={caixa} aoAbrirCaixa={() => setPainelCaixa(true)} />
-      <main className="conteudo">
+      {/* Novo pedido ocupa a tela toda, sem a margem creme. */}
+      <main className={`conteudo ${!semCaixa && aba === 'delivery' && lancando ? 'conteudo--cheio' : ''}`}>
         {aviso && (
           <p className="aviso-sucesso" role="status">
             {aviso}
@@ -98,16 +101,18 @@ export function TelaPrincipal({ usuario, aoSair }) {
               else setCaixa(c);
             }} />
         )}
-        {/* A fila fica montada mesmo no Salão, durante o lançamento e com o caixa fechado: o alerta continua tocando. */}
+        {/* O painel fica montado mesmo no Salão, durante o lançamento e com o caixa fechado: o alerta continua tocando. */}
         <div hidden={semCaixa || aba !== 'delivery' || lancando}>
-          <FilaPedidos statusConexao={status} aoNovoDelivery={() => setLancando(true)} />
+          <PainelDelivery statusConexao={status} aoNovoPedido={() => setLancando(true)} recarga={recarga} />
         </div>
         {!semCaixa && aba === 'delivery' && lancando && (
-          <NovoDelivery
+          <NovoPedido
             aoSair={() => setLancando(false)}
             aoConcluir={(pedido) => {
               setLancando(false);
-              setAviso(`Pedido #${pedido.numeroDia} lançado (${pedido.nomeCliente}).`);
+              setRecarga((n) => n + 1);
+              const tipo = pedido.encomenda ? 'Encomenda' : 'Pedido';
+              setAviso(`${tipo} #${pedido.numeroDia} ${pedido.encomenda ? 'lançada' : 'lançado'} (${pedido.nomeCliente}).`);
             }}
           />
         )}

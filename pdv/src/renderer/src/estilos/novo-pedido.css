@@ -1,0 +1,881 @@
+/* "Novo pedido" do delivery (assistente em etapas). Só cores do tokens.css. */
+
+/* Novo pedido ocupa o conteúdo inteiro (sem a margem creme). */
+.conteudo--cheio {
+  padding: 0;
+}
+.novo-pedido {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* A barra de cima mede um pouco mais que --altura-barra (sombra/arredondamento): 2px de folga. */
+  min-height: calc(100vh - var(--altura-barra) - 2px);
+  /* Mesma borda vermelha (14 px) em cima (gap), dos lados e embaixo. */
+  padding: 0 14px 14px;
+  background: var(--cor-vermelho);
+}
+
+.novo-pedido__barra {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 -14px;
+  padding: 4px 16px;
+  background: var(--cor-superficie);
+  border-bottom: 3px solid var(--cor-dourado);
+}
+/* Faixa fina, grudada na barra de cima. */
+.novo-pedido__barra .botao-icone {
+  width: 36px;
+  height: 36px;
+}
+.novo-pedido__barra {
+  position: sticky;
+  top: var(--altura-barra);
+  z-index: 8;
+}
+.novo-pedido__barra h2 {
+  margin: 0;
+  text-align: center;
+  font-size: 19px;
+}
+.novo-pedido__etapa {
+  font-weight: 700;
+  color: var(--cor-texto-suave);
+}
+
+/* Botões redondos flutuantes (← vermelho, → verde) no canto superior direito. */
+/* Botões redondos (← vermelho, → verde) no canto superior direito, na barra
+   (que gruda no topo: continuam à mão quando o formulário do cliente rola). */
+.novo-pedido__setas {
+  display: flex;
+  gap: 12px;
+}
+.botao-redondo {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 3px solid var(--cor-branco);
+  border-radius: 50%;
+  color: var(--cor-branco);
+  box-shadow: var(--sombra);
+  cursor: pointer;
+}
+.botao-redondo:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.botao-redondo:focus-visible {
+  outline: 3px solid var(--cor-dourado);
+  outline-offset: 2px;
+}
+.botao-redondo--grande {
+  width: 40px;
+  height: 40px;
+  border-width: 2px;
+}
+.botao-redondo--vermelho {
+  background: var(--cor-vermelho-escuro);
+}
+.botao-redondo--verde {
+  background: var(--cor-ok);
+}
+.botao-redondo--dourado {
+  background: var(--cor-dourado);
+  color: var(--cor-preto);
+}
+.botao-redondo:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.novo-pedido__mensagem {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 760px;
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-aviso-fundo);
+  color: var(--cor-vermelho-escuro);
+  font-weight: 700;
+}
+.novo-pedido__mensagem--info {
+  color: var(--cor-texto);
+  font-weight: 600;
+}
+
+/* Conteúdo de cada etapa: cartão branco sobre o vermelho. */
+.novo-pedido__cartao {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* a tela que entra deslizando não vaza do cartão */
+  padding: 24px 28px;
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+}
+/* Cliente e produtos: menos respiro interno. */
+.novo-pedido__cartao--largo {
+  padding: 16px 20px;
+}
+
+.etapa__titulo {
+  margin: 0 0 8px;
+  font-size: 26px;
+}
+.etapa__texto {
+  margin: 0 0 20px;
+  color: var(--cor-texto-suave);
+  font-size: 17px;
+}
+
+/* Indicador de etapas (bolinhas) embaixo. */
+/* Bolinhas dentro do cartão branco, embaixo e no centro, em vermelho. */
+.novo-pedido__bolinhas {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.bolinha {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--cor-vermelho);
+  border-radius: 50%;
+}
+.bolinha--feita {
+  background: var(--cor-vermelho);
+  opacity: 0.45;
+}
+.bolinha--atual {
+  background: var(--cor-vermelho);
+  transform: scale(1.25);
+}
+
+/* ───────── Etapa 1: tipo ───────── */
+
+.etapa-tipo {
+  flex: 1;
+  align-content: center;
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+.etapa-tipo__ilustracao {
+  width: min(250px, 70%);
+  height: auto;
+  margin-bottom: 16px;
+}
+.etapa-tipo__opcoes {
+  display: grid;
+  gap: 12px;
+  width: min(420px, 100%);
+}
+.opcao-tipo {
+  min-height: 58px;
+  border: 3px solid var(--cor-vermelho);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+  color: var(--cor-vermelho);
+  font: inherit;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.opcao-tipo--marcada {
+  background: var(--cor-vermelho);
+  color: var(--cor-branco);
+}
+.opcao-tipo {
+  transition: background-color 0.15s, color 0.15s, transform 0.15s;
+}
+/* Clique: o botão "aperta" e enche de vermelho antes de trocar de tela. */
+.opcao-tipo--escolhendo {
+  animation: apertar-opcao 0.26s ease-out;
+}
+@keyframes apertar-opcao {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1.03);
+  }
+}
+
+/* Troca de etapa: desliza da direita (avançar) ou da esquerda (voltar). */
+.novo-pedido__tela {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.novo-pedido__tela--frente {
+  animation: entrar-da-direita 0.28s ease-out;
+}
+.novo-pedido__tela--tras {
+  animation: entrar-da-esquerda 0.28s ease-out;
+}
+@keyframes entrar-da-direita {
+  from {
+    opacity: 0;
+    transform: translateX(60px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes entrar-da-esquerda {
+  from {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.bolinha {
+  transition: transform 0.25s, background-color 0.25s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .novo-pedido__tela--frente,
+  .novo-pedido__tela--tras,
+  .opcao-tipo--escolhendo {
+    animation: none;
+  }
+}
+.opcao-tipo:focus-visible {
+  outline: 3px solid var(--cor-dourado);
+  outline-offset: 2px;
+}
+
+/* ───────── Etapa 2: cliente ───────── */
+
+.etapa-cliente {
+  display: grid;
+  gap: 16px;
+}
+.autocomplete {
+  position: relative;
+}
+.autocomplete__campo {
+  position: relative;
+  display: flex;
+  gap: 12px;
+}
+.autocomplete__campo input {
+  flex: 1;
+  min-height: 54px;
+  padding: 0 12px 0 40px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  font-size: 18px;
+}
+.autocomplete__campo .campo__icone {
+  bottom: 17px;
+}
+.autocomplete__lista {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  max-height: 360px;
+  margin: 4px 0 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 2px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+  font-weight: 400;
+}
+.autocomplete__item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.autocomplete__item strong {
+  font-weight: 800;
+}
+.autocomplete__item--destaque {
+  background: var(--cor-aviso-fundo);
+  box-shadow: inset 3px 0 0 var(--cor-vermelho);
+}
+.autocomplete__item--esgotado {
+  color: var(--cor-texto-suave);
+}
+.autocomplete__vazio {
+  padding: 10px 12px;
+  color: var(--cor-texto-suave);
+}
+
+/* Linhas de campos sublinhados, em grade de 12 colunas (espaçado, sem rolagem). */
+/* Respiro que acompanha a altura da tela: folgado em telas altas, sem rolagem em 768 px. */
+.etapa-cliente {
+  gap: clamp(12px, 2.4vh, 28px);
+  padding: 4px 8px;
+}
+.etapa-cliente__busca {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.etapa-cliente__busca .autocomplete {
+  flex: 1;
+}
+.cliente-vinculado {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 999px;
+  background: var(--cor-ok);
+  color: var(--cor-branco);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.cliente-vinculado--novo {
+  padding: 6px 14px;
+  background: var(--cor-creme);
+  color: var(--cor-texto-suave);
+}
+.cliente-vinculado__x {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 20%);
+  color: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.linha-form {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: clamp(12px, 2.4vh, 28px) 32px;
+}
+.linha-form .c-2 {
+  grid-column: span 2;
+}
+.linha-form .c-3 {
+  grid-column: span 3;
+}
+.linha-form .c-4 {
+  grid-column: span 4;
+}
+.linha-form .c-5 {
+  grid-column: span 5;
+}
+.linha-form .c-12 {
+  grid-column: 1 / -1;
+}
+.linha-form--encomenda {
+  align-items: end;
+  padding-top: 14px;
+  border-top: 1px solid var(--cor-borda);
+}
+.etapa-cliente__rotulo-encomenda {
+  display: grid;
+  gap: 2px;
+  align-self: center;
+  font-size: 13px;
+}
+.etapa-cliente__rotulo-encomenda .etapa-cliente__titulo {
+  font-size: 14px;
+}
+.linha-form .interruptor.c-4 {
+  grid-column: span 4;
+  min-height: 38px;
+}
+/* Busca do cliente um pouco mais baixa: a etapa cabe sem rolagem. */
+.etapa-cliente .autocomplete__campo input {
+  min-height: 48px;
+}
+.etapa-cliente .autocomplete__campo .campo__icone {
+  bottom: 14px;
+}
+.etapa-cliente .campo {
+  min-width: 0;
+  gap: clamp(2px, 0.5vh, 6px);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cor-texto-suave);
+}
+/* Campo sublinhado: sem caixa, só a linha embaixo (vermelha no foco). */
+.etapa-cliente .campo input,
+.etapa-cliente .campo select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 1px solid var(--cor-texto-suave);
+  border-radius: 0;
+  background: transparent;
+  color: var(--cor-texto);
+  font-size: 17px;
+}
+.etapa-cliente .campo input:focus-visible,
+.etapa-cliente .campo select:focus-visible {
+  outline: none;
+  border-bottom: 2px solid var(--cor-vermelho);
+}
+.etapa-cliente .campo input[readonly] {
+  color: var(--cor-texto-suave);
+  border-bottom-style: dashed;
+}
+.etapa-cliente .campo--erro input,
+.etapa-cliente .campo--erro select {
+  border-bottom: 2px solid var(--cor-vermelho);
+}
+.etapa-cliente__secao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--cor-borda);
+}
+.etapa-cliente__titulo {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--cor-texto);
+}
+.etapa-cliente__enderecos {
+  flex: 1 1 320px;
+  max-width: 560px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+  font: inherit;
+}
+.campo__erro,
+.campo__dica {
+  font-size: 12px;
+}
+.interruptor {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.interruptor input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--cor-vermelho);
+}
+.form-grade--meio {
+  grid-template-columns: 1fr 1fr;
+  max-width: 520px;
+}
+
+/* ───────── Etapa 4: produtos (60% / 40%) ───────── */
+
+.etapa-produtos {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr);
+  gap: 16px;
+  flex: 1;
+  height: calc(100vh - var(--altura-barra) - 300px);
+  min-height: 480px;
+}
+.etapa-produtos__esquerda {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.entrada-produto {
+  position: relative;
+  display: grid;
+  gap: 8px;
+}
+.entrada-produto__linha {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+.entrada-produto__produto {
+  flex: 1;
+}
+.entrada-produto__produto input {
+  width: 100%;
+}
+.entrada-produto__qtd {
+  width: 92px;
+}
+.entrada-produto__qtd input {
+  width: 100%;
+  text-align: center;
+}
+.botao-icone--campo {
+  width: 54px;
+  height: 54px;
+}
+.botao--adicionar {
+  min-width: 54px;
+  min-height: 54px;
+  padding: 0;
+  background: var(--cor-ok);
+  border-color: var(--cor-ok);
+  font-size: 28px;
+}
+.botao--adicionar:hover:not(:disabled) {
+  background: var(--cor-ok);
+  border-color: var(--cor-ok);
+  filter: brightness(1.1);
+}
+.teclado-numerico {
+  position: absolute;
+  top: 100%;
+  right: 62px;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  gap: 6px;
+  padding: 8px;
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+  border: 2px solid var(--cor-borda);
+}
+.teclado-numerico__tecla {
+  min-height: 52px;
+  border: 2px solid var(--cor-borda);
+  border-radius: 8px;
+  background: var(--cor-superficie);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.teclado-numerico__tecla--ok {
+  border-color: var(--cor-ok);
+  background: var(--cor-ok);
+  color: var(--cor-branco);
+}
+
+.grade-rolavel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+.grade-rolavel__conteudo {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.grade-rolavel__setas {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+}
+.grade-categorias {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+.categoria-botao {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-height: 96px;
+  padding: 12px;
+  border: 0;
+  border-radius: var(--raio);
+  box-shadow: var(--sombra);
+  color: var(--cor-branco);
+  font: inherit;
+  font-size: 19px;
+  font-weight: 800;
+  text-align: center;
+  cursor: pointer;
+}
+.categoria-botao:active {
+  transform: scale(0.98);
+}
+.categoria-botao:focus-visible {
+  outline: 3px solid var(--cor-dourado);
+  outline-offset: 2px;
+}
+.categoria-botao__qtd {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.categoria-botao--vermelho {
+  background: var(--cor-vermelho);
+}
+.categoria-botao--vermelho-escuro {
+  background: var(--cor-vermelho-escuro);
+}
+.categoria-botao--dourado {
+  background: var(--cor-dourado);
+  color: var(--cor-preto);
+}
+.categoria-botao--preto {
+  background: var(--cor-preto);
+}
+.categoria-botao--laranja {
+  background: var(--cor-laranja);
+}
+.grade__voltar {
+  justify-self: start;
+}
+.produto-botao__codigo {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cor-texto-suave);
+}
+
+/* ───────── Resumo do pedido (lado direito) ───────── */
+
+.resumo-pedido {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 2px solid var(--cor-borda);
+  border-radius: var(--raio);
+  overflow: hidden;
+}
+.resumo-pedido__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--cor-borda);
+}
+.resumo-pedido__topo p {
+  margin: 0;
+}
+.resumo-pedido__cliente {
+  font-size: 18px;
+  font-weight: 800;
+}
+.resumo-pedido__tempo {
+  color: var(--cor-texto-suave);
+  font-weight: 600;
+}
+.resumo-pedido__redondos {
+  display: flex;
+  gap: 8px;
+}
+.resumo-pedido__confirmar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 12px 0;
+}
+.resumo-pedido__confirmar span {
+  flex: 1;
+  font-weight: 700;
+}
+.resumo-pedido__itens {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+.resumo-pedido__vazio {
+  padding: 24px 14px;
+  text-align: center;
+}
+.item-resumo:nth-child(even) {
+  background: var(--cor-creme);
+}
+.item-resumo--aberto {
+  box-shadow: inset 4px 0 0 var(--cor-vermelho);
+}
+.item-resumo__linha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.item-resumo__linha:focus-visible {
+  outline: 3px solid var(--cor-dourado);
+  outline-offset: -3px;
+}
+.item-resumo__codigo {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--cor-texto-suave);
+}
+.item-resumo__nome {
+  font-weight: 800;
+  font-size: 16px;
+}
+.item-resumo__total {
+  grid-row: 2 / 4;
+  grid-column: 2;
+  align-self: center;
+  font-weight: 800;
+}
+.item-resumo__qtd {
+  font-size: 14px;
+  color: var(--cor-texto-suave);
+}
+.item-resumo__obs {
+  grid-column: 1;
+  margin: 0;
+}
+.item-resumo__editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 12px;
+}
+.item-resumo__editor .linha__obs {
+  flex: 1 1 180px;
+}
+.qtd input {
+  width: 48px;
+  min-height: 36px;
+  border: 1px solid var(--cor-borda);
+  border-radius: 6px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.resumo-pedido__rodape {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--cor-borda);
+}
+.faixa {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: var(--raio-pequeno);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+}
+.faixa--cliente {
+  background: var(--cor-ok);
+  color: var(--cor-branco);
+}
+.faixa__x {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+.faixa--taxa {
+  background: var(--cor-creme);
+  color: var(--cor-texto);
+  cursor: pointer;
+}
+div.faixa--taxa {
+  cursor: default;
+}
+.faixa--desconto {
+  background: var(--cor-aviso-fundo);
+  color: var(--cor-vermelho-escuro);
+}
+.resumo-pedido__total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 4px 0;
+  font-weight: 800;
+}
+.resumo-pedido__total strong {
+  font-size: 32px;
+  color: var(--cor-vermelho-escuro);
+}
+.resumo-pedido__valor {
+  display: grid;
+  gap: 8px;
+}
+.resumo-pedido__botoes {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.6fr;
+  gap: 8px;
+}
+.botao--marcado {
+  background: var(--cor-aviso-fundo);
+}
+.botao--lancar {
+  min-height: 56px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+/* ───────── Pagamento ───────── */
+
+.modal-pagamento {
+  width: min(560px, calc(100vw - 32px));
+}
+.modal-pagamento .painel__corpo {
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+.modal-pagamento__total {
+  font-size: 26px;
+}
+.modal-pagamento__quando {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 1100px) {
+  .etapa-produtos {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .grade-rolavel__conteudo {
+    max-height: 420px;
+  }
+  .linha-form {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .linha-form .campo {
+    grid-column: span 3;
+  }
+  .linha-form .c-12 {
+    grid-column: 1 / -1;
+  }
+}

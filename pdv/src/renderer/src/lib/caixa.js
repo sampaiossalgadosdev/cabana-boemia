@@ -30,6 +30,7 @@ let horaViradaAtual = 4;
 export const definirHoraVirada = (h) => {
   if (Number.isInteger(h) && h >= 0 && h <= 12) horaViradaAtual = h;
 };
+export const horaVirada = () => horaViradaAtual;
 
 /**
  * Dia OPERACIONAL "YYYY-MM-DD" (vira às `horaVirada`:00, não à meia-noite).

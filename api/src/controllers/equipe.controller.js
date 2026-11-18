@@ -17,27 +17,101 @@ const buscaSchema = z.object({
     .max(60),
 });
 
-const enderecoNovoSchema = enderecoSchema.omit({ principal: true });
+/** Endereço no PDV: o do site + CEP (só dígitos), cidade e estado (opcionais). */
+const enderecoNovoSchema = enderecoSchema.omit({ principal: true }).extend({
+  cep: z
+    .string()
+    .trim()
+    .nullish()
+    .transform((v) => (v ? v.replace(/\D/g, '') : null))
+    .refine((v) => v == null || v.length === 8, 'CEP com 8 números')
+    .transform((v) => v || null),
+  cidade: opcional(60),
+  estado: opcional(30),
+});
 
-const clienteNovoSchema = z.object({
+const email = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .nullish()
+  .transform((v) => v || null)
+  .refine((v) => v == null || (v.length <= 120 && z.email().safeParse(v).success), 'E-mail inválido');
+
+const dadosClienteSchema = {
   nome: z.string({ error: 'Informe o nome' }).trim().min(1, 'Informe o nome').max(100),
   telefone,
-  endereco: enderecoNovoSchema,
+  email,
+  observacao: opcional(300),
+};
+
+/** Cadastro rápido: endereço opcional (encomenda retirada no balcão). */
+const clienteNovoSchema = z.object({ ...dadosClienteSchema, endereco: enderecoNovoSchema.nullish() });
+
+const clienteEdicaoSchema = z.object(dadosClienteSchema);
+
+const enderecoIdSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  enderecoId: z.coerce.number().int().positive(),
 });
 
 const cardapioSchema = z.object({ turnoId: z.coerce.number().int().positive().optional() });
 
-/** Pedido do WhatsApp: o mesmo item do site; cliente e endereço do cadastro. */
+/** Teto de sanidade para desconto (R$ 10.000,00); o service limita ao subtotal. */
+const DESCONTO_MAX_CENTAVOS = 1_000_000;
+
+/**
+ * Pedido da equipe (delivery do WhatsApp ou encomenda): o mesmo item do site;
+ * cliente e endereço do cadastro. Retirada no balcão (só encomenda) não tem
+ * endereço. `taxaEntregaCentavos` ausente/null = taxa do bairro (com frete grátis).
+ */
 const pedidoWhatsappSchema = z
   .object({
     clienteId: z.number({ error: 'Escolha o cliente' }).int().positive(),
-    enderecoId: z.number({ error: 'Escolha o endereço de entrega' }).int().positive(),
+    enderecoId: z.number({ error: 'Escolha o endereço de entrega' }).int().positive().nullish(),
     itens: z.array(itemPedidoSchema, { error: 'Adicione os itens' }).min(1, 'Adicione os itens').max(50),
     formaPagamento: z.enum(FORMAS_PAGAMENTO, { error: 'Escolha a forma de pagamento' }),
     trocoParaCentavos: z.number().int().positive().nullish(),
     chaveIdempotencia: z.uuid().optional(),
+    encomenda: z.boolean().default(false),
+    agendadoPara: z.iso.datetime({ offset: true, error: 'Informe a data e o horário' }).nullish().transform((v) => (v ? new Date(v) : null)),
+    retirarNoBalcao: z.boolean().default(false),
+    descontoCentavos: z.number({ error: 'Desconto inválido' }).int('Use centavos inteiros').min(0).max(DESCONTO_MAX_CENTAVOS).default(0),
+    taxaEntregaCentavos: z
+      .number({ error: 'Taxa inválida' })
+      .int('Use centavos inteiros')
+      .min(0, 'A taxa não pode ser negativa')
+      .max(pedidoService.TAXA_MANUAL_MAX_CENTAVOS, 'Taxa alta demais')
+      .nullish()
+      .transform((v) => v ?? null),
+    observacao: opcional(200),
+    pagoAgora: z.boolean().default(false),
   })
-  .superRefine(trocoSoEmDinheiro);
+  .superRefine(trocoSoEmDinheiro)
+  .superRefine((d, ctx) => {
+    if (d.encomenda && !d.agendadoPara) {
+      ctx.addIssue({ code: 'custom', path: ['agendadoPara'], message: 'Informe a data e o horário da encomenda' });
+    }
+    if (!d.encomenda && d.agendadoPara) {
+      ctx.addIssue({ code: 'custom', path: ['agendadoPara'], message: 'Horário agendado só em encomenda' });
+    }
+    if (d.retirarNoBalcao && !d.encomenda) {
+      ctx.addIssue({ code: 'custom', path: ['retirarNoBalcao'], message: 'Retirada no balcão só em encomenda' });
+    }
+    if (!d.retirarNoBalcao && !d.enderecoId) {
+      ctx.addIssue({ code: 'custom', path: ['enderecoId'], message: 'Escolha o endereço de entrega' });
+    }
+  });
+
+const statusSchema = z.object({
+  status: z.enum(pedidoService.STATUS_ANDAMENTO, { error: 'Status inválido' }),
+});
+
+const agendamentoSchema = z.object({
+  agendadoPara: z.iso
+    .datetime({ offset: true, error: 'Informe a data e o horário' })
+    .transform((v) => new Date(v)),
+});
 
 const listarSchema = z.object({
   dataRef: z
@@ -154,6 +228,18 @@ export function criarEquipeController(relogio = () => new Date()) {
       res.json({ pedido: await equipeService.finalizarPedido(id, dados, relogio()) });
     },
 
+    async alterarStatus(req, res) {
+      const { id } = validar(idSchema, req.params);
+      const { status } = validar(statusSchema, req.body ?? {});
+      res.json({ pedido: await pedidoService.alterarStatus(id, status) });
+    },
+
+    async alterarAgendamento(req, res) {
+      const { id } = validar(idSchema, req.params);
+      const { agendadoPara } = validar(agendamentoSchema, req.body ?? {});
+      res.json({ pedido: await pedidoService.alterarAgendamento(id, agendadoPara, relogio()) });
+    },
+
     async cancelarPedido(req, res) {
       const { id } = validar(idSchema, req.params);
       res.json({ pedido: await pedidoService.cancelarPedido(id, { usuarioId: req.usuario.id, agora: relogio() }) });
@@ -177,10 +263,21 @@ export function criarEquipeController(relogio = () => new Date()) {
       res.status(201).json({ cliente: await equipeService.criarCliente(validar(clienteNovoSchema, req.body)) });
     },
 
+    async atualizarCliente(req, res) {
+      const { id } = validar(idSchema, req.params);
+      res.json({ cliente: await equipeService.atualizarCliente(id, validar(clienteEdicaoSchema, req.body ?? {})) });
+    },
+
     async adicionarEndereco(req, res) {
       const { id } = validar(idSchema, req.params);
       const endereco = validar(enderecoNovoSchema, req.body);
       res.status(201).json({ cliente: await equipeService.adicionarEndereco(id, endereco) });
+    },
+
+    async atualizarEndereco(req, res) {
+      const { id, enderecoId } = validar(enderecoIdSchema, req.params);
+      const endereco = validar(enderecoNovoSchema, req.body ?? {});
+      res.json({ cliente: await equipeService.atualizarEndereco(id, enderecoId, endereco) });
     },
 
     async cardapio(req, res) {

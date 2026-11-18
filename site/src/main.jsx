@@ -9,8 +9,10 @@ import { ClienteProvider } from './cliente/ClienteContext.jsx';
 import { AvisosProvider } from './componentes/Avisos.jsx';
 import { aplicarFavicon } from './lib/logo.js';
 import { PaginaLegal, PAGINAS_LEGAIS } from './componentes/PaginaLegal.jsx';
+import { iniciarPwa } from './lib/pwa.js';
 
 aplicarFavicon();
+iniciarPwa();
 
 // /privacidade e /termos: páginas de texto (a API devolve o index.html para qualquer rota).
 const paginaLegal = PAGINAS_LEGAIS[window.location.pathname.replace(/\/+$/, '')];

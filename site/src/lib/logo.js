@@ -4,13 +4,14 @@ import logoUrl from '../../../shared/assets/logo-cabana-boemia.jpg';
 
 export { logoUrl };
 
-/** Usa a logo como favicon e ícone da tela inicial (iOS). */
+/**
+ * Usa a logo como favicon. O ícone da tela inicial (apple-touch-icon e os do
+ * manifest) é quadrado e vem de /icones/ (site/scripts/gerar-icones.mjs).
+ */
 export function aplicarFavicon(doc = document) {
-  for (const rel of ['icon', 'apple-touch-icon']) {
-    const link = doc.createElement('link');
-    link.rel = rel;
-    link.href = logoUrl;
-    if (rel === 'icon') link.type = 'image/jpeg';
-    doc.head.append(link);
-  }
+  const link = doc.createElement('link');
+  link.rel = 'icon';
+  link.href = logoUrl;
+  link.type = 'image/jpeg';
+  doc.head.append(link);
 }

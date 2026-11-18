@@ -211,6 +211,56 @@ button:disabled {
   box-shadow: 0 0 0 3px rgb(217 84 30 / 35%);
 }
 
+/* Convite para instalar o app (InstalarApp.jsx): discreto, no tom dos selos. */
+.instalar-app {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid rgb(201 166 70 / 70%);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cor-creme);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.instalar-app:hover,
+.instalar-app:focus-visible {
+  background: rgb(0 0 0 / 22%);
+}
+
+.dica-instalar {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: rgb(251 243 232 / 88%);
+}
+
+.dica-instalar strong {
+  color: var(--cor-creme);
+}
+
+.dica-instalar__fechar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 22%);
+  color: var(--cor-creme);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
 /* ───────── Faixas de aviso ───────── */
 
 .faixa {

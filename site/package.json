@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "icones": "node scripts/gerar-icones.mjs",
+    "predev": "npm run icones",
     "dev": "vite",
+    "prebuild": "npm run icones",
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test \"test/**/*.test.js\""
@@ -16,6 +19,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.7.0",
+    "pngjs": "^7.0.0",
     "vite": "^5.4.21"
   },
   "type": "module"

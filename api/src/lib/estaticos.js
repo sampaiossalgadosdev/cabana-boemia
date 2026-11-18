@@ -59,6 +59,10 @@ export const CSP_SITE = {
   // Fotos dos produtos: o dono cola o link na retaguarda e pode ser de qualquer
   // host (hoje Unsplash, depois as fotos reais). Só imagem e só https.
   imgSrc: ["'self'", 'data:', 'https:'],
+  // PWA: manifest e service worker só do próprio site (já valia pelo
+  // default-src/script-src; explícito para ninguém afrouxar sem querer).
+  manifestSrc: ["'self'"],
+  workerSrc: ["'self'"],
 };
 
 /** CSP da retaguarda: não carrega nada de fora. */
@@ -85,6 +89,9 @@ export function servirSpa(app, { prefixo, dist, csp }) {
     index: false,
     setHeaders(res, arquivo) {
       res.set('Cache-Control', arquivo.includes(`${path.sep}assets${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache');
+      // Service worker do PWA (site/pwa/): sempre revalidado (no-cache, acima),
+      // então um deploy novo chega na próxima visita; vale para o site inteiro.
+      if (arquivo === path.join(dist, 'sw.js')) res.set('Service-Worker-Allowed', '/');
     },
   });
 

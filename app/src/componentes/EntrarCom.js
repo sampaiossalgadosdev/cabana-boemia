@@ -3,12 +3,9 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCliente } from '../estado/Cliente.js';
 import { appleDisponivel } from '../login/provedores.js';
-import { BASE } from '../lib/api.js';
+import { URL_PRIVACIDADE, URL_TERMOS } from '../lib/links.js';
 import { useEstilos, useTema } from '../tema/tema.js';
 import { TextoErro, Titulo } from './formulario.js';
-
-/** Raiz do site (sem /api): páginas de privacidade, termos e exclusão. */
-export const SITE = BASE.replace(/\/api$/, '');
 
 function BotaoApple({ onPress, desabilitado }) {
   // Botão oficial (exigência das diretrizes da Apple); carregado só no iOS.
@@ -71,11 +68,11 @@ export function EntrarCom({ titulo, texto }) {
       <TextoErro>{erro}</TextoErro>
       <Text style={s.legal}>
         Ao entrar você concorda com os{' '}
-        <Text style={s.link} onPress={() => Linking.openURL(`${SITE}/termos`)}>
+        <Text style={s.link} onPress={() => Linking.openURL(URL_TERMOS)}>
           termos
         </Text>{' '}
         e a{' '}
-        <Text style={s.link} onPress={() => Linking.openURL(`${SITE}/privacidade`)}>
+        <Text style={s.link} onPress={() => Linking.openURL(URL_PRIVACIDADE)}>
           política de privacidade
         </Text>
         .

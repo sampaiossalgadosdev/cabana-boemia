@@ -115,3 +115,10 @@ test('rotas novas do app: login com refresh, Apple, renovar, sair e excluir cont
   assert.equal(chamadas[5].auth, 'Bearer tok');
   assert.deepEqual(chamadas[6].corpo, {});
 });
+
+test('links legais do app: páginas da plataforma servidas pela API (não as do site)', async () => {
+  const { URL_PRIVACIDADE, URL_TERMOS, URL_EXCLUIR_CONTA } = await import('../src/lib/links.js');
+  assert.equal(URL_PRIVACIDADE, 'https://cabana.managerpix.com.br/privacidade-app');
+  assert.equal(URL_TERMOS, 'https://cabana.managerpix.com.br/termos-app');
+  assert.equal(URL_EXCLUIR_CONTA, 'https://cabana.managerpix.com.br/excluir-conta');
+});

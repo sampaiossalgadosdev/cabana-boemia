@@ -6,7 +6,8 @@ import { AvisosNaTela, useAvisos } from '../../estado/Avisos.js';
 import * as api from '../../lib/api.js';
 import { ERRO_GENERICO, textoEndereco } from '../../logica/checkout.js';
 import { Botao } from '../../componentes/basicos.js';
-import { EntrarCom, SITE } from '../../componentes/EntrarCom.js';
+import { EntrarCom } from '../../componentes/EntrarCom.js';
+import { URL_PRIVACIDADE, URL_TERMOS } from '../../lib/links.js';
 import { PassoTelefone } from '../../componentes/PassoTelefone.js';
 import { FormEndereco } from '../../componentes/FormEndereco.js';
 import { TextoErro } from '../../componentes/formulario.js';
@@ -17,7 +18,8 @@ import { useEstilos, useTema } from '../../tema/tema.js';
 const TEXTO_EXCLUSAO =
   'Isso apaga sua conta de vez: nome, e-mail, telefone, endereços salvos e o acesso pelo Google ou pela Apple, ' +
   'em todos os aparelhos.\n\nOs pedidos já feitos ficam com o restaurante como registro fiscal (valores e itens), ' +
-  'mas sem seu nome, telefone e endereço.\n\nNão dá para desfazer.';
+  'mas sem seu nome, telefone e endereço. Se você fez um pedido nas últimas 3 horas, a exclusão fica liberada ' +
+  '3 horas depois dele.\n\nNão dá para desfazer.';
 
 function Endereco({ endereco, ocupado, onEditar, onPrincipal, onRemover }) {
   const s = useEstilos(criarEstilos);
@@ -127,8 +129,8 @@ export default function Perfil() {
 
   const links = (
     <View style={s.links}>
-      <Botao titulo="Política de privacidade" variante="texto" onPress={() => Linking.openURL(`${SITE}/privacidade`)} />
-      <Botao titulo="Termos de uso" variante="texto" onPress={() => Linking.openURL(`${SITE}/termos`)} />
+      <Botao titulo="Política de privacidade" variante="texto" onPress={() => Linking.openURL(URL_PRIVACIDADE)} />
+      <Botao titulo="Termos de uso" variante="texto" onPress={() => Linking.openURL(URL_TERMOS)} />
     </View>
   );
 

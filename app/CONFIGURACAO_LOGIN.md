@@ -11,7 +11,8 @@ Dados fixos do app:
 | Projeto EAS | `@sampaio040826/delivery-abatia` (ID `77cc3648-5ee3-4448-a147-6c213d3a69ea`) |
 | API | `https://cabana.managerpix.com.br` |
 | Exclusão de conta (web) | `https://cabana.managerpix.com.br/excluir-conta` |
-| Política de privacidade | `https://cabana.managerpix.com.br/privacidade` |
+| Política de privacidade (app) | `https://cabana.managerpix.com.br/privacidade-app` |
+| Termos de uso (app) | `https://cabana.managerpix.com.br/termos-app` |
 
 ## Como o login do Google funciona no app
 
@@ -84,7 +85,7 @@ A App Store exige "Entrar com Apple" quando o app oferece login com Google. O bo
 
 1. Crie o app: nome "Delivery Abatiá", idioma padrão Português (Brasil), App, Gratuito.
 2. **Política do app** (Painel › Configurar o app):
-   - Política de privacidade: `https://cabana.managerpix.com.br/privacidade`. O texto hoje fala da Cabana Boemia: atualizar para a plataforma antes da produção.
+   - Política de privacidade: `https://cabana.managerpix.com.br/privacidade-app` (em nome da plataforma). **Rascunho: precisa de revisão jurídica antes da produção** (ver CLAUDE.md).
    - **Exclusão de conta**: marque que o app permite criar conta e informe o link `https://cabana.managerpix.com.br/excluir-conta`. Dentro do app: Perfil › Excluir minha conta.
    - **Segurança dos dados**: coletados nome, e-mail, telefone, endereço (informações pessoais) e histórico de pedidos (compras no app), para funcionalidade do app e gerenciamento da conta; nada compartilhado com terceiros nem usado para anúncios; dados criptografados em trânsito (HTTPS); o usuário pode pedir a exclusão.
    - Acesso ao app: o cardápio abre sem login; para finalizar um pedido é preciso entrar com Google (o revisor usa a própria conta).

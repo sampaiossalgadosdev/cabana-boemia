@@ -4,6 +4,7 @@ import { validar } from '../lib/validar.js';
 import * as clienteService from '../services/cliente.service.js';
 import * as enderecoService from '../services/endereco.service.js';
 import * as pedidoService from '../services/pedido.service.js';
+import { registrarAcesso } from '../services/registroAcesso.service.js';
 
 const googleSchema = z.object({
   credential: z.string().min(1, 'Informe o credential do Google').max(4096),
@@ -59,18 +60,24 @@ export function criarClienteController(
     async entrarComGoogle(req, res) {
       const { credential, refresh } = validar(googleSchema, req.body);
       const identidade = await verificarIdTokenGoogle(credential);
-      res.json(await clienteService.entrarComGoogle(identidade, { comRefresh: refresh === true }));
+      const r = await clienteService.entrarComGoogle(identidade, { comRefresh: refresh === true });
+      await registrarAcesso({ clienteId: r.cliente.id, ip: req.ip, evento: 'LOGIN' });
+      res.json(r);
     },
 
     async entrarComApple(req, res) {
       const { identityToken, nonce, nome, refresh } = validar(appleSchema, req.body);
       const identidade = await verificarIdentityTokenApple(identityToken, { nonce });
-      res.json(await clienteService.entrarComApple(identidade, { nome, comRefresh: refresh === true }));
+      const r = await clienteService.entrarComApple(identidade, { nome, comRefresh: refresh === true });
+      await registrarAcesso({ clienteId: r.cliente.id, ip: req.ip, evento: 'LOGIN' });
+      res.json(r);
     },
 
     async renovar(req, res) {
       const { refreshToken } = validar(refreshSchema, req.body);
-      res.json(await clienteService.renovarSessao(refreshToken));
+      const r = await clienteService.renovarSessao(refreshToken);
+      await registrarAcesso({ clienteId: r.cliente.id, ip: req.ip, evento: 'REFRESH' });
+      res.json(r);
     },
 
     async sair(req, res) {
@@ -86,6 +93,8 @@ export function criarClienteController(
         revogarApple,
         agora: relogio(),
       });
+      // Depois de apagar a conta: o registro fica pelo prazo legal (sem chave estrangeira).
+      await registrarAcesso({ clienteId: req.cliente.id, ip: req.ip, evento: 'EXCLUSAO_CONTA' });
       res.json({ excluido: true, pedidosAnonimizados: r.pedidosAnonimizados, appleRevogado: r.apple?.revogado ?? null });
     },
 
@@ -122,6 +131,7 @@ export function criarClienteController(
     async criarPedido(req, res) {
       const dados = validar(pedidoSchema, req.body);
       const { pedido, criado } = await pedidoService.criarPedidoDoSite(req.cliente, dados, { agora: relogio() });
+      await registrarAcesso({ clienteId: req.cliente.id, ip: req.ip, evento: 'PEDIDO' });
       res.status(criado ? 201 : 200).json({ pedido });
     },
 

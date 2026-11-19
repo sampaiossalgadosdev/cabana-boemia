@@ -144,6 +144,11 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
     );
     const trabalhos = await prisma.trabalhoImpressao.findMany({ where: { pedidoId: ped.id } });
     assert.deepEqual(trabalhos.map((t) => [t.tipo, t.status]), [['PEDIDO', 'PENDENTE']]);
+
+    // Registro de acesso (Marco Civil): o envio do pedido fica com IP e data/hora.
+    const registros = await prisma.registroAcesso.findMany({ where: { clienteId: c.cliente.id }, orderBy: { id: 'asc' } });
+    assert.deepEqual(registros.map((x) => x.evento), ['PEDIDO'], 'o cliente deste teste é criado direto no banco (sem login)');
+    assert.equal(registros[0].ip, '127.0.0.1');
   });
 
   test('preço adulterado no body é ignorado', async () => {

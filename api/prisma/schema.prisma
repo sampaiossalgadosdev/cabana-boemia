@@ -446,6 +446,27 @@ model SolicitacaoExclusao {
   @@index([criadoEm])
 }
 
+enum EventoAcesso {
+  LOGIN
+  REFRESH
+  PEDIDO
+  EXCLUSAO_CONTA
+}
+
+/// Registro de acesso do cliente (Marco Civil da Internet, art. 15): guardado por
+/// 6 meses e apagado por rotina diária. `clienteId` SEM chave estrangeira de
+/// propósito: o registro precisa sobreviver à exclusão da conta pelo prazo legal.
+model RegistroAcesso {
+  id        Int          @id @default(autoincrement())
+  clienteId Int?
+  ip        String       @db.VarChar(45)
+  evento    EventoAcesso
+  criadoEm  DateTime     @default(now())
+
+  @@index([criadoEm])
+  @@index([clienteId])
+}
+
 // ───────────── Configuração (linha única) ─────────────
 
 model Configuracao {

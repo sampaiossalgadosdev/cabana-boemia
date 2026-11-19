@@ -4,6 +4,8 @@ import { criarTempoReal } from './lib/tempoReal.js';
 import { prisma } from './lib/prisma.js';
 import { problemasNosSegredos } from './lib/tokens.js';
 import { credenciaisApple } from './lib/apple.js';
+import { emailDoTitular } from './lib/controlador.js';
+import { iniciarLimpezaDiaria } from './services/registroAcesso.service.js';
 
 // Falha cedo: sem segredos válidos a API subiria e só quebraria no primeiro login.
 const problemas = problemasNosSegredos();
@@ -25,6 +27,13 @@ if (!credenciaisApple()) {
   );
 }
 
+if (!emailDoTitular()) {
+  console.warn('Aviso: CONTATO_TITULAR_EMAIL ausente. A política de privacidade do app fica só com o formulário como canal do titular.');
+}
+
+// Registros de acesso do cliente: apaga os de mais de 6 meses ao iniciar e a cada 24 h.
+const pararLimpeza = iniciarLimpezaDiaria();
+
 const porta = Number(process.env.PORT) || 3000;
 const app = criarApp();
 const servidor = http.createServer(app);
@@ -36,6 +45,7 @@ servidor.listen(porta, () => {
 
 function encerrar(sinal) {
   console.log(`${sinal} recebido, encerrando...`);
+  pararLimpeza();
   // io.close desconecta os sockets e fecha também o servidor HTTP.
   io.close(async () => {
     await prisma.$disconnect();

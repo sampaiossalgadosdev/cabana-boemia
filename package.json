@@ -24,6 +24,10 @@
     "test": "npm test --workspaces --if-present",
     "seed:demo": "npm run seed:demo -w api"
   },
+  "devDependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
   "allowScripts": {
     "@prisma/client@5.22.0": true,
     "@prisma/engines@5.22.0": true,

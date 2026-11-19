@@ -4,16 +4,25 @@ import { Stack, router, useIsFocused } from 'expo-router';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useCarrinho } from '../estado/Carrinho.js';
-import { useCardapio } from '../estado/Cardapio.js';
-import { AvisosNaTela, useAvisos } from '../estado/Avisos.js';
-import { subtotal } from '../logica/carrinho.js';
-import { limiteDaLinha, produtosDoCardapio, resumoDaSacola, rotuloItens, sugestoes as listarSugestoes } from '../logica/sacola.js';
-import { formatarPreco } from '../logica/dinheiro.js';
-import { quandoAbre } from '../logica/horario.js';
-import { Botao, ImagemProduto, Quantidade } from '../componentes/basicos.js';
-import { LinhaFreteGratis } from '../componentes/BarraSacola.js';
-import { useEstilos, useTema } from '../tema/tema.js';
+import { useCarrinho } from '../../estado/Carrinho.js';
+import { useCardapio } from '../../estado/Cardapio.js';
+import { AvisosNaTela, useAvisos } from '../../estado/Avisos.js';
+import { useCliente } from '../../estado/Cliente.js';
+import * as api from '../../lib/api.js';
+import { subtotal } from '../../logica/carrinho.js';
+import {
+  enderecoDaTaxa,
+  limiteDaLinha,
+  produtosDoCardapio,
+  resumoDaSacola,
+  rotuloItens,
+  sugestoes as listarSugestoes,
+} from '../../logica/sacola.js';
+import { formatarPreco } from '../../logica/dinheiro.js';
+import { quandoAbre } from '../../logica/horario.js';
+import { Botao, ImagemProduto, Quantidade } from '../../componentes/basicos.js';
+import { LinhaFreteGratis } from '../../componentes/BarraSacola.js';
+import { useEstilos, useTema } from '../../tema/tema.js';
 
 function ItemSacola({ item, produto, limite, onEditar, onMudar, onRemover }) {
   const s = useEstilos(criarEstilos);
@@ -66,6 +75,27 @@ function ItemSacola({ item, produto, limite, onEditar, onMudar, onRemover }) {
   );
 }
 
+/** Taxa do bairro do endereço salvo (logado), ou null se ainda não dá para saber (como no site). */
+function useTaxaDoCliente(emFoco) {
+  const { status, chamar } = useCliente();
+  const [taxa, setTaxa] = useState(null);
+  useEffect(() => {
+    if (status !== 'logado') {
+      setTaxa(null);
+      return undefined;
+    }
+    if (!emFoco) return undefined;
+    let vivo = true;
+    chamar((token) => api.listarEnderecos(token))
+      .then(({ enderecos }) => vivo && setTaxa(enderecoDaTaxa(enderecos)?.bairro.taxaCentavos ?? null))
+      .catch(() => vivo && setTaxa(null));
+    return () => {
+      vivo = false;
+    };
+  }, [status, chamar, emFoco]);
+  return taxa;
+}
+
 function CartaoSugestao({ produto, adicionado, onAdicionar }) {
   const s = useEstilos(criarEstilos);
   const tema = useTema();
@@ -94,8 +124,9 @@ function CartaoSugestao({ produto, adicionado, onAdicionar }) {
 
 /**
  * Sacola: itens (lápis edita no modal do produto), "Peça também", resumo e
- * "Continuar". Valores são prévia: a API recalcula no envio. Sem login a taxa
- * fica "Calculada no próximo passo" (o checkout entra no próximo passo do app).
+ * "Continuar" (abre o checkout no mesmo modal). Valores são prévia: a API
+ * recalcula no envio. Sem login (ou sem endereço) a taxa fica "Calculada no
+ * próximo passo"; logado, é a do bairro do endereço principal.
  */
 export default function TelaSacola() {
   const s = useEstilos(criarEstilos);
@@ -116,7 +147,8 @@ export default function TelaSacola() {
 
   const produtos = useMemo(() => produtosDoCardapio(dados?.categorias), [dados]);
   const freteGratis = dados?.freteGratis ?? null;
-  const resumo = resumoDaSacola(itens, { taxaBairroCentavos: null, freteGratis });
+  const taxaBairro = useTaxaDoCliente(emFoco);
+  const resumo = resumoDaSacola(itens, { taxaBairroCentavos: taxaBairro, freteGratis });
   const listaSugestoes = podePedir ? listarSugestoes(dados, itens, recem) : [];
 
   const limpar = () =>
@@ -241,12 +273,13 @@ export default function TelaSacola() {
           </Text>
         </View>
         <View style={s.rodapeAcao}>
-          {/* Checkout (login, endereço, pagamento) entra no próximo passo do app. */}
-          <Botao titulo="Continuar" desabilitado onPress={() => {}} />
+          <Botao titulo="Continuar" desabilitado={!podePedir} onPress={() => router.push('/sacola/checkout')} />
           <Text style={s.rodapeNota} numberOfLines={2}>
             {fechado
               ? `Fechado no momento${dados?.proximaAbertura ? ` · abre ${quandoAbre(dados.proximaAbertura.em)}` : ''}`
-              : 'Finalizar pelo app: em breve'}
+              : !podePedir
+                ? 'Conecte-se à internet para pedir'
+                : ''}
           </Text>
         </View>
       </View>

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useCardapio } from '../../estado/Cardapio.js';
 import { AvisosNaTela } from '../../estado/Avisos.js';
+import { useUltimoPedido } from '../../estado/UltimoPedido.js';
+import { Botao } from '../../componentes/basicos.js';
 import { Cabecalho } from '../../componentes/Cabecalho.js';
 import { AvisoFechado, FaixaSemConexao } from '../../componentes/Faixas.js';
 import { AbasCategorias, ListaCardapio } from '../../componentes/ListaCardapio.js';
@@ -15,6 +17,7 @@ export default function Inicio() {
   const s = useEstilos(criarEstilos);
   const tema = useTema();
   const { dados, categorias, podePedir, semConexao, salvoEm, buscando, recarregar } = useCardapio();
+  const { ultimoPedido, repetir } = useUltimoPedido();
   const lista = useRef(null);
   const [ativa, setAtiva] = useState(null);
   const [puxou, setPuxou] = useState(false);
@@ -68,6 +71,12 @@ export default function Inicio() {
           <>
             {semConexao && <FaixaSemConexao salvoEm={salvoEm} podePedir={podePedir} />}
             {fechado && <AvisoFechado proximaAbertura={dados.proximaAbertura} />}
+            {podePedir && ultimoPedido?.itens.length > 0 && categorias.length > 0 && (
+              <View style={s.repetir}>
+                <Text style={s.repetirTexto}>Bateu a vontade de novo?</Text>
+                <Botao titulo="Repetir último pedido" variante="secundario" onPress={() => repetir(ultimoPedido)} />
+              </View>
+            )}
           </>
         }
       />
@@ -81,4 +90,18 @@ const criarEstilos = (t) =>
   StyleSheet.create({
     tela: { flex: 1, backgroundColor: t.cores.fundo },
     carregando: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    repetir: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      marginHorizontal: 16,
+      marginTop: 12,
+      padding: 12,
+      borderRadius: t.raio.normal,
+      backgroundColor: t.cores.superficie,
+      borderWidth: 1,
+      borderColor: t.cores.borda,
+    },
+    repetirTexto: { flex: 1, fontSize: t.fontes.tamanho.normal, fontWeight: t.fontes.peso.medio, color: t.cores.texto },
   });

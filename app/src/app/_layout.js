@@ -7,6 +7,8 @@ import { TemaProvider, temaCabana, useTema } from '../tema/tema.js';
 import { AvisosProvider } from '../estado/Avisos.js';
 import { CarrinhoProvider, useCarrinho } from '../estado/Carrinho.js';
 import { CardapioProvider, useCardapio } from '../estado/Cardapio.js';
+import { ClienteProvider } from '../estado/Cliente.js';
+import { UltimoPedidoProvider } from '../estado/UltimoPedido.js';
 import { TelaSemInternet } from '../componentes/TelaSemInternet.js';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -48,7 +50,7 @@ function Navegacao() {
       >
         <Stack.Screen name="(abas)" options={{ headerShown: false }} />
         <Stack.Screen name="produto" options={{ presentation: 'modal', headerShown: false }} />
-        <Stack.Screen name="sacola" options={{ presentation: 'modal', title: 'Sacola' }} />
+        <Stack.Screen name="sacola" options={{ presentation: 'modal', headerShown: false }} />
       </Stack>
     </>
   );
@@ -60,7 +62,11 @@ export default function LayoutRaiz() {
       <AvisosProvider>
         <CarrinhoProvider>
           <CardapioProvider>
-            <Navegacao />
+            <ClienteProvider>
+              <UltimoPedidoProvider>
+                <Navegacao />
+              </UltimoPedidoProvider>
+            </ClienteProvider>
           </CardapioProvider>
         </CarrinhoProvider>
       </AvisosProvider>

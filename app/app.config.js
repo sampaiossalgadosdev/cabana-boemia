@@ -9,8 +9,8 @@ const ID_APP = 'br.com.deliveryabatia.app';
 // e exige esse valor: sem ele (build só Android), o plugin fica de fora.
 const ESQUEMA_GOOGLE_IOS = process.env.GOOGLE_IOS_URL_SCHEME;
 
-// Projeto no EAS (expo.dev). Público; vem do `eas init`.
-const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID || 'PREENCHER_COM_EAS_INIT';
+// Projeto no EAS (expo.dev, conta sampaio040826), criado pelo `eas init`. Público.
+const EAS_PROJECT_ID = '77cc3648-5ee3-4448-a147-6c213d3a69ea';
 
 /** @type {import("expo/config").ExpoConfig} */
 export default {

@@ -4,20 +4,27 @@
     "appVersionSource": "local"
   },
   "build": {
+    "base": {
+      "node": "24.14.1",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://cabana.managerpix.com.br",
+        "ELECTRON_SKIP_BINARY_DOWNLOAD": "1"
+      }
+    },
     "development": {
+      "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://cabana.managerpix.com.br" }
+      "android": { "buildType": "apk" }
     },
     "preview": {
+      "extends": "base",
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://cabana.managerpix.com.br" }
+      "android": { "buildType": "apk" }
     },
     "production": {
-      "android": { "buildType": "app-bundle" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://cabana.managerpix.com.br" }
+      "extends": "base",
+      "android": { "buildType": "app-bundle" }
     }
   },
   "submit": {

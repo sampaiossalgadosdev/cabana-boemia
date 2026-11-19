@@ -42,9 +42,10 @@ NODE_ENV=production npm start   # prisma migrate deploy && node src/server.js
 
 ### Como o Railway monta o serviço
 
-O Railway usa o **Railpack**, que reconhece os workspaces pelo `package.json` da raiz. Não há configuração extra:
+O Railway usa o **Railpack**, que reconhece os workspaces pelo `package.json` da raiz:
 
 - **Node:** `engines.node = "24.x"`.
+- **Instalação:** só `api`, `site`, `retaguarda` e `shared`, pela variável `RAILPACK_NODE_NPM_INSTALL` (tabela abaixo). Sem ela o Railpack roda `npm install` na raiz e instala também o `app` (Expo/React Native) e o `pdv` (Electron), que o servidor não usa. No seu computador nada muda: `npm install` continua instalando todos.
 - **Build:** `npm run build` (raiz).
 - **Start:** `npm start` (raiz) → `prisma migrate deploy && node src/server.js` no workspace `api`. As migrations rodam a cada deploy; o **seed não roda sozinho**.
 - **Root Directory do serviço: vazio** (raiz do repositório). Apontar para `api/` quebra os workspaces.
@@ -59,7 +60,8 @@ O Railway usa o **Railpack**, que reconhece os workspaces pelo `package.json` da
 | `CORS_ORIGINS` | `https://cabana.managerpix.com.br,https://cabana-boemia-production.up.railway.app` (com `https://`, sem barra no fim, separados por vírgula sem espaço) |
 | `NODE_ENV` | `production` |
 | `BCRYPT_CUSTO` | `12` |
-| `ELECTRON_SKIP_BINARY_DOWNLOAD` | `1` (a instalação inclui o workspace do PDV; não baixa o Electron no servidor) |
+| `RAILPACK_NODE_NPM_INSTALL` | `npm ci --workspace=api --workspace=site --workspace=retaguarda --workspace=shared` (variável de build do Railpack: troca só o comando de instalação; direto, não via `npm run`) |
+| `ELECTRON_SKIP_BINARY_DOWNLOAD` | `1` (segurança, caso a instalação volte a incluir o PDV: não baixa o Electron no servidor) |
 
 `PORT` **não** é definida: o Railway injeta. `VITE_API_URL` também não: o site e a retaguarda chamam `/api` no mesmo domínio. O dono tem todas prontas em `api/.env.railway` (não versionado) para colar no Raw Editor.
 

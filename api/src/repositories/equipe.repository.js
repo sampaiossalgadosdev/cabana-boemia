@@ -6,14 +6,20 @@ const SELECT_ENDERECO = {
   numero: true,
   complemento: true,
   referencia: true,
+  cep: true,
+  cidade: true,
+  estado: true,
   principal: true,
   bairro: { select: { id: true, nome: true, taxaCentavos: true, ativo: true } },
 };
 
 export const SELECT_CLIENTE = {
   id: true,
+  googleId: true, // só para saber se é cadastro do site (o id do Google não sai da API)
   nome: true,
+  email: true,
   telefone: true,
+  observacao: true,
   enderecos: {
     select: SELECT_ENDERECO,
     orderBy: [{ principal: 'desc' }, { criadoEm: 'desc' }, { id: 'desc' }],
@@ -40,12 +46,21 @@ export function buscarClientePorId(id, db = prisma) {
   return db.cliente.findUnique({ where: { id }, select: SELECT_CLIENTE });
 }
 
-export function buscarClientePorTelefone(telefone, db = prisma) {
-  return db.cliente.findFirst({ where: { telefone }, select: SELECT_CLIENTE, orderBy: { id: 'asc' } });
+/** Primeiro cliente com o telefone (menos o `exceto`, na edição). */
+export function buscarClientePorTelefone(telefone, db = prisma, exceto = null) {
+  return db.cliente.findFirst({
+    where: { telefone, ...(exceto ? { id: { not: exceto } } : {}) },
+    select: SELECT_CLIENTE,
+    orderBy: { id: 'asc' },
+  });
 }
 
-export function criarCliente({ nome, telefone }, db = prisma) {
-  return db.cliente.create({ data: { nome, telefone }, select: { id: true } });
+export function criarCliente({ nome, telefone, email = null, observacao = null }, db = prisma) {
+  return db.cliente.create({ data: { nome, telefone, email, observacao }, select: { id: true } });
+}
+
+export function atualizarCliente(id, dados, db = prisma) {
+  return db.cliente.update({ where: { id }, data: dados, select: { id: true } });
 }
 
 /**

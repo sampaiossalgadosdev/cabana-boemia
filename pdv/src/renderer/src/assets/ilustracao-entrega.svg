@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" role="img" aria-label="Entregador de moto">
+  <!-- Ilustração provisória (cores da Cabana Boemia). Para trocar, substitua este arquivo
+       por outra imagem com o mesmo nome (ou ajuste o import em EtapaTipo.jsx). -->
+  <ellipse cx="160" cy="182" rx="130" ry="10" fill="#eaded0"/>
+  <!-- estrada -->
+  <path d="M20 182h280" stroke="#c9a646" stroke-width="3" stroke-dasharray="14 10" stroke-linecap="round"/>
+  <!-- rodas -->
+  <circle cx="88" cy="150" r="28" fill="#111111"/>
+  <circle cx="88" cy="150" r="12" fill="#fbf3e8"/>
+  <circle cx="236" cy="150" r="28" fill="#111111"/>
+  <circle cx="236" cy="150" r="12" fill="#fbf3e8"/>
+  <!-- moto -->
+  <path d="M70 140c8-26 34-34 58-34h44l20 24h30c10 0 18 8 18 18v4H70z" fill="#c8102e"/>
+  <path d="M192 130l22-44h14" fill="none" stroke="#111111" stroke-width="7" stroke-linecap="round"/>
+  <rect x="218" y="78" width="22" height="9" rx="4" fill="#111111"/>
+  <path d="M120 106h52l-6 16h-40z" fill="#9e0b22"/>
+  <!-- baú de entrega -->
+  <rect x="52" y="70" width="58" height="46" rx="6" fill="#c9a646"/>
+  <path d="M52 86h58" stroke="#9e0b22" stroke-width="4"/>
+  <path d="M74 98h14" stroke="#111111" stroke-width="4" stroke-linecap="round"/>
+  <!-- piloto -->
+  <path d="M138 104l10-40c2-8 10-12 18-10l14 4c8 2 12 10 10 18l-8 28z" fill="#111111"/>
+  <path d="M166 70l34 16" stroke="#111111" stroke-width="11" stroke-linecap="round"/>
+  <path d="M150 108l26 4 10 24" fill="none" stroke="#9e0b22" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="170" cy="40" r="20" fill="#c8102e"/>
+  <path d="M154 40h30c0 8-7 14-15 14s-15-6-15-14z" fill="#111111" opacity="0.85"/>
+  <path d="M152 34c4-10 12-14 20-14" stroke="#fbf3e8" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <!-- linhas de velocidade -->
+  <path d="M8 118h30M18 134h24M4 150h22" stroke="#d9541e" stroke-width="5" stroke-linecap="round"/>
+</svg>

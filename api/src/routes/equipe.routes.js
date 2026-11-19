@@ -20,6 +20,8 @@ export function criarEquipeRoutes({ relogio } = {}) {
   r.post('/pedidos', assincrono(c.criarPedido));
   r.patch('/pedidos/:id/finalizar', assincrono(c.finalizarPedido));
   r.patch('/pedidos/:id/cancelar', assincrono(c.cancelarPedido));
+  r.patch('/pedidos/:id/status', assincrono(c.alterarStatus));
+  r.patch('/pedidos/:id/agendamento', assincrono(c.alterarAgendamento));
   r.post('/pedidos/:id/reimprimir', assincrono(c.reimprimirPedido));
   r.get('/caixa/atual', assincrono(c.caixaAtual));
   r.post('/caixa/abrir', assincrono(c.abrirCaixa));
@@ -36,7 +38,9 @@ export function criarEquipeRoutes({ relogio } = {}) {
   r.post('/impressoes/:id/falha', assincrono(c.falhaImpressao));
   r.get('/clientes', assincrono(c.buscarClientes));
   r.post('/clientes', assincrono(c.criarCliente));
+  r.put('/clientes/:id', assincrono(c.atualizarCliente));
   r.post('/clientes/:id/enderecos', assincrono(c.adicionarEndereco));
+  r.put('/clientes/:id/enderecos/:enderecoId', assincrono(c.atualizarEndereco));
   r.get('/cardapio', assincrono(c.cardapio));
   r.get('/config/tempo-estimado', assincrono(c.obterTempo));
   r.put('/config/tempo-estimado', assincrono(c.definirTempo));

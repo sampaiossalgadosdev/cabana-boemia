@@ -53,4 +53,15 @@ describe('api/.env.railway (produção)', { skip: semArquivo }, () => {
     assert.equal(p.get('NODE_ENV'), 'production');
     assert.equal(p.has('DATABASE_URL_TEST'), false, 'banco de teste não vai para produção');
   });
+
+  test('Railpack instala só api, site, retaguarda e shared (sem app nem pdv)', () => {
+    const cmd = prod().get('RAILPACK_NODE_NPM_INSTALL') ?? '';
+    // direto, sem "npm run" (o npm ci aninhado dá EALLOWSCRIPTS no npm 11)
+    assert.match(cmd, /^npm ci( |$)/);
+    const workspaces = [...cmd.matchAll(/--workspace=(\S+)/g)].map((m) => m[1]).sort();
+    assert.deepEqual(workspaces, ['api', 'retaguarda', 'shared', 'site']);
+    // o build da raiz só usa esses workspaces
+    const raiz = JSON.parse(readFileSync(path.join(raizApi, '..', 'package.json'), 'utf8'));
+    assert.doesNotMatch(raiz.scripts.build, /-w (app|pdv)\b/);
+  });
 });

@@ -10,6 +10,7 @@ import * as estoqueService from '../services/estoque.service.js';
 import * as configuracaoService from '../services/configuracao.service.js';
 import * as turnoService from '../services/turno.service.js';
 import * as relatorioService from '../services/relatorio.service.js';
+import * as solicitacaoRepo from '../repositories/solicitacaoExclusao.repository.js';
 
 // ───────── Schemas ─────────
 
@@ -199,6 +200,19 @@ const id = (req) => validar(idSchema, req.params).id;
 /** @param {() => Date} [relogio] fonte do "agora" (injetável nos testes) */
 export function criarRetaguardaController(relogio = () => new Date()) {
   return {
+    /** Pedidos de exclusão de conta da página pública /excluir-conta. */
+    async listarSolicitacoesExclusao(req, res) {
+      res.json(await solicitacaoRepo.listar());
+    },
+
+    async marcarSolicitacaoAtendida(req, res) {
+      const { id } = validar(idSchema, req.params);
+      if (!(await solicitacaoRepo.marcarAtendida(id))) {
+        throw new ErroHttp(404, 'Solicitação não encontrada ou já atendida', { codigo: 'NAO_ENCONTRADO' });
+      }
+      res.status(204).end();
+    },
+
     /** Caixas abertos no dia local, com esperado, contado, diferença e totais por forma. */
     async caixas(req, res) {
       const { data } = validar(caixasSchema, req.query);

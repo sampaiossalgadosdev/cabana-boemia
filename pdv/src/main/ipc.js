@@ -5,6 +5,8 @@
  * o IPC com campos extras).
  */
 
+import { criarConsultaCep } from './cep.js';
+
 export const FORMAS_PAGAMENTO = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'];
 export const CANAIS_FILA = 'SITE,WHATSAPP';
 export const TEMPO_MIN = 1;
@@ -40,16 +42,40 @@ export function enderecoParaApi(e) {
     complemento: opcional(e.complemento, 120),
     referencia: opcional(e.referencia, 200),
     bairroId: Number(e.bairroId),
+    cep: opcional(e.cep, 9),
+    cidade: opcional(e.cidade, 60),
+    estado: opcional(e.estado, 30),
   };
 }
 
-/** Só os campos do pedido do WhatsApp; itens só com produto, quantidade e observação. */
+/** Nome, telefone, e-mail e observação do cliente (cadastro e edição). */
+export function clienteParaApi(d) {
+  return {
+    nome: String(d?.nome ?? ''),
+    telefone: String(d?.telefone ?? ''),
+    email: opcional(d?.email, 120),
+    observacao: opcional(d?.observacao, 300),
+  };
+}
+
+/** Inteiro >= 0 ou null (centavos opcionais do pedido). */
+const centavosOpcionais = (v) => (Number.isInteger(v) && v >= 0 ? v : null);
+
+/**
+ * Só os campos do pedido da equipe (delivery do WhatsApp ou encomenda); itens
+ * só com produto, quantidade e observação. Nunca preço: o total sai da API.
+ */
 export function pedidoParaApi(d) {
   if (!d || typeof d !== 'object' || !Array.isArray(d.itens)) throw new ErroEntrada('Pedido inválido');
   if (!FORMAS_PAGAMENTO.includes(d.formaPagamento)) throw new ErroEntrada('Escolha a forma de pagamento');
+  const encomenda = d.encomenda === true;
+  const retirarNoBalcao = encomenda && d.retirarNoBalcao === true;
+  if (encomenda && (typeof d.agendadoPara !== 'string' || Number.isNaN(Date.parse(d.agendadoPara)))) {
+    throw new ErroEntrada('Informe a data e o horário da encomenda');
+  }
   return {
     clienteId: idValido(d.clienteId, 'cliente'),
-    enderecoId: idValido(d.enderecoId, 'endereço'),
+    enderecoId: retirarNoBalcao ? null : idValido(d.enderecoId, 'endereço'),
     itens: d.itens.slice(0, 50).map((i) => ({
       produtoId: Number(i?.produtoId),
       quantidade: Number(i?.quantidade),
@@ -58,7 +84,23 @@ export function pedidoParaApi(d) {
     formaPagamento: d.formaPagamento,
     trocoParaCentavos: Number.isInteger(d.trocoParaCentavos) ? d.trocoParaCentavos : null,
     chaveIdempotencia: typeof d.chaveIdempotencia === 'string' ? d.chaveIdempotencia : undefined,
+    encomenda,
+    agendadoPara: encomenda ? new Date(d.agendadoPara).toISOString() : null,
+    retirarNoBalcao,
+    descontoCentavos: centavosOpcionais(d.descontoCentavos) ?? 0,
+    taxaEntregaCentavos: retirarNoBalcao ? null : centavosOpcionais(d.taxaEntregaCentavos),
+    observacao: opcional(d.observacao, 200),
+    pagoAgora: d.pagoAgora === true,
   };
+}
+
+/** Status que o painel pode escolher (o resto é finalizar/cancelar). */
+export const STATUS_ANDAMENTO = ['ABERTO', 'EM_PREPARO', 'SAIU_ENTREGA'];
+
+/** "hoje" ou AAAA-MM-DD (dia operacional do painel). */
+function dataValida(valor) {
+  if (valor === 'hoje' || (typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor))) return valor;
+  throw new ErroEntrada('Data inválida');
 }
 
 /** Peso máximo aceito pela API para o prato por kg (gramas). */
@@ -143,7 +185,7 @@ export function validarMinutos(valor) {
  * }} deps
  * @returns {Record<string, (...args: any[]) => Promise<unknown>>}
  */
-export function criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao }) {
+export function criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao, consultarCep = criarConsultaCep() }) {
   async function aposLogin(usuario) {
     if (usuario) {
       tempoReal.ligar();
@@ -180,6 +222,24 @@ export function criarHandlers({ config, api, tempoReal, agente, listarImpressora
     'tempoReal:status': async () => tempoReal.status(),
 
     'pedidos:fila': async () => api.requisitar('GET', `/equipe/pedidos?dataRef=hoje&canal=${CANAIS_FILA}`),
+
+    /** Painel: todos os pedidos do dia operacional (o PDV filtra status, tipo e busca). */
+    'pedidos:listar': async (dataRef) =>
+      api.requisitar('GET', `/equipe/pedidos?dataRef=${dataValida(dataRef)}&canal=${CANAIS_FILA}&status=todos`),
+
+    'pedidos:status': async (id, status) => {
+      if (!STATUS_ANDAMENTO.includes(status)) throw new ErroEntrada('Status inválido');
+      return api.requisitar('PATCH', `/equipe/pedidos/${idValido(id, 'pedido')}/status`, { status });
+    },
+
+    'pedidos:agendamento': async (id, agendadoPara) => {
+      if (typeof agendadoPara !== 'string' || Number.isNaN(Date.parse(agendadoPara))) {
+        throw new ErroEntrada('Informe a data e o horário');
+      }
+      return api.requisitar('PATCH', `/equipe/pedidos/${idValido(id, 'pedido')}/agendamento`, {
+        agendadoPara: new Date(agendadoPara).toISOString(),
+      });
+    },
 
     'pedidos:finalizar': async (id, formaPagamento) => {
       if (!Number.isInteger(id) || id <= 0) throw new ErroEntrada('Pedido inválido');
@@ -224,15 +284,27 @@ export function criarHandlers({ config, api, tempoReal, agente, listarImpressora
     'clientes:buscar': async (busca) =>
       api.requisitar('GET', `/equipe/clientes?busca=${encodeURIComponent(texto(busca, 'o nome ou telefone', 60).trim())}`),
 
+    // Endereço opcional: encomenda retirada no balcão não precisa.
     'clientes:criar': async (dados) =>
       api.requisitar('POST', '/equipe/clientes', {
-        nome: String(dados?.nome ?? ''),
-        telefone: String(dados?.telefone ?? ''),
-        endereco: enderecoParaApi(dados?.endereco),
+        ...clienteParaApi(dados),
+        endereco: dados?.endereco == null ? null : enderecoParaApi(dados.endereco),
       }),
+
+    'clientes:atualizar': async (clienteId, dados) =>
+      api.requisitar('PUT', `/equipe/clientes/${idValido(clienteId, 'cliente')}`, clienteParaApi(dados)),
 
     'clientes:adicionarEndereco': async (clienteId, endereco) =>
       api.requisitar('POST', `/equipe/clientes/${idValido(clienteId, 'cliente')}/enderecos`, enderecoParaApi(endereco)),
+
+    'clientes:atualizarEndereco': async (clienteId, enderecoId, endereco) =>
+      api.requisitar(
+        'PUT',
+        `/equipe/clientes/${idValido(clienteId, 'cliente')}/enderecos/${idValido(enderecoId, 'endereço')}`,
+        enderecoParaApi(endereco),
+      ),
+
+    'cep:consultar': async (cep) => consultarCep(String(cep ?? '')),
 
     'tempo:obter': async () => api.requisitar('GET', '/equipe/config/tempo-estimado'),
 

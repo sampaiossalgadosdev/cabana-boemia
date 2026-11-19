@@ -10,7 +10,8 @@ import { criarRetaguardaRoutes } from './retaguarda.routes.js';
 /**
  * Rotas montadas por app: cada criarApp() tem seu próprio rate limiter
  * (estado em memória), o que isola os testes.
- * @param {{ limiteLogin?: number, relogio?: () => Date, verificarIdTokenGoogle?: Function }} [opcoes]
+ * @param {{ limiteLogin?: number, relogio?: () => Date, verificarIdTokenGoogle?: Function,
+ *           verificarIdentityTokenApple?: Function, revogarApple?: Function, limiteAuthCliente?: number }} [opcoes]
  */
 export function criarRotas(opcoes = {}) {
   const routes = Router();

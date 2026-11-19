@@ -7,6 +7,8 @@ import './estilos/delivery.css';
 import './estilos/impressao.css';
 import './estilos/salao.css';
 import './estilos/caixa.css';
+import './estilos/painel.css';
+import './estilos/novo-pedido.css';
 
 createRoot(document.getElementById('raiz')).render(
   <StrictMode>

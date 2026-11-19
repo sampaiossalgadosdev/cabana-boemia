@@ -81,7 +81,11 @@ export function criarClienteController(
 
     async excluirConta(req, res) {
       const { appleAuthorizationCode } = validar(exclusaoSchema, req.body ?? {});
-      const r = await clienteService.excluirConta(req.cliente.id, { appleAuthorizationCode, revogarApple });
+      const r = await clienteService.excluirConta(req.cliente.id, {
+        appleAuthorizationCode,
+        revogarApple,
+        agora: relogio(),
+      });
       res.json({ excluido: true, pedidosAnonimizados: r.pedidosAnonimizados, appleRevogado: r.apple?.revogado ?? null });
     },
 

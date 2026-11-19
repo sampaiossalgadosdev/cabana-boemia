@@ -222,7 +222,9 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
   const entrarApple = (campos, extra = {}) =>
     req('POST', '/cliente/auth/apple', { corpo: { identityToken: tokenApple(campos), nonce: NONCE, refresh: true, ...extra } });
 
-  async function pedidoDe(clienteId, status = 'FINALIZADO') {
+  const HORA = 60 * 60 * 1000;
+  /** Pedido do cliente; `horasAtras` = há quanto tempo foi criado (padrão: 4 h, fora da janela de 3 h). */
+  async function pedidoDe(clienteId, status = 'FINALIZADO', horasAtras = 4) {
     seq += 1;
     return prisma.pedido.create({
       data: {
@@ -230,6 +232,7 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
         dataRef: new Date('2026-11-19T00:00:00Z'),
         canal: 'SITE',
         status,
+        criadoEm: new Date(Date.now() - horasAtras * HORA),
         clienteId,
         nomeCliente: 'Ana Souza',
         telefone: '43999990000',
@@ -400,14 +403,37 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
 
   // ───── Exclusão de conta ─────
 
-  test('excluir com pedido em andamento: 409 PEDIDO_EM_ANDAMENTO e nada muda', async () => {
+  test('excluir com pedido de menos de 3 h (não cancelado, qualquer status): 409 PEDIDO_EM_ANDAMENTO e nada muda', async () => {
     const { token, cliente } = (await entrarGoogle({})).corpo;
-    const p = await pedidoDe(cliente.id, 'CONFIRMADO');
+    const p = await pedidoDe(cliente.id, 'CONFIRMADO', 0);
     const r = await req('DELETE', '/cliente/me', { token });
     assert.equal(r.status, 409);
     assert.equal(r.corpo.erro.codigo, 'PEDIDO_EM_ANDAMENTO');
     assert.ok(await prisma.cliente.findUnique({ where: { id: cliente.id } }));
     assert.equal((await prisma.pedido.findUnique({ where: { id: p.id } })).nomeCliente, 'Ana Souza');
+  });
+
+  test('janela de 3 h: finalizado recente bloqueia; cancelado recente não; aberto antigo (PDV nunca finalizou) não', async () => {
+    const bloqueia = (await entrarGoogle({})).corpo;
+    await pedidoDe(bloqueia.cliente.id, 'FINALIZADO', 2.9);
+    const r1 = await req('DELETE', '/cliente/me', { token: bloqueia.token });
+    assert.equal(r1.status, 409);
+    assert.equal(r1.corpo.erro.codigo, 'PEDIDO_EM_ANDAMENTO');
+    assert.match(r1.corpo.erro.mensagem, /3 horas/);
+
+    const cancelado = (await entrarGoogle({})).corpo;
+    await pedidoDe(cancelado.cliente.id, 'CANCELADO', 0);
+    assert.equal((await req('DELETE', '/cliente/me', { token: cancelado.token })).status, 200);
+
+    // Pedido que o PDV deixou em aberto (CONFIRMADO/ABERTO) há mais de 3 h: o cliente não fica preso.
+    const preso = (await entrarGoogle({})).corpo;
+    const antigo = await pedidoDe(preso.cliente.id, 'CONFIRMADO', 3.1);
+    const r3 = await req('DELETE', '/cliente/me', { token: preso.token });
+    assert.equal(r3.status, 200);
+    assert.equal(r3.corpo.pedidosAnonimizados, 1);
+    const p = await prisma.pedido.findUnique({ where: { id: antigo.id } });
+    assert.equal(p.status, 'CONFIRMADO', 'o status do pedido não muda');
+    assert.equal(p.nomeCliente, 'Cliente excluído');
   });
 
   test('excluir: apaga cliente, endereços e refresh; pedidos ficam com valores e itens, sem dados pessoais', async () => {

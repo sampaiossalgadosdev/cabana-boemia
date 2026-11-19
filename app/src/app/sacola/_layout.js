@@ -20,7 +20,7 @@ export default function LayoutSacola() {
       <Stack.Screen name="index" options={{ title: 'Sacola' }} />
       <Stack.Screen name="checkout" options={{ title: 'Finalizar' }} />
       {/* Sem voltar: o pedido já foi criado. */}
-      <Stack.Screen name="enviado" options={{ title: 'Pedido enviado', headerBackVisible: false, gestureEnabled: false }} />
+      <Stack.Screen name="enviado" options={{ title: 'Pedido enviado', headerBackVisible: false, headerLeft: () => null, gestureEnabled: false }} />
     </Stack>
   );
 }

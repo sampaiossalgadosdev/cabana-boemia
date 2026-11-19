@@ -4,8 +4,8 @@
 
 const ID_APP = 'br.com.deliveryabatia.app';
 
-/** @type {import('expo/config').ExpoConfig} */
-module.exports = {
+/** @type {import("expo/config").ExpoConfig} */
+export default {
   name: 'Delivery Abatiá',
   slug: 'delivery-abatia',
   scheme: 'deliveryabatia',

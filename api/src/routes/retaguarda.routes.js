@@ -18,6 +18,9 @@ export function criarRetaguardaRoutes({ relogio } = {}) {
   });
   r.use(autenticar, exigirPapel('DONO'));
   r.get('/caixas', assincrono(c.caixas));
+  // Pedidos de exclusão de conta feitos pela página /excluir-conta (tela na retaguarda: pendente).
+  r.get('/solicitacoes-exclusao', assincrono(c.listarSolicitacoesExclusao));
+  r.patch('/solicitacoes-exclusao/:id/atendida', assincrono(c.marcarSolicitacaoAtendida));
   r.get('/relatorios/dia', assincrono(c.relatorioDia));
   r.post('/relatorios/dia/imprimir', assincrono(c.imprimirRelatorioDia));
 

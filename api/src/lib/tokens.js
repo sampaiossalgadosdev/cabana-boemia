@@ -92,3 +92,23 @@ export function gerarRefreshToken(agora = new Date()) {
     expiraEm: new Date(agora.getTime() + REFRESH_TOKEN_DURACAO_MS),
   };
 }
+
+/** Refresh do cliente (app): 60 dias, renovado a cada uso (rotativo). O site não usa. */
+export const CLIENTE_REFRESH_DURACAO_MS = 60 * 24 * 60 * 60 * 1000;
+
+/**
+ * Hash do refresh do cliente: HMAC com o segredo do cliente e um prefixo, para
+ * nunca coincidir com o hash de um refresh da equipe (outra tabela, outro segredo).
+ */
+export function hashRefreshTokenCliente(token) {
+  return createHmac('sha256', segredo('JWT_CLIENTE_SECRET')).update(`cliente:${token}`).digest('hex');
+}
+
+export function gerarRefreshTokenCliente(agora = new Date()) {
+  const token = randomBytes(32).toString('base64url');
+  return {
+    token,
+    hash: hashRefreshTokenCliente(token),
+    expiraEm: new Date(agora.getTime() + CLIENTE_REFRESH_DURACAO_MS),
+  };
+}

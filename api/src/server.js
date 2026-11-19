@@ -3,6 +3,7 @@ import { criarApp, lerOrigensCors } from './app.js';
 import { criarTempoReal } from './lib/tempoReal.js';
 import { prisma } from './lib/prisma.js';
 import { problemasNosSegredos } from './lib/tokens.js';
+import { credenciaisApple } from './lib/apple.js';
 
 // Falha cedo: sem segredos válidos a API subiria e só quebraria no primeiro login.
 const problemas = problemasNosSegredos();
@@ -17,6 +18,11 @@ if (problemas.length) {
 
 if (!process.env.GOOGLE_CLIENT_ID) {
   console.warn('Aviso: GOOGLE_CLIENT_ID ausente. O login de clientes no site responde 503 até configurar.');
+}
+if (!credenciaisApple()) {
+  console.warn(
+    'Aviso: APPLE_TEAM_ID/APPLE_KEY_ID/APPLE_PRIVATE_KEY ausentes. O "Entrar com Apple" funciona, mas a exclusão de conta não revoga o login na Apple.',
+  );
 }
 
 const porta = Number(process.env.PORT) || 3000;

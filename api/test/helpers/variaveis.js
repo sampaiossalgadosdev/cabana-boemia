@@ -23,7 +23,8 @@ export async function variaveisLidasPelaApi() {
   for (const pasta of ['src', 'scripts', 'prisma']) {
     for (const arquivo of await arquivosJs(path.join(raizApi, pasta))) {
       const codigo = await readFile(arquivo, 'utf8');
-      for (const m of codigo.matchAll(/process\.env\.([A-Z0-9_]+)/g)) usadas.add(m[1]);
+      // `process.env.X` e `env.X` (funções que recebem `env = process.env`, ex.: lib/apple.js)
+      for (const m of codigo.matchAll(/\benv\.([A-Z][A-Z0-9_]+)/g)) usadas.add(m[1]);
       for (const m of codigo.matchAll(/segredo\('([A-Z0-9_]+)'\)/g)) usadas.add(m[1]);
     }
   }

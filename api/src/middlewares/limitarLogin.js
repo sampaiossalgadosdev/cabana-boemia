@@ -26,3 +26,24 @@ export function criarLimitadorLogin({ limite = 10, janelaMs = 15 * 60 * 1000 } =
     },
   });
 }
+
+/**
+ * Rate limit de /cliente/auth/* (login Google/Apple, renovar e sair) por IP.
+ * Só falhas contam (token inválido, refresh recusado): clientes atrás do mesmo
+ * IP da operadora (CGNAT) não se atrapalham em logins normais.
+ */
+export function criarLimitadorAuthCliente({ limite = 20, janelaMs = 15 * 60 * 1000 } = {}) {
+  return rateLimit({
+    windowMs: janelaMs,
+    limit: limite,
+    skipSuccessfulRequests: true,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    keyGenerator: (req) => ipKeyGenerator(req.ip),
+    handler: (req, res) => {
+      res.status(429).json({
+        erro: { mensagem: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.', codigo: 'MUITAS_TENTATIVAS' },
+      });
+    },
+  });
+}

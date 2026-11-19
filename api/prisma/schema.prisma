@@ -109,6 +109,7 @@ model RefreshToken {
 model Cliente {
   id           Int      @id @default(autoincrement())
   googleId     String?  @unique
+  appleId      String?  @unique // "sub" do Entrar com Apple (app iOS)
   nome         String
   /// Nome sem acento e minúsculo (busca do PDV: "joao" acha "João"). Calculado
   /// pela extensão em src/lib/prisma.js a cada gravação de `nome`; sem default.
@@ -119,8 +120,9 @@ model Cliente {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  enderecos Endereco[]
-  pedidos   Pedido[]
+  enderecos     Endereco[]
+  pedidos       Pedido[]
+  refreshTokens RefreshTokenCliente[]
 
   @@index([telefone])
 }
@@ -411,6 +413,37 @@ model MovimentoCaixa {
   usuario Usuario @relation(fields: [usuarioId], references: [id])
 
   @@index([caixaId])
+}
+
+// ───────────── Sessão do app do cliente e exclusão de conta ─────────────
+
+/// Refresh token do cliente (app). Opaco, rotativo, ~60 dias; no banco só o HMAC.
+/// O site não pede refresh: continua só com o JWT de 7 dias.
+model RefreshTokenCliente {
+  id         Int       @id @default(autoincrement())
+  clienteId  Int
+  hash       String    @unique
+  expiraEm   DateTime
+  revogadoEm DateTime?
+  criadoEm   DateTime  @default(now())
+
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([clienteId])
+}
+
+/// Pedido de exclusão de conta pela página pública /excluir-conta (link do Play Console).
+/// Atendido à mão pelo dono (confere a identidade e exclui).
+model SolicitacaoExclusao {
+  id         Int       @id @default(autoincrement())
+  nome       String?   @db.VarChar(100)
+  email      String?   @db.VarChar(200)
+  telefone   String?   @db.VarChar(20)
+  mensagem   String?   @db.VarChar(500)
+  criadoEm   DateTime  @default(now())
+  atendidaEm DateTime?
+
+  @@index([criadoEm])
 }
 
 // ───────────── Configuração (linha única) ─────────────

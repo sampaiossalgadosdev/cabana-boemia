@@ -7,6 +7,24 @@ import * as pedidoService from '../services/pedido.service.js';
 
 const googleSchema = z.object({
   credential: z.string().min(1, 'Informe o credential do Google').max(4096),
+  // App: pede também o refresh token (sessão longa). O site não manda e recebe só o token.
+  refresh: z.boolean().optional(),
+});
+
+const appleSchema = z.object({
+  identityToken: z.string().min(1, 'Informe o identity token da Apple').max(4096),
+  // Nonce bruto: o app pediu à Apple o SHA-256 dele, que vem dentro do token.
+  nonce: z.string().min(16).max(128),
+  // A Apple só manda o nome no primeiro login (pelo app, fora do token).
+  nome: z.string().trim().max(100).optional(),
+  refresh: z.boolean().optional(),
+});
+
+const refreshSchema = z.object({ refreshToken: z.string().min(20).max(200) });
+
+const exclusaoSchema = z.object({
+  // Conta da Apple: código novo do "Entrar com Apple" para revogar o login na Apple.
+  appleAuthorizationCode: z.string().min(1).max(2048).optional(),
 });
 
 const perfilSchema = z.object({
@@ -30,15 +48,41 @@ const pedidoSchema = z
 const historicoSchema = z.object({ antesDeId: z.coerce.number().int().positive().optional() });
 
 /**
- * @param {(idToken: string) => Promise<object>} verificarIdTokenGoogle
+ * @param {{ verificarIdTokenGoogle: Function, verificarIdentityTokenApple: Function, revogarApple: Function }} deps
  * @param {() => Date} [relogio] "agora" do pedido (injetável nos testes)
  */
-export function criarClienteController(verificarIdTokenGoogle, relogio = () => new Date()) {
+export function criarClienteController(
+  { verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple },
+  relogio = () => new Date(),
+) {
   return {
     async entrarComGoogle(req, res) {
-      const { credential } = validar(googleSchema, req.body);
+      const { credential, refresh } = validar(googleSchema, req.body);
       const identidade = await verificarIdTokenGoogle(credential);
-      res.json(await clienteService.entrarComGoogle(identidade));
+      res.json(await clienteService.entrarComGoogle(identidade, { comRefresh: refresh === true }));
+    },
+
+    async entrarComApple(req, res) {
+      const { identityToken, nonce, nome, refresh } = validar(appleSchema, req.body);
+      const identidade = await verificarIdentityTokenApple(identityToken, { nonce });
+      res.json(await clienteService.entrarComApple(identidade, { nome, comRefresh: refresh === true }));
+    },
+
+    async renovar(req, res) {
+      const { refreshToken } = validar(refreshSchema, req.body);
+      res.json(await clienteService.renovarSessao(refreshToken));
+    },
+
+    async sair(req, res) {
+      const { refreshToken } = validar(refreshSchema, req.body);
+      await clienteService.sair(refreshToken);
+      res.status(204).end();
+    },
+
+    async excluirConta(req, res) {
+      const { appleAuthorizationCode } = validar(exclusaoSchema, req.body ?? {});
+      const r = await clienteService.excluirConta(req.cliente.id, { appleAuthorizationCode, revogarApple });
+      res.json({ excluido: true, pedidosAnonimizados: r.pedidosAnonimizados, appleRevogado: r.apple?.revogado ?? null });
     },
 
     me(req, res) {

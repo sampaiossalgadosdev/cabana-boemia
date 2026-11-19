@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { assincrono } from '../lib/assincrono.js';
 import { criarVerificadorGoogle } from '../lib/google.js';
+import { criarVerificadorApple, criarRevogadorApple } from '../lib/apple.js';
 import { autenticarCliente, exigirTelefoneCliente } from '../middlewares/autenticarCliente.js';
+import { criarLimitadorAuthCliente } from '../middlewares/limitarLogin.js';
 import { criarClienteController } from '../controllers/cliente.controller.js';
 
 /** Dados pessoais: nunca em cache. */
@@ -11,19 +13,31 @@ function semCache(req, res, next) {
 }
 
 /**
- * Rotas do cliente do site (JWT de cliente, separado do da equipe).
- * @param {{ verificarIdTokenGoogle?: (idToken: string) => Promise<object>, relogio?: () => Date }} [opcoes]
+ * Rotas do cliente (site e app; JWT de cliente, separado do da equipe).
+ * @param {{ verificarIdTokenGoogle?: Function, verificarIdentityTokenApple?: Function,
+ *           revogarApple?: Function, limiteAuthCliente?: number, relogio?: () => Date }} [opcoes]
  */
-export function criarClienteRoutes({ verificarIdTokenGoogle = criarVerificadorGoogle(), relogio } = {}) {
-  const c = criarClienteController(verificarIdTokenGoogle, relogio);
+export function criarClienteRoutes({
+  verificarIdTokenGoogle = criarVerificadorGoogle(),
+  verificarIdentityTokenApple = criarVerificadorApple(),
+  revogarApple = criarRevogadorApple(),
+  limiteAuthCliente,
+  relogio,
+} = {}) {
+  const c = criarClienteController({ verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple }, relogio);
   const r = Router();
   r.use(semCache);
 
-  r.post('/auth/google', assincrono(c.entrarComGoogle));
+  const limitar = criarLimitadorAuthCliente({ limite: limiteAuthCliente });
+  r.post('/auth/google', limitar, assincrono(c.entrarComGoogle));
+  r.post('/auth/apple', limitar, assincrono(c.entrarComApple));
+  r.post('/auth/renovar', limitar, assincrono(c.renovar));
+  r.post('/auth/sair', limitar, assincrono(c.sair));
 
   r.use(autenticarCliente);
   r.get('/me', c.me);
   r.put('/me', assincrono(c.atualizarMe));
+  r.delete('/me', assincrono(c.excluirConta));
   r.get('/enderecos', assincrono(c.listarEnderecos));
   r.post('/enderecos', assincrono(c.criarEndereco));
   r.put('/enderecos/:id', assincrono(c.atualizarEndereco));

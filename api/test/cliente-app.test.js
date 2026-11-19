@@ -14,6 +14,7 @@ import {
   EMISSOR_APPLE,
 } from '../src/lib/apple.js';
 import { validarSolicitacao } from '../src/routes/exclusao.routes.js';
+import { contatoHtml, paginaPrivacidade, paginaTermos, VIGENCIA } from '../src/routes/legal.routes.js';
 
 /**
  * App Delivery Abatiá: login nativo (Google com várias audiences, Apple),
@@ -181,6 +182,46 @@ test('formulário de exclusão: exige e-mail ou celular válido; normaliza', () 
     telefone: '43999990000',
     mensagem: null,
   });
+});
+
+test('páginas legais do app: em nome da plataforma, com todos os tópicos e a vigência', () => {
+  const p = paginaPrivacidade('5543999990000');
+  for (const trecho of [
+    'controlador',
+    'Delivery Abatiá',
+    'nome e e-mail',
+    'Telefone',
+    'Endereços de entrega',
+    'Histórico de pedidos',
+    'Registros de acesso',
+    'Para que usamos',
+    'somente para preparar e entregar aquele pedido',
+    'Railway',
+    'Por quanto tempo guardamos',
+    'art. 18',
+    'ANPD',
+    'Perfil › Excluir minha conta',
+    'href="/excluir-conta"',
+    'Contato',
+    `Vigente desde ${VIGENCIA}`,
+  ]) {
+    assert.ok(p.includes(trecho), `privacidade sem: ${trecho}`);
+  }
+  const t = paginaTermos('');
+  for (const trecho of ['Termos de uso', 'Cada loja é responsável', 'na entrega, direto à loja', 'Cancelamento', 'Código de Defesa do Consumidor', 'href="/privacidade-app"', `Vigente desde ${VIGENCIA}`]) {
+    assert.ok(t.includes(trecho), `termos sem: ${trecho}`);
+  }
+  for (const html of [p, t]) {
+    assert.doesNotMatch(html, /<script/);
+    assert.doesNotMatch(html, /Cabana Boemia/, 'em nome da plataforma, não da loja');
+  }
+});
+
+test('contato das páginas legais: WhatsApp formatado quando existe; sempre o formulário', () => {
+  assert.match(contatoHtml('5543999990000'), /href="https:\/\/wa\.me\/5543999990000">\(43\) 99999-0000</);
+  assert.doesNotMatch(contatoHtml(''), /wa\.me/);
+  assert.match(contatoHtml(''), /href="\/excluir-conta"/);
+  assert.doesNotMatch(contatoHtml('<script>'), /<script/);
 });
 
 // ───────────── Com banco: rotas ─────────────
@@ -490,6 +531,22 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
 
   // ───── Página /excluir-conta ─────
 
+  test('GET /privacidade-app e /termos-app: HTML da API (fora do site), CSP sem script, indexáveis, WhatsApp da configuração', async () => {
+    await prisma.configuracao.upsert({ where: { id: 1 }, create: { id: 1, whatsappNumero: '5543988887777' }, update: { whatsappNumero: '5543988887777' } });
+    for (const caminho of ['/privacidade-app', '/termos-app']) {
+      const r = await req('GET', caminho, { url: raiz });
+      assert.equal(r.status, 200, caminho);
+      assert.match(r.headers.get('content-type'), /text\/html/);
+      assert.equal(r.headers.get('cache-control'), 'no-store');
+      assert.match(r.headers.get('content-security-policy'), /default-src 'none'/);
+      assert.equal(r.headers.get('x-robots-tag'), null, 'páginas legais podem ser indexadas');
+      assert.doesNotMatch(r.corpo, /<script/);
+      assert.match(r.corpo, /wa\.me\/5543988887777/);
+    }
+    assert.match((await req('GET', '/privacidade-app', { url: raiz })).corpo, /Política de privacidade/);
+    assert.match((await req('GET', '/termos-app', { url: raiz })).corpo, /Termos de uso/);
+  });
+
   test('GET /excluir-conta: HTML próprio da API, sem cache, CSP sem script', async () => {
     const r = await req('GET', '/excluir-conta', { url: raiz });
     assert.equal(r.status, 200);
@@ -497,6 +554,9 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
     assert.equal(r.headers.get('cache-control'), 'no-store');
     assert.match(r.headers.get('content-security-policy'), /default-src 'none'/);
     assert.match(r.corpo, /Perfil › Excluir minha conta/);
+    assert.match(r.corpo, /3 horas/);
+    assert.match(r.corpo, /href="\/privacidade-app"/);
+    assert.equal(r.headers.get('x-robots-tag'), 'noindex');
     assert.match(r.corpo, /<form method="post"/);
     assert.doesNotMatch(r.corpo, /<script/);
   });

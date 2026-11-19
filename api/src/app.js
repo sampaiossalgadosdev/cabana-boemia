@@ -4,6 +4,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import { criarRotas } from './routes/index.js';
 import { criarRotasExclusao } from './routes/exclusao.routes.js';
+import { criarRotasLegais } from './routes/legal.routes.js';
 import { naoEncontrado } from './middlewares/naoEncontrado.js';
 import { tratarErro } from './middlewares/erro.js';
 import { servirSpa, DIST_SITE, DIST_RETAGUARDA, CSP_SITE, CSP_RETAGUARDA } from './lib/estaticos.js';
@@ -73,8 +74,10 @@ export function criarApp({
     PREFIXO_API,
     criarRotas({ limiteLogin, relogio, verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple, limiteAuthCliente }),
   );
-  // Página pública de exclusão de conta (link do Play Console): antes do site, que pegaria qualquer caminho.
+  // Páginas públicas do app (exclusão de conta, privacidade e termos; links do Play Console
+  // e do app): antes do site, que pegaria qualquer caminho.
   app.use(criarRotasExclusao({ limiteSolicitacoes }));
+  app.use(criarRotasLegais());
   servirSpa(app, { prefixo: '/admin', dist: distRetaguarda, csp: CSP_RETAGUARDA });
   servirSpa(app, { prefixo: '/', dist: distSite, csp: CSP_SITE });
 

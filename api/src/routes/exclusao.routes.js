@@ -3,6 +3,7 @@ import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import { normalizarTelefone } from '@restaurante/shared/telefone';
 import { assincrono } from '../lib/assincrono.js';
 import * as solicitacaoRepo from '../repositories/solicitacaoExclusao.repository.js';
+import { documento, escapar, responderPagina } from '../lib/paginaPublica.js';
 
 /**
  * Página pública de exclusão de conta (/excluir-conta), servida pela API sem
@@ -12,10 +13,7 @@ import * as solicitacaoRepo from '../repositories/solicitacaoExclusao.repository
  */
 export const CAMINHO_EXCLUSAO = '/excluir-conta';
 
-const CSP = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
-const escapar = (t) =>
-  String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -55,22 +53,9 @@ function pagina({ enviado = false, erros = {}, valores = {} } = {}) {
   <label class="isca" aria-hidden="true">Não preencha <input name="site" tabindex="-1" autocomplete="off"></label>
   <button type="submit">Pedir exclusão da conta</button>
 </form>`;
-  return `<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Excluir conta · Delivery Abatiá</title>
-<meta name="robots" content="noindex">
-<style>
-body{margin:0;background:#FBF3E8;color:#111;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-header{background:#C8102E;color:#FBF3E8;padding:20px 16px}header h1{margin:0;font-size:22px}
-main{max-width:640px;margin:0 auto;padding:16px}section,form,.ok{background:#fff;border:1px solid #EADED0;border-radius:14px;padding:16px;margin:16px 0}
-h2{font-size:18px;margin:0 0 8px}ul{padding-left:20px;margin:8px 0}label{display:block;margin:12px 0 0;font-weight:600}
-input,textarea{display:block;box-sizing:border-box;width:100%;margin-top:4px;padding:10px;border:1px solid #EADED0;border-radius:10px;font:inherit;font-weight:400}
-button{margin-top:16px;width:100%;padding:14px;border:0;border-radius:10px;background:#C8102E;color:#fff;font:inherit;font-weight:700}
-.erro{color:#9E0B22;margin:4px 0 0}.ok{border-left:4px solid #2E7D4F}.isca{position:absolute;left:-9999px}small{color:#5E5249}
-</style></head><body>
-<header><h1>Excluir conta · Delivery Abatiá</h1></header>
-<main>
-<section>
+  return documento({
+    titulo: 'Excluir conta',
+    corpo: `<section>
   <h2>Pelo app (na hora)</h2>
   <p>Abra o app <strong>Delivery Abatiá</strong>, vá em <strong>Perfil › Excluir minha conta</strong> e confirme.</p>
 </section>
@@ -85,16 +70,14 @@ button{margin-top:16px;width:100%;padding:14px;border:0;border-radius:10px;backg
   <ul>
     <li>Os pedidos já feitos (valores, itens e data), que o restaurante guarda como registro fiscal, <strong>sem</strong> seu nome, telefone e endereço: aparecem como "Cliente excluído".</li>
   </ul>
-  <p><small>Pedidos em andamento precisam ser entregues antes da exclusão.</small></p>
+  <p><small>Se você fez um pedido nas últimas 3 horas, a exclusão fica liberada 3 horas depois dele (a loja ainda precisa do endereço para entregar).</small></p>
+  <p><small>Mais detalhes na <a href="/privacidade-app">política de privacidade</a>.</small></p>
 </section>
-${corpo}
-</main></body></html>`;
+${corpo}`,
+  });
 }
 
-const responder = (res, status, opcoes) => {
-  res.status(status).set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': CSP });
-  res.send(pagina(opcoes));
-};
+const responder = (res, status, opcoes) => responderPagina(res, status, pagina(opcoes));
 
 /** @param {{ limiteSolicitacoes?: number }} [opcoes] */
 export function criarRotasExclusao({ limiteSolicitacoes = 5 } = {}) {

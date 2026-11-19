@@ -21,6 +21,7 @@
     "dev:site": "npm run dev -w site",
     "dev:retaguarda": "npm run dev -w retaguarda",
     "dev:pdv": "npm run dev -w pdv",
+    "dev:app": "npm run start -w app",
     "test": "npm test --workspaces --if-present",
     "seed:demo": "npm run seed:demo -w api"
   },

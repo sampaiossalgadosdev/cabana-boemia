@@ -1,6 +1,6 @@
 # Cabana Boemia — Sistema de pedidos
 
-Monorepo npm workspaces: `api` (Express + Prisma + Socket.IO), `site` (cliente), `retaguarda` (dono), `pdv` (Electron, balcão) e `shared`.
+Monorepo npm workspaces: `api` (Express + Prisma + Socket.IO), `site` (cliente), `retaguarda` (dono), `pdv` (Electron, balcão), `app` (Delivery Abatiá, Expo, Android/iOS; em desenvolvimento) e `shared`.
 
 Em produção é **um serviço só** no Railway (mais o PostgreSQL), em **https://cabana.managerpix.com.br** (CNAME no Registro.br apontando para o Railway; o domínio do Railway, https://cabana-boemia-production.up.railway.app, continua ativo e serve o mesmo sistema). A API serve tudo:
 
@@ -21,6 +21,7 @@ npm run dev:api          # API em http://localhost:3000 (lê api/.env)
 npm run dev:site         # http://localhost:5173 (repassa /api para a 3000)
 npm run dev:retaguarda   # http://localhost:5174/admin/
 npm run dev:pdv
+npm run dev:app          # app Delivery Abatiá (Expo; abrir no Expo Go pelo QR)
 npm test                 # todos os workspaces
 npm run seed:demo        # dados de demonstração do dia (roteiro em DEMO.md)
 npm run dist -w pdv      # instalador do PDV → pdv/dist/Cabana Boemia PDV Setup <versão>.exe

@@ -45,6 +45,13 @@ export function AbasCategorias({ categorias, ativa, onSelecionar }) {
   );
 }
 
+// Fixo: a SectionList não aceita trocar o viewabilityConfig depois de montada (lança erro).
+const VISIBILIDADE = { itemVisiblePercentThreshold: 60 };
+function Divisoria() {
+  const s = useEstilos(criarEstilos);
+  return <View style={s.divisoria} />;
+}
+
 /** Card horizontal (texto à esquerda, foto à direita); o card inteiro abre o produto. */
 const CardProduto = memo(function CardProduto({ produto, desabilitado, onAbrir }) {
   const s = useEstilos(criarEstilos);
@@ -125,14 +132,14 @@ export const ListaCardapio = forwardRef(function ListaCardapio(
           {section.titulo}
         </Text>
       )}
-      ItemSeparatorComponent={() => <View style={s.divisoria} />}
+      ItemSeparatorComponent={Divisoria}
       ListHeaderComponent={cabecalho}
       ListEmptyComponent={<Text style={s.vazio}>Nenhum item disponível no momento.</Text>}
       ListFooterComponent={<View style={{ height: 24 + rodapeEspaco }} />}
       stickySectionHeadersEnabled={false}
       initialNumToRender={60}
       onViewableItemsChanged={aoMudarVisiveis}
-      viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
+      viewabilityConfig={VISIBILIDADE}
       onScrollToIndexFailed={() => {}}
       refreshing={Boolean(atualizando)}
       onRefresh={onAtualizar}

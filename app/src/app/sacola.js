@@ -259,7 +259,12 @@ const criarEstilos = (t) =>
   StyleSheet.create({
     tela: { flex: 1, backgroundColor: t.cores.fundo },
     conteudo: { padding: 16, paddingBottom: 32 },
-    limpar: { color: t.cores.textoInverso, fontWeight: t.fontes.peso.forte, fontSize: t.fontes.tamanho.normal },
+    limpar: {
+      color: t.cores.textoInverso,
+      fontWeight: t.fontes.peso.forte,
+      fontSize: t.fontes.tamanho.normal,
+      paddingHorizontal: 8,
+    },
     restaurante: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
     logoFundo: {
       width: 52,

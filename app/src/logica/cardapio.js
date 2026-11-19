@@ -3,8 +3,9 @@
  * quanto dá para pôr na sacola e o cardápio salvo no aparelho para abrir sem
  * internet.
  */
-import { QUANTIDADE_MAX } from './carrinho.js';
+import { QUANTIDADE_MAX, adicionar } from './carrinho.js';
 import { lerTexto, gravarTexto } from './armazenamento.js';
+import { avisosDaRepeticao } from './pedido.js';
 
 export const CHAVE_CARDAPIO = 'delivery-abatia:cardapio:v1';
 
@@ -38,6 +39,42 @@ export function limiteParaAdicionar(itens, produto) {
   const max = produto?.maxSacola ?? QUANTIDADE_MAX;
   const naSacola = itens.filter((i) => i.produtoId === produto?.id).reduce((s, i) => s + i.quantidade, 0);
   return Math.max(0, Math.min(QUANTIDADE_MAX, max - naSacola));
+}
+
+/**
+ * "Repetir pedido" no app: como o `repetirPedido` do site (só o que está no
+ * cardápio agora, com o preço de agora e a mesma observação), mas sem passar
+ * do saldo (`maxSacola`): o site deixa passar e a API recusa no envio. O que
+ * coube só em parte vai em `limitados`; o que não coube nada, em `indisponiveis`.
+ * @returns {{ itens: any[], adicionados: number, indisponiveis: string[], limitados: string[] }}
+ */
+export function repetirComSaldo(itensCarrinho, pedido, categorias) {
+  const porId = new Map((categorias ?? []).flatMap((c) => c.produtos).map((p) => [p.id, p]));
+  let itens = itensCarrinho;
+  let adicionados = 0;
+  const indisponiveis = [];
+  const limitados = [];
+  const anotar = (lista, nome) => !lista.includes(nome) && lista.push(nome);
+  for (const item of pedido?.itens ?? []) {
+    const produto = porId.get(item.produtoId);
+    const cabe = produto ? limiteParaAdicionar(itens, produto) : 0;
+    if (!cabe) {
+      anotar(indisponiveis, produto?.nome ?? item.nome);
+      continue;
+    }
+    const quantidade = Math.min(item.quantidade, cabe);
+    if (quantidade < item.quantidade) anotar(limitados, produto.nome);
+    itens = adicionar(itens, produto, quantidade, item.observacao ?? '');
+    adicionados += quantidade;
+  }
+  return { itens, adicionados, indisponiveis, limitados };
+}
+
+/** Avisos do "repetir" (os do site + quem entrou com menos por causa do saldo). */
+export function avisosDaRepeticaoComSaldo(r) {
+  const { mensagens, abrirSacola } = avisosDaRepeticao(r);
+  if (r.limitados?.length) mensagens.push(`Entrou só a quantidade disponível de: ${r.limitados.join(', ')}.`);
+  return { mensagens, abrirSacola };
 }
 
 /** Formato mínimo de uma resposta de GET /publico/cardapio. */

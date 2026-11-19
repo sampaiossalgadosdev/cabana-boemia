@@ -78,3 +78,40 @@ test('falha de rede e tempo esgotado são erro de rede; cancelamento não', asyn
   assert.equal(e3.name, 'AbortError');
   assert.equal(ehErroDeRede(e3), false);
 });
+
+test('rotas novas do app: login com refresh, Apple, renovar, sair e excluir conta', async () => {
+  const { entrarComGoogle, entrarComApple, renovarSessao, sairDaSessao, excluirConta } = await import('../src/lib/api.js');
+  const chamadas = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, opcoes) => {
+    chamadas.push({ url, metodo: opcoes.method, corpo: opcoes.body ? JSON.parse(opcoes.body) : undefined, auth: opcoes.headers.authorization });
+    return { ok: true, status: 200, text: async () => '{}' };
+  };
+  try {
+    await entrarComGoogle('id-token');
+    await entrarComApple({ identityToken: 'it', nonce: 'n'.repeat(20), nome: 'Bruno' });
+    await entrarComApple({ identityToken: 'it', nonce: 'n'.repeat(20) });
+    await renovarSessao('r'.repeat(43));
+    await sairDaSessao('r'.repeat(43));
+    await excluirConta('tok', { appleAuthorizationCode: 'cod' });
+    await excluirConta('tok');
+  } finally {
+    globalThis.fetch = original;
+  }
+  const rota = (c) => `${c.metodo} ${c.url.replace('https://cabana.managerpix.com.br/api', '')}`;
+  assert.deepEqual(chamadas.map(rota), [
+    'POST /cliente/auth/google',
+    'POST /cliente/auth/apple',
+    'POST /cliente/auth/apple',
+    'POST /cliente/auth/renovar',
+    'POST /cliente/auth/sair',
+    'DELETE /cliente/me',
+    'DELETE /cliente/me',
+  ]);
+  assert.deepEqual(chamadas[0].corpo, { credential: 'id-token', refresh: true });
+  assert.deepEqual(chamadas[1].corpo, { identityToken: 'it', nonce: 'n'.repeat(20), refresh: true, nome: 'Bruno' });
+  assert.equal('nome' in chamadas[2].corpo, false);
+  assert.deepEqual(chamadas[5].corpo, { appleAuthorizationCode: 'cod' });
+  assert.equal(chamadas[5].auth, 'Bearer tok');
+  assert.deepEqual(chamadas[6].corpo, {});
+});

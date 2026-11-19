@@ -124,8 +124,25 @@ export const buscarBairros = () => requisitar('GET', '/publico/bairros');
 
 // ───── Cliente (login, pedidos e perfil entram no próximo passo do app) ─────
 
-/** POST /cliente/auth/google → { token, cliente } */
-export const entrarComGoogle = (credential) => requisitar('POST', '/cliente/auth/google', { corpo: { credential } });
+/** POST /cliente/auth/google → { token, refreshToken, cliente } (o app sempre pede o refresh). */
+export const entrarComGoogle = (credential) =>
+  requisitar('POST', '/cliente/auth/google', { corpo: { credential, refresh: true } });
+
+/** POST /cliente/auth/apple → { token, refreshToken, cliente }. `nonce` = o bruto (a Apple recebeu o SHA-256). */
+export const entrarComApple = ({ identityToken, nonce, nome }) =>
+  requisitar('POST', '/cliente/auth/apple', {
+    corpo: { identityToken, nonce, refresh: true, ...(nome ? { nome } : {}) },
+  });
+
+/** POST /cliente/auth/renovar → { token, refreshToken, cliente } (o refresh usado deixa de valer). */
+export const renovarSessao = (refreshToken) => requisitar('POST', '/cliente/auth/renovar', { corpo: { refreshToken } });
+
+/** POST /cliente/auth/sair → 204 (revoga o refresh). */
+export const sairDaSessao = (refreshToken) => requisitar('POST', '/cliente/auth/sair', { corpo: { refreshToken } });
+
+/** DELETE /cliente/me → { excluido, pedidosAnonimizados, appleRevogado } */
+export const excluirConta = (token, { appleAuthorizationCode } = {}) =>
+  requisitar('DELETE', '/cliente/me', { token, corpo: appleAuthorizationCode ? { appleAuthorizationCode } : {} });
 
 /** GET /cliente/me → { cliente } */
 export const buscarCliente = (token) => requisitar('GET', '/cliente/me', { token });

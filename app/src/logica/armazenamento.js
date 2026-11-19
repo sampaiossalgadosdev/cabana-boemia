@@ -1,16 +1,25 @@
 /**
  * Armazenamento do aparelho com a interface do AsyncStorage (getItem/setItem/
- * removeItem que devolvem Promise). Sem React Native aqui: o app injeta o
- * AsyncStorage em `plataforma.js` (usarArmazenamento) e os testes passam um
- * storage em memória. Nada aqui pode derrubar o app: em falha, lê null e não
- * grava.
+ * removeItem que devolvem Promise). Sem React Native aqui: o app injeta em
+ * `plataforma.js` o AsyncStorage (`usarArmazenamento`: sacola, cardápio
+ * salvo) e o cofre do expo-secure-store (`usarCofre`: sessão, tokens). Os
+ * testes passam um storage em memória. Nada aqui pode derrubar o app: em
+ * falha, lê null e não grava.
  */
 let padrao = null;
+let cofre = null;
 
-/** Define o storage usado quando a função não recebe um. */
+/** Define o storage usado quando a função não recebe um (AsyncStorage). */
 export function usarArmazenamento(storage) {
   padrao = storage ?? null;
 }
+
+/** Define o cofre (dados sensíveis: tokens). Nunca cair no AsyncStorage. */
+export function usarCofre(storage) {
+  cofre = storage ?? null;
+}
+
+export const cofrePadrao = () => cofre;
 
 /** @returns {Promise<string | null>} */
 export async function lerTexto(chave, storage = padrao) {

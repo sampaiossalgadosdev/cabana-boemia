@@ -15,6 +15,8 @@ import {
 } from '../src/lib/apple.js';
 import { validarSolicitacao } from '../src/routes/exclusao.routes.js';
 import { contatoHtml, paginaPrivacidade, paginaTermos, VIGENCIA } from '../src/routes/legal.routes.js';
+import { CONTROLADOR, emailDoTitular, identificacaoDoControlador } from '../src/lib/controlador.js';
+import { limiteRetencao, normalizarIp, registrarAcesso } from '../src/services/registroAcesso.service.js';
 
 /**
  * App Delivery Abatiá: login nativo (Google com várias audiences, Apple),
@@ -184,31 +186,49 @@ test('formulário de exclusão: exige e-mail ou celular válido; normaliza', () 
   });
 });
 
-test('páginas legais do app: em nome da plataforma, com todos os tópicos e a vigência', () => {
-  const p = paginaPrivacidade('5543999990000');
+test('páginas legais do app: controlador, todos os tópicos e a vigência', () => {
+  const p = paginaPrivacidade('privacidade@exemplo.com');
   for (const trecho of [
     'controlador',
-    'Delivery Abatiá',
+    'João Pedro de Oliveira Sampaio (Delivery Abatiá), Abatiá-PR',
+    'Resolução CD/ANPD nº 2/2022',
+    'não há encarregado (DPO) nomeado',
     'nome e e-mail',
     'Telefone',
     'Endereços de entrega',
     'Histórico de pedidos',
     'Registros de acesso',
     'Para que usamos',
-    'somente para preparar e entregar aquele pedido',
+    'nome, telefone, endereço de entrega e os itens do pedido',
+    'único fim de preparar e entregar aquele pedido',
+    'não pode usar esses dados para nenhuma outra finalidade',
     'Railway',
     'Por quanto tempo guardamos',
+    'pelo prazo exigido pela legislação fiscal e de defesa do consumidor',
+    '6 meses',
+    'apagados automaticamente',
     'art. 18',
     'ANPD',
     'Perfil › Excluir minha conta',
     'href="/excluir-conta"',
-    'Contato',
+    'href="mailto:privacidade@exemplo.com"',
     `Vigente desde ${VIGENCIA}`,
   ]) {
     assert.ok(p.includes(trecho), `privacidade sem: ${trecho}`);
   }
-  const t = paginaTermos('');
-  for (const trecho of ['Termos de uso', 'Cada loja é responsável', 'na entrega, direto à loja', 'Cancelamento', 'Código de Defesa do Consumidor', 'href="/privacidade-app"', `Vigente desde ${VIGENCIA}`]) {
+  assert.doesNotMatch(p, /5 anos/, 'sem prazo fixo para os pedidos');
+  const t = paginaTermos('privacidade@exemplo.com');
+  for (const trecho of [
+    'Termos de uso',
+    'Responsável pela plataforma: <strong>João Pedro de Oliveira Sampaio (Delivery Abatiá), Abatiá-PR',
+    'Cada loja é responsável',
+    'não pode usá-los para outra finalidade',
+    'na entrega, direto à loja',
+    'Cancelamento',
+    'Código de Defesa do Consumidor',
+    'href="/privacidade-app"',
+    `Vigente desde ${VIGENCIA}`,
+  ]) {
     assert.ok(t.includes(trecho), `termos sem: ${trecho}`);
   }
   for (const html of [p, t]) {
@@ -217,11 +237,35 @@ test('páginas legais do app: em nome da plataforma, com todos os tópicos e a v
   }
 });
 
-test('contato das páginas legais: WhatsApp formatado quando existe; sempre o formulário', () => {
-  assert.match(contatoHtml('5543999990000'), /href="https:\/\/wa\.me\/5543999990000">\(43\) 99999-0000</);
-  assert.doesNotMatch(contatoHtml(''), /wa\.me/);
-  assert.match(contatoHtml(''), /href="\/excluir-conta"/);
-  assert.doesNotMatch(contatoHtml('<script>'), /<script/);
+test('controlador num lugar só: trocar para razão social e CNPJ muda as duas páginas', () => {
+  assert.equal(identificacaoDoControlador(), 'João Pedro de Oliveira Sampaio (Delivery Abatiá), Abatiá-PR');
+  const empresa = { ...CONTROLADOR, nome: 'Delivery Abatiá Ltda.', documento: 'CNPJ 00.000.000/0001-00', pequenoPorte: false };
+  assert.equal(identificacaoDoControlador(empresa), 'Delivery Abatiá Ltda., CNPJ 00.000.000/0001-00, Abatiá-PR');
+  const p = paginaPrivacidade(null, empresa);
+  assert.match(p, /Delivery Abatiá Ltda\., CNPJ 00\.000\.000\/0001-00, Abatiá-PR/);
+  assert.doesNotMatch(p, /não há encarregado/, 'sem pequeno porte, o texto do encarregado sai');
+  assert.match(paginaTermos(null, empresa), /Delivery Abatiá Ltda\./);
+});
+
+test('canal do titular: e-mail do ambiente (CONTATO_TITULAR_EMAIL) quando existe; sempre o formulário', () => {
+  assert.equal(emailDoTitular({ CONTATO_TITULAR_EMAIL: ' x@y.com ' }), 'x@y.com');
+  assert.equal(emailDoTitular({ CONTATO_TITULAR_EMAIL: '' }), null);
+  assert.equal(emailDoTitular({}), null);
+  assert.match(contatoHtml('x@y.com'), /href="mailto:x@y\.com"/);
+  assert.doesNotMatch(contatoHtml(null), /mailto/);
+  assert.match(contatoHtml(null), /href="\/excluir-conta"/);
+  assert.doesNotMatch(contatoHtml('"><script>'), /<script/);
+});
+
+test('registro de acesso: corte de 6 meses de calendário (nunca antes), IP limpo, falha não lança', async () => {
+  assert.equal(limiteRetencao(new Date('2026-11-19T15:30:00Z')).toISOString(), '2026-05-19T15:30:00.000Z');
+  assert.equal(limiteRetencao(new Date('2026-08-31T12:00:00Z')).toISOString(), '2026-02-28T12:00:00.000Z', '31/08 → 28/02, não 03/03');
+  assert.equal(limiteRetencao(new Date('2026-03-15T00:00:00Z')).toISOString(), '2025-09-15T00:00:00.000Z', 'vira o ano');
+  assert.equal(normalizarIp('::ffff:203.0.113.5'), '203.0.113.5');
+  assert.equal(normalizarIp('2001:db8::1'), '2001:db8::1');
+  assert.equal(normalizarIp(undefined), 'desconhecido');
+  const quebrado = { registroAcesso: { create: async () => { throw new Error('banco fora'); } } };
+  assert.equal(await registrarAcesso({ clienteId: 1, ip: '1.2.3.4', evento: 'LOGIN' }, quebrado), false);
 });
 
 // ───────────── Com banco: rotas ─────────────
@@ -307,6 +351,7 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
         log: false,
         limiteAuthCliente: 1000,
         limiteSolicitacoes: 3,
+        emailTitular: 'titular@teste.com',
         verificarIdTokenGoogle: criarVerificadorGoogle({ clientIds: [WEB, ANDROID], obterCertificados: async () => ({ [KID_G]: pem(chaveGoogle) }) }),
         verificarIdentityTokenApple: criarVerificadorApple({ audiences: [BUNDLE], obterChaves: async () => ({ keys: [jwkApple] }) }),
         revogarApple: async (codigo) => {
@@ -382,6 +427,55 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
     assert.deepEqual([a.status, b.status].sort(), [200, 401]);
   });
 
+  test('registro de acesso: login (Google e Apple), refresh e exclusão com IP e data/hora; a exclusão não apaga os registros', async () => {
+    const antes = new Date(Date.now() - 1000);
+    const g = (await entrarGoogle({})).corpo;
+    await req('POST', '/cliente/auth/renovar', { corpo: { refreshToken: g.refreshToken } });
+    await req('DELETE', '/cliente/me', { token: g.token });
+    const reg = await prisma.registroAcesso.findMany({ where: { clienteId: g.cliente.id }, orderBy: { id: 'asc' } });
+    assert.deepEqual(reg.map((x) => x.evento), ['LOGIN', 'REFRESH', 'EXCLUSAO_CONTA']);
+    for (const x of reg) {
+      assert.equal(x.ip, '127.0.0.1');
+      assert.ok(x.criadoEm >= antes);
+    }
+    assert.equal(await prisma.cliente.findUnique({ where: { id: g.cliente.id } }), null, 'conta apagada, registros ficam');
+
+    const a = (await entrarApple({})).corpo;
+    assert.equal(await prisma.registroAcesso.count({ where: { clienteId: a.cliente.id, evento: 'LOGIN' } }), 1);
+
+    // Falha de login e refresh recusado não viram registro de acesso de cliente.
+    const total = await prisma.registroAcesso.count();
+    await entrarApple({ aud: 'com.outro.app' });
+    await req('POST', '/cliente/auth/renovar', { corpo: { refreshToken: 'z'.repeat(43) } });
+    assert.equal(await prisma.registroAcesso.count(), total);
+  });
+
+  test('rotina diária: apaga só o que tem mais de 6 meses; roda ao iniciar', async () => {
+    const { apagarAntigos, iniciarLimpezaDiaria } = await import('../src/services/registroAcesso.service.js');
+    const agora = new Date('2026-11-19T12:00:00Z');
+    await prisma.registroAcesso.createMany({
+      data: [
+        { ip: '10.0.0.1', evento: 'LOGIN', criadoEm: new Date('2026-05-19T11:59:00Z') }, // 6 meses e 1 min: sai
+        { ip: '10.0.0.2', evento: 'PEDIDO', criadoEm: new Date('2026-05-19T12:01:00Z') }, // 1 min a menos: fica
+        { ip: '10.0.0.3', evento: 'LOGIN', criadoEm: new Date('2025-01-01T00:00:00Z') }, // bem antigo: sai
+      ],
+    });
+    assert.equal(await apagarAntigos(agora), 2);
+    const ips = (await prisma.registroAcesso.findMany({ where: { ip: { startsWith: '10.0.0.' } } })).map((x) => x.ip);
+    assert.deepEqual(ips, ['10.0.0.2']);
+
+    await prisma.registroAcesso.create({ data: { ip: '10.0.0.4', evento: 'REFRESH', criadoEm: new Date('2020-01-01T00:00:00Z') } });
+    const parar = iniciarLimpezaDiaria({ intervaloMs: 60_000, agora: () => agora });
+    try {
+      for (let i = 0; i < 50 && (await prisma.registroAcesso.count({ where: { ip: '10.0.0.4' } })); i++) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      assert.equal(await prisma.registroAcesso.count({ where: { ip: '10.0.0.4' } }), 0, 'a primeira limpeza roda ao iniciar');
+    } finally {
+      parar();
+    }
+  });
+
   test('sair revoga o refresh (idempotente)', async () => {
     const { refreshToken } = (await entrarGoogle({})).corpo;
     assert.equal((await req('POST', '/cliente/auth/sair', { corpo: { refreshToken } })).status, 204);
@@ -454,17 +548,21 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
     assert.equal((await prisma.pedido.findUnique({ where: { id: p.id } })).nomeCliente, 'Ana Souza');
   });
 
-  test('janela de 3 h: finalizado recente bloqueia; cancelado recente não; aberto antigo (PDV nunca finalizou) não', async () => {
-    const bloqueia = (await entrarGoogle({})).corpo;
-    await pedidoDe(bloqueia.cliente.id, 'FINALIZADO', 2.9);
-    const r1 = await req('DELETE', '/cliente/me', { token: bloqueia.token });
-    assert.equal(r1.status, 409);
-    assert.equal(r1.corpo.erro.codigo, 'PEDIDO_EM_ANDAMENTO');
-    assert.match(r1.corpo.erro.mensagem, /3 horas/);
+  test('janela de 3 h: em preparo/saiu recente bloqueia; finalizado ou cancelado recente não; aberto antigo (PDV nunca finalizou) não', async () => {
+    for (const status of ['EM_PREPARO', 'SAIU_ENTREGA']) {
+      const c1 = (await entrarGoogle({})).corpo;
+      await pedidoDe(c1.cliente.id, status, 2.9);
+      const r1 = await req('DELETE', '/cliente/me', { token: c1.token });
+      assert.equal(r1.status, 409, status);
+      assert.equal(r1.corpo.erro.codigo, 'PEDIDO_EM_ANDAMENTO');
+      assert.match(r1.corpo.erro.mensagem, /3 horas/);
+    }
 
-    const cancelado = (await entrarGoogle({})).corpo;
-    await pedidoDe(cancelado.cliente.id, 'CANCELADO', 0);
-    assert.equal((await req('DELETE', '/cliente/me', { token: cancelado.token })).status, 200);
+    for (const status of ['FINALIZADO', 'CANCELADO']) {
+      const c2 = (await entrarGoogle({})).corpo;
+      await pedidoDe(c2.cliente.id, status, 0);
+      assert.equal((await req('DELETE', '/cliente/me', { token: c2.token })).status, 200, `${status} recente não bloqueia`);
+    }
 
     // Pedido que o PDV deixou em aberto (CONFIRMADO/ABERTO) há mais de 3 h: o cliente não fica preso.
     const preso = (await entrarGoogle({})).corpo;
@@ -531,8 +629,7 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
 
   // ───── Página /excluir-conta ─────
 
-  test('GET /privacidade-app e /termos-app: HTML da API (fora do site), CSP sem script, indexáveis, WhatsApp da configuração', async () => {
-    await prisma.configuracao.upsert({ where: { id: 1 }, create: { id: 1, whatsappNumero: '5543988887777' }, update: { whatsappNumero: '5543988887777' } });
+  test('GET /privacidade-app e /termos-app: HTML da API (fora do site), CSP sem script, indexáveis, e-mail do titular', async () => {
     for (const caminho of ['/privacidade-app', '/termos-app']) {
       const r = await req('GET', caminho, { url: raiz });
       assert.equal(r.status, 200, caminho);
@@ -541,7 +638,8 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
       assert.match(r.headers.get('content-security-policy'), /default-src 'none'/);
       assert.equal(r.headers.get('x-robots-tag'), null, 'páginas legais podem ser indexadas');
       assert.doesNotMatch(r.corpo, /<script/);
-      assert.match(r.corpo, /wa\.me\/5543988887777/);
+      assert.match(r.corpo, /mailto:titular@teste\.com/);
+      assert.match(r.corpo, /João Pedro de Oliveira Sampaio \(Delivery Abatiá\)/);
     }
     assert.match((await req('GET', '/privacidade-app', { url: raiz })).corpo, /Política de privacidade/);
     assert.match((await req('GET', '/termos-app', { url: raiz })).corpo, /Termos de uso/);

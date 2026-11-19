@@ -30,6 +30,7 @@ export const PREFIXO_API = '/api';
  *   `verificarIdTokenGoogle` / `verificarIdentityTokenApple` / `revogarApple`: trocam o Google e a
  *   Apple nos testes (chave própria, sem rede). `limiteAuthCliente`: rate limit de /cliente/auth/*.
  *   `limiteSolicitacoes`: envios por hora do formulário de /excluir-conta.
+ *   `emailTitular`: e-mail do canal do titular nas páginas legais (padrão: CONTATO_TITULAR_EMAIL).
  *   `distSite` / `distRetaguarda`: builds servidos em / e /admin (testes usam pastas próprias).
  */
 export function criarApp({
@@ -42,6 +43,7 @@ export function criarApp({
   revogarApple,
   limiteAuthCliente,
   limiteSolicitacoes,
+  emailTitular,
   distSite = DIST_SITE,
   distRetaguarda = DIST_RETAGUARDA,
 } = {}) {
@@ -77,7 +79,7 @@ export function criarApp({
   // Páginas públicas do app (exclusão de conta, privacidade e termos; links do Play Console
   // e do app): antes do site, que pegaria qualquer caminho.
   app.use(criarRotasExclusao({ limiteSolicitacoes }));
-  app.use(criarRotasLegais());
+  app.use(criarRotasLegais({ email: emailTitular }));
   servirSpa(app, { prefixo: '/admin', dist: distRetaguarda, csp: CSP_RETAGUARDA });
   servirSpa(app, { prefixo: '/', dist: distSite, csp: CSP_SITE });
 

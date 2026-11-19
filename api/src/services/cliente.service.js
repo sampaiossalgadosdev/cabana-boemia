@@ -7,7 +7,8 @@ import * as refreshRepo from '../repositories/refreshTokenCliente.repository.js'
 const NOME_MAX = 100;
 
 /**
- * Janela de "pedido em andamento" na exclusão da conta: pedido não cancelado
+ * Janela de "pedido em andamento" na exclusão da conta: pedido nem cancelado
+ * nem finalizado
  * criado há menos que isto bloqueia (a loja ainda precisa do endereço e do
  * telefone). Não depende do PDV finalizar: passado o prazo, a exclusão vale.
  */
@@ -115,8 +116,8 @@ export function garantirTelefone(cliente) {
 
 /**
  * Exclusão da conta (Google Play e App Store exigem dentro do app).
- * Com pedido em andamento (não cancelado, criado nas últimas 3 horas, qualquer
- * que seja o status no PDV), recusa: o restaurante ainda precisa do endereço e
+ * Com pedido em andamento (nem cancelado nem finalizado, criado nas últimas 3
+ * horas; depois disso libera mesmo que o PDV não finalize), recusa: o restaurante ainda precisa do endereço e
  * do telefone para entregar. Apaga cliente, endereços e refresh tokens;
  * pedidos ficam anonimizados. Conta da Apple: revoga o login na Apple quando
  * as credenciais existem (APPLE_TEAM_ID/KEY_ID/PRIVATE_KEY) e o app mandou o
@@ -131,7 +132,7 @@ export async function excluirConta(clienteId, { appleAuthorizationCode, revogarA
   if ((await clienteRepo.contarPedidosRecentes(clienteId, desde)) > 0) {
     throw new ErroHttp(
       409,
-      'Você fez um pedido há pouco. A exclusão da conta fica liberada 3 horas depois do pedido (ou fale com o restaurante).',
+      'Você tem um pedido em andamento. A exclusão da conta fica liberada quando ele for entregue ou 3 horas depois do pedido.',
       { codigo: 'PEDIDO_EM_ANDAMENTO' },
     );
   }

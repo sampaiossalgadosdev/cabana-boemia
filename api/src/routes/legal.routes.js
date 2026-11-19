@@ -1,14 +1,13 @@
 import { Router } from 'express';
-import { formatarTelefone } from '@restaurante/shared/telefone';
-import { assincrono } from '../lib/assincrono.js';
 import { documento, escapar, responderPagina } from '../lib/paginaPublica.js';
-import * as publicoService from '../services/publico.service.js';
+import { CONTROLADOR, emailDoTitular, identificacaoDoControlador } from '../lib/controlador.js';
+import { RETENCAO_MESES } from '../services/registroAcesso.service.js';
 
 /**
  * Política de privacidade e termos de uso do APP Delivery Abatiá, em nome da
- * plataforma (controladora dos dados). Páginas públicas da API, fora do site
- * (o site continua com /privacidade e /termos da Cabana Boemia). São os links
- * do app, do Play Console e da App Store.
+ * plataforma (controladora dos dados; ver lib/controlador.js). Páginas
+ * públicas da API, fora do site (o site continua com /privacidade e /termos da
+ * Cabana Boemia). São os links do app, do Play Console e da App Store.
  *
  * RASCUNHO: precisa de revisão jurídica antes da produção (ver CLAUDE.md).
  */
@@ -18,26 +17,33 @@ export const CAMINHO_TERMOS_APP = '/termos-app';
 /** Data de vigência dos dois textos. Mudou o texto: atualizar. */
 export const VIGENCIA = '19 de novembro de 2026';
 
-/** Contato: WhatsApp da configuração (quando preenchido) + formulário de /excluir-conta. */
-export function contatoHtml(whatsapp) {
-  const numero = String(whatsapp ?? '').replace(/\D/g, '');
-  const local = numero.startsWith('55') ? numero.slice(2) : numero;
-  const zap = numero
-    ? `<li>WhatsApp: <a href="https://wa.me/${numero}">${escapar(formatarTelefone(local))}</a></li>`
+/** Canal do titular: o e-mail (quando configurado) e o formulário de /excluir-conta. */
+export function contatoHtml(email) {
+  const linhaEmail = email
+    ? `<li>E-mail: <a href="mailto:${escapar(email)}">${escapar(email)}</a></li>`
     : '';
-  return `<ul>${zap}<li>Formulário em <a href="/excluir-conta">/excluir-conta</a> (exclusão da conta e outros pedidos sobre seus dados: escreva na observação).</li></ul>`;
+  return `<ul>${linhaEmail}<li>Formulário em <a href="/excluir-conta">/excluir-conta</a> (exclusão da conta e outros pedidos sobre seus dados: escreva na observação).</li></ul>
+  <p class="nota">Dúvidas sobre um pedido (atraso, troca, cancelamento) são com a loja, pelo WhatsApp que aparece na tela do pedido enviado.</p>`;
 }
 
-const rodape = (outro) =>
-  `Vigente desde ${VIGENCIA}. ${outro} · <a href="/excluir-conta">Excluir minha conta</a>`;
+const rodape = (outro) => `Vigente desde ${VIGENCIA}. ${outro} · <a href="/excluir-conta">Excluir minha conta</a>`;
 
-export function paginaPrivacidade(whatsapp) {
+/** Bloco do controlador e do encarregado. */
+function controladorHtml(c = CONTROLADOR) {
+  const encarregado = c.pequenoPorte
+    ? '<p>Como agente de tratamento de pequeno porte (Resolução CD/ANPD nº 2/2022), não há encarregado (DPO) nomeado: o canal de contato da seção "Contato" cumpre essa função.</p>'
+    : '';
+  return `<p>Controlador dos dados: <strong>${escapar(identificacaoDoControlador(c))}</strong>.</p>${encarregado}`;
+}
+
+export function paginaPrivacidade(email, c = CONTROLADOR) {
   return documento({
     titulo: 'Política de privacidade',
     rodape: rodape('<a href="/termos-app">Termos de uso</a>'),
     corpo: `
 <section>
   <p>Esta política explica como o <strong>Delivery Abatiá</strong>, plataforma de pedidos das lojas de Abatiá-PR, trata os seus dados pessoais no app Delivery Abatiá. O Delivery Abatiá é o <strong>controlador</strong> desses dados, nos termos da Lei Geral de Proteção de Dados (Lei 13.709/2018, LGPD).</p>
+  ${controladorHtml(c)}
 </section>
 <section>
   <h2>1. Dados que coletamos</h2>
@@ -46,7 +52,7 @@ export function paginaPrivacidade(whatsapp) {
     <li><strong>Telefone</strong> (celular), que você informa para receber o pedido.</li>
     <li><strong>Endereços de entrega</strong>: rua, número, complemento, ponto de referência e bairro.</li>
     <li><strong>Histórico de pedidos</strong>: itens, observações, valores, forma de pagamento, troco, data e hora, endereço e loja.</li>
-    <li><strong>Registros de acesso</strong>: endereço IP, data e hora e o endereço acessado em nossos servidores.</li>
+    <li><strong>Registros de acesso</strong>: endereço IP e data e hora de quando você entra na conta, quando o app renova a sua sessão, quando envia um pedido e quando exclui a conta.</li>
   </ul>
   <p>Não coletamos localização do aparelho, contatos, fotos nem dados de cartão. O pagamento é feito na entrega, direto com a loja.</p>
 </section>
@@ -64,7 +70,7 @@ export function paginaPrivacidade(whatsapp) {
 <section>
   <h2>3. Com quem compartilhamos</h2>
   <ul>
-    <li><strong>A loja do seu pedido</strong> recebe nome, telefone, endereço de entrega, itens, observações e forma de pagamento, <strong>somente para preparar e entregar aquele pedido</strong>.</li>
+    <li><strong>A loja do seu pedido</strong> recebe somente o seu <strong>nome, telefone, endereço de entrega e os itens do pedido</strong> (com as observações e a forma de pagamento escolhida), com o <strong>único fim de preparar e entregar aquele pedido</strong>. A loja <strong>não pode usar esses dados para nenhuma outra finalidade</strong>, como propaganda ou cadastro próprio.</li>
     <li><strong>Google ou Apple</strong>, apenas para confirmar a sua identidade no login.</li>
     <li><strong>Hospedagem</strong>: os dados ficam em servidores contratados da Railway (Railway Corporation), que podem estar fora do Brasil. A transferência segue o art. 33 da LGPD.</li>
     <li><strong>Autoridades</strong>, quando houver obrigação legal ou ordem judicial.</li>
@@ -74,8 +80,8 @@ export function paginaPrivacidade(whatsapp) {
   <h2>4. Por quanto tempo guardamos</h2>
   <ul>
     <li><strong>Conta, telefone e endereços</strong>: enquanto a conta existir. Ao excluir, são apagados na hora (pelo app) ou em até 15 dias (pelo formulário).</li>
-    <li><strong>Pedidos</strong>: valores, itens e datas por até 5 anos, por obrigações fiscais e para atender reclamações. Se você excluir a conta, os pedidos ficam <strong>sem</strong> seu nome, telefone e endereço.</li>
-    <li><strong>Registros de acesso</strong>: 6 meses, como exige o Marco Civil da Internet (Lei 12.965/2014, art. 15).</li>
+    <li><strong>Pedidos</strong>: valores, itens e datas pelo prazo exigido pela legislação fiscal e de defesa do consumidor. Se você excluir a conta, os pedidos ficam <strong>sem</strong> seu nome, telefone e endereço.</li>
+    <li><strong>Registros de acesso</strong>: ${RETENCAO_MESES} meses, como exige o Marco Civil da Internet (Lei 12.965/2014, art. 15), mesmo depois da exclusão da conta. Passado esse prazo, são apagados automaticamente.</li>
     <li><strong>Pedidos de exclusão feitos pelo formulário</strong>: até serem atendidos e pelo tempo necessário para comprovar o atendimento.</li>
   </ul>
 </section>
@@ -86,7 +92,7 @@ export function paginaPrivacidade(whatsapp) {
 <section>
   <h2>6. Como excluir sua conta</h2>
   <ul>
-    <li>No app: <strong>Perfil › Excluir minha conta</strong>. A exclusão é imediata. Se você fez um pedido nas últimas 3 horas, ela fica liberada 3 horas depois dele.</li>
+    <li>No app: <strong>Perfil › Excluir minha conta</strong>. A exclusão é imediata. Se um pedido seu ainda está sendo preparado ou entregue (feito nas últimas 3 horas), ela fica liberada quando ele for entregue ou 3 horas depois do pedido.</li>
     <li>Sem o app: pelo formulário em <a href="/excluir-conta">/excluir-conta</a>.</li>
   </ul>
 </section>
@@ -100,7 +106,7 @@ export function paginaPrivacidade(whatsapp) {
 </section>
 <section>
   <h2>9. Contato</h2>
-  ${contatoHtml(whatsapp)}
+  ${contatoHtml(email)}
 </section>
 <section>
   <h2>10. Mudanças nesta política</h2>
@@ -109,17 +115,18 @@ export function paginaPrivacidade(whatsapp) {
   });
 }
 
-export function paginaTermos(whatsapp) {
+export function paginaTermos(email, c = CONTROLADOR) {
   return documento({
     titulo: 'Termos de uso',
     rodape: rodape('<a href="/privacidade-app">Política de privacidade</a>'),
     corpo: `
 <section>
   <p>Estes termos valem para o uso do app <strong>Delivery Abatiá</strong>, plataforma que reúne o cardápio de lojas de Abatiá-PR e envia os seus pedidos a elas. Ao usar o app, você concorda com estes termos e com a <a href="/privacidade-app">política de privacidade</a>.</p>
+  <p>Responsável pela plataforma: <strong>${escapar(identificacaoDoControlador(c))}</strong>.</p>
 </section>
 <section>
   <h2>1. O que é a plataforma</h2>
-  <p>O Delivery Abatiá intermedeia o pedido entre você e a loja. <strong>Cada loja é responsável</strong> pelos produtos, preços, preparo, entrega, troca e emissão de documentos fiscais dos pedidos feitos a ela.</p>
+  <p>O Delivery Abatiá intermedeia o pedido entre você e a loja. <strong>Cada loja é responsável</strong> pelos produtos, preços, preparo, entrega, troca e emissão de documentos fiscais dos pedidos feitos a ela. A loja recebe só os dados necessários para preparar e entregar o pedido e não pode usá-los para outra finalidade.</p>
 </section>
 <section>
   <h2>2. Conta</h2>
@@ -163,21 +170,14 @@ export function paginaTermos(whatsapp) {
 </section>
 <section>
   <h2>10. Contato</h2>
-  ${contatoHtml(whatsapp)}
+  ${contatoHtml(email)}
 </section>`,
   });
 }
 
-export function criarRotasLegais() {
+export function criarRotasLegais({ email = emailDoTitular() } = {}) {
   const r = Router();
-  const whatsapp = async () => (await publicoService.config().catch(() => null))?.whatsapp ?? '';
-  r.get(
-    CAMINHO_PRIVACIDADE_APP,
-    assincrono(async (req, res) => responderPagina(res, 200, paginaPrivacidade(await whatsapp()), { indexar: true })),
-  );
-  r.get(
-    CAMINHO_TERMOS_APP,
-    assincrono(async (req, res) => responderPagina(res, 200, paginaTermos(await whatsapp()), { indexar: true })),
-  );
+  r.get(CAMINHO_PRIVACIDADE_APP, (req, res) => responderPagina(res, 200, paginaPrivacidade(email), { indexar: true }));
+  r.get(CAMINHO_TERMOS_APP, (req, res) => responderPagina(res, 200, paginaTermos(email), { indexar: true }));
   return r;
 }

@@ -27,12 +27,14 @@ export function atualizar(id, dados, db = prisma) {
 }
 
 /**
- * Pedidos "em andamento" para a exclusão da conta: não cancelados e criados a
- * partir de `desde`. Não olha FINALIZADO/ABERTO de propósito: se o PDV nunca
- * finalizar um pedido, o cliente não fica preso para sempre.
+ * Pedidos "em andamento" para a exclusão da conta: nem cancelados nem
+ * finalizados, criados a partir de `desde`. A janela de tempo existe para não
+ * depender do PDV: se ele nunca finalizar um pedido, o cliente não fica preso.
  */
 export function contarPedidosRecentes(clienteId, desde, db = prisma) {
-  return db.pedido.count({ where: { clienteId, status: { not: 'CANCELADO' }, criadoEm: { gte: desde } } });
+  return db.pedido.count({
+    where: { clienteId, status: { notIn: ['CANCELADO', 'FINALIZADO'] }, criadoEm: { gte: desde } },
+  });
 }
 
 /** Nome que fica nos pedidos de quem excluiu a conta. */

@@ -18,8 +18,8 @@ import { useEstilos, useTema } from '../../tema/tema.js';
 const TEXTO_EXCLUSAO =
   'Isso apaga sua conta de vez: nome, e-mail, telefone, endereços salvos e o acesso pelo Google ou pela Apple, ' +
   'em todos os aparelhos.\n\nOs pedidos já feitos ficam com o restaurante como registro fiscal (valores e itens), ' +
-  'mas sem seu nome, telefone e endereço. Se você fez um pedido nas últimas 3 horas, a exclusão fica liberada ' +
-  '3 horas depois dele.\n\nNão dá para desfazer.';
+  'mas sem seu nome, telefone e endereço. Se um pedido seu ainda está em andamento, a exclusão fica liberada ' +
+  'quando ele for entregue ou 3 horas depois do pedido.\n\nNão dá para desfazer.';
 
 function Endereco({ endereco, ocupado, onEditar, onPrincipal, onRemover }) {
   const s = useEstilos(criarEstilos);

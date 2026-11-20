@@ -21,9 +21,10 @@ const ESPERA_RECONEXAO_MS = 3_000;
  *   renovar: () => Promise<string>,
  *   aoStatus: (s: 'conectado' | 'reconectando' | 'desligado') => void,
  *   aoEvento: (nome: string, dados: unknown) => void,
- * }} opcoes
+ *   lojaInformada?: () => string | null,
+ * }} opcoes `lojaInformada`: loja do ADMIN (`auth.loja`; sem ela a API recusa o ADMIN)
  */
-export function criarTempoReal({ io, apiUrl, accessToken, renovar, aoStatus, aoEvento }) {
+export function criarTempoReal({ io, apiUrl, accessToken, renovar, aoStatus, aoEvento, lojaInformada = () => null }) {
   let socket = null;
   let timer = null;
   let status = 'desligado';
@@ -52,8 +53,9 @@ export function criarTempoReal({ io, apiUrl, accessToken, renovar, aoStatus, aoE
       reconnectionDelayMax: 10_000,
       // Chamado a cada tentativa: pega um access válido (renova se preciso).
       auth: (cb) => {
+        const loja = lojaInformada();
         accessToken().then(
-          (token) => cb({ token }),
+          (token) => cb(loja ? { token, loja } : { token }),
           () => cb({ token: '' }),
         );
       },

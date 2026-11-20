@@ -1,25 +1,18 @@
-import { useState } from 'react';
-// Logo compartilhada (site, PDV e instalador): importada de shared/assets,
-// nunca copiada. O Vite empacota com hash no build.
-import logoUrl from '../../../../../shared/assets/logo-cabana-boemia.jpg';
-// Recorte só do laço (sem o fundo de papel nem a sombra do canto), PNG transparente.
-import logoRecorteUrl from '../../../../../shared/assets/logo-cabana-boemia-recorte.png';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { temaDaLoja } from '../lib/tema.js';
+
+/** Loja em que o PDV trabalha (identidade vinda do main, com a logo em data:). */
+export const LojaContexto = createContext(null);
+export const useLoja = () => useContext(LojaContexto);
 
 /**
- * Logo do restaurante; se a imagem falhar, o nome em texto.
- * `recorte`: só o laço, sem fundo (painel do delivery).
+ * Logo da loja; sem logo (ou se a imagem falhar), o nome em texto. Sem loja
+ * (login, ADMIN escolhendo): o nome da plataforma.
  */
-export function Logo({ className = '', recorte = false }) {
+export function Logo({ className = '' }) {
+  const tema = temaDaLoja(useLoja());
   const [falhou, setFalhou] = useState(false);
-  if (falhou) return <span className={`logo logo--texto ${className}`}>Cabana Boemia</span>;
-  return (
-    <img
-      className={`logo ${className}`}
-      src={recorte ? logoRecorteUrl : logoUrl}
-      alt="Cabana Boemia"
-      width={recorte ? 760 : 811}
-      height={recorte ? 258 : 344}
-      onError={() => setFalhou(true)}
-    />
-  );
+  useEffect(() => setFalhou(false), [tema.logo]);
+  if (!tema.logo || falhou) return <span className={`logo logo--texto ${className}`}>{tema.nome}</span>;
+  return <img className={`logo ${className}`} src={tema.logo} alt={tema.nome} onError={() => setFalhou(true)} />;
 }

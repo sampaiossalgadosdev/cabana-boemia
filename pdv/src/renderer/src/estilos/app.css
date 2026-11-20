@@ -42,7 +42,7 @@ input {
   border: 2px solid var(--cor-acao);
   border-radius: var(--raio-pequeno);
   background: var(--cor-acao);
-  color: var(--cor-branco);
+  color: var(--cor-primaria-texto);
   font-weight: 600;
   cursor: pointer;
 }
@@ -103,7 +103,7 @@ input:focus-visible {
 
 .erro {
   margin: 0;
-  color: var(--cor-vermelho-escuro);
+  color: var(--cor-erro-escuro);
   font-weight: 600;
 }
 
@@ -163,9 +163,56 @@ input:focus-visible {
   object-fit: contain;
 }
 .logo--texto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: auto;
+  min-height: 48px;
+  max-width: 360px;
   font-size: 26px;
   font-weight: 700;
-  color: var(--cor-vermelho);
+  line-height: 1.15;
+  text-align: center;
+  color: var(--cor-primaria-na-base);
+}
+.painel-delivery__logo.logo--texto {
+  font-size: 40px;
+}
+
+/* ADMIN: escolher a loja em que o PDV vai trabalhar. */
+.lista-lojas {
+  display: grid;
+  gap: 10px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.lista-lojas__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.lista-lojas__item:hover:not(:disabled) {
+  border-color: var(--cor-texto-suave);
+}
+.lista-lojas__cor {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+.lista-lojas__inativa {
+  margin-left: auto;
+  font-weight: 400;
+  color: var(--cor-texto-suave);
 }
 
 /* ───────── Barra superior ───────── */
@@ -180,11 +227,31 @@ input:focus-visible {
   min-height: var(--altura-barra);
   padding: 8px 20px;
   background: var(--cor-superficie);
-  border-bottom: 3px solid var(--cor-dourado);
+  /* Cabeçalho na cor da loja (a base continua clara para a leitura). */
+  border-bottom: 4px solid var(--cor-primaria);
   box-shadow: var(--sombra);
 }
 .barra__logo {
   height: 56px;
+  max-width: 220px;
+}
+.barra__logo.logo--texto {
+  font-size: 22px;
+  min-height: 0;
+}
+.barra__loja {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.barra__nome-loja {
+  max-width: 180px;
+  font-weight: 700;
+  color: var(--cor-primaria-na-base);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .barra__abas {
   display: flex;
@@ -207,7 +274,7 @@ input:focus-visible {
 .aba--ativa {
   border-color: var(--cor-vermelho);
   background: var(--cor-vermelho);
-  color: var(--cor-branco);
+  color: var(--cor-primaria-texto);
 }
 .barra__direita {
   margin-left: auto;
@@ -254,10 +321,10 @@ input:focus-visible {
   color: var(--cor-texto-suave);
 }
 .campo-tempo--erro input {
-  border-color: var(--cor-vermelho);
+  border-color: var(--cor-erro);
 }
 .campo-tempo--erro .campo-tempo__dica {
-  color: var(--cor-vermelho-escuro);
+  color: var(--cor-erro-escuro);
   font-weight: 600;
 }
 
@@ -377,7 +444,7 @@ input:focus-visible {
 }
 .selo--site {
   background: var(--cor-vermelho);
-  color: var(--cor-branco);
+  color: var(--cor-primaria-texto);
 }
 .selo--whatsapp {
   background: #1f7a45;

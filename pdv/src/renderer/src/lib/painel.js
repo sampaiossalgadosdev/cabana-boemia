@@ -160,3 +160,20 @@ export function destacarTrecho(texto, busca) {
     { texto: chars.slice(fim).join(''), destaque: false },
   ].filter((p) => p.texto);
 }
+
+// ───────── NFC-e ─────────
+
+/** Só os números da chave digitada ou colada (até 44). */
+export const digitosNfce = (texto) => String(texto ?? '').replace(/\D/g, '').slice(0, 44);
+
+/** "4126…" → "4126 1112 3456 …" (grupos de 4, como na DANFE). */
+export const formatarChaveNfce = (chave) => digitosNfce(chave).replace(/(\d{4})(?=\d)/g, '$1 ');
+
+/** Problema da chave antes de mandar (a API confere o modelo e o dígito), ou null. Vazio = apagar. */
+export function problemaNaChaveNfce(texto) {
+  const d = digitosNfce(texto);
+  if (d.length === 0) return null;
+  if (d.length !== 44) return `A chave tem 44 números (faltam ${44 - d.length})`;
+  if (d.slice(20, 22) !== '65') return 'Não é chave de NFC-e (modelo 65)';
+  return null;
+}

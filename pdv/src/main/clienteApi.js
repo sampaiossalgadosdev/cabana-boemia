@@ -38,9 +38,17 @@ export function expiracaoDoJwt(token) {
  *   fetch?: typeof fetch,
  *   agora?: () => number,
  *   aoSessaoExpirar?: (erro: ErroApi) => void,
- * }} opcoes
+ *   lojaInformada?: () => string | null,
+ * }} opcoes `lojaInformada`: slug da loja escolhida pelo ADMIN (vai no X-Loja)
  */
-export function criarClienteApi({ apiUrl, armazem, fetch = globalThis.fetch, agora = Date.now, aoSessaoExpirar = () => {} }) {
+export function criarClienteApi({
+  apiUrl,
+  armazem,
+  fetch = globalThis.fetch,
+  agora = Date.now,
+  aoSessaoExpirar = () => {},
+  lojaInformada = () => null,
+}) {
   let access = null; // { token, expiraEm }
   let usuario = null;
   let renovando = null;
@@ -51,6 +59,9 @@ export function criarClienteApi({ apiUrl, armazem, fetch = globalThis.fetch, ago
     const headers = { accept: 'application/json' };
     if (corpo !== undefined) headers['content-type'] = 'application/json';
     if (token) headers.authorization = `Bearer ${token}`;
+    // ADMIN numa loja: a API usa a loja do cabeçalho (DONO/ATENDENTE: a do cadastro).
+    const loja = token ? lojaInformada() : null;
+    if (loja) headers['x-loja'] = loja;
 
     let res;
     try {

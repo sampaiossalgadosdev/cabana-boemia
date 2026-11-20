@@ -15,6 +15,7 @@ import { criarPing } from './agente-impressao/conexao.js';
 import { criarImpressoraArquivo, criarImpressoraWindows } from './agente-impressao/impressoras.js';
 import { carregarSpooler } from './agente-impressao/winspool.js';
 import { criarRegistro } from './registro.js';
+import { criarEstadoLoja } from './loja.js';
 
 const DEV = !app.isPackaged;
 /** Servidor de produção: já vem preenchido (editável) na primeira execução do app instalado. */
@@ -54,8 +55,12 @@ function iniciar() {
 
     let tempoReal;
     let agente;
+    let handlers;
+    // Loja deste PDV: a do login (DONO/ATENDENTE) ou a escolhida pelo ADMIN (X-Loja).
+    const loja = criarEstadoLoja({ servidor: config.servidor });
     const api = criarClienteApi({
       apiUrl: config.apiUrl,
+      lojaInformada: loja.informada,
       armazem: criarArmazemRefresh({ caminho: path.join(dados, 'sessao.bin'), safeStorage }),
       aoSessaoExpirar: (erro) => {
         tempoReal?.desligar();
@@ -73,6 +78,7 @@ function iniciar() {
     agente = criarAgente({
       log: logImpressao,
       api,
+      idAgente: config.idAgente,
       ping: criarPing({ apiUrl: config.apiUrl }),
       configuracao: config.impressao,
       criarSaida: async (cfg) =>
@@ -87,6 +93,7 @@ function iniciar() {
       apiUrl: config.apiUrl,
       accessToken: api.accessToken,
       renovar: api.renovar,
+      lojaInformada: loja.informada,
       aoStatus: (status) => {
         enviar('socket:status', status);
         // Eventos emitidos durante a queda não voltam: busca tudo o que está pendente.
@@ -95,6 +102,12 @@ function iniciar() {
       aoEvento: (nome, dados) => {
         if (nome === 'impressao:nova') agente.aoImpressaoNova();
         else enviar(nome, dados);
+        // A retaguarda trocou o nome, a logo ou a cor da loja: tema novo na hora.
+        if (nome === 'cardapio:atualizado' && dados?.origem === 'loja') {
+          handlers['loja:atual']()
+            .then((identidade) => identidade && enviar('loja:atualizada', identidade))
+            .catch(() => {});
+        }
       },
     });
 
@@ -104,7 +117,7 @@ function iniciar() {
       return lista.map((p) => p.name).sort((a, b) => a.localeCompare(b));
     };
 
-    const handlers = criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao: app.getVersion() });
+    handlers = criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao: app.getVersion(), loja });
     for (const [canal, handler] of Object.entries(handlers)) {
       ipcMain.handle(canal, (evento, ...args) => {
         // Só a nossa janela, com a nossa página, fala com o main.

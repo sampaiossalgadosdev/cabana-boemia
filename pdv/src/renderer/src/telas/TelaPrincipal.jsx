@@ -10,7 +10,7 @@ import { PainelCaixa } from '../componentes/caixa/PainelCaixa.jsx';
 
 const AVISO_MS = 6000;
 
-export function TelaPrincipal({ usuario, aoSair }) {
+export function TelaPrincipal({ usuario, aoSair, aoTrocarLoja }) {
   const [aba, setAba] = useState('delivery');
   const [lancando, setLancando] = useState(false);
   const [aviso, setAviso] = useState('');
@@ -86,7 +86,7 @@ export function TelaPrincipal({ usuario, aoSair }) {
   return (
     <div className="principal">
       <BarraSuperior aba={aba} aoTrocarAba={setAba} statusConexao={status} usuario={usuario}
-        aoSair={sair} saindo={saindo} caixa={caixa} aoAbrirCaixa={() => setPainelCaixa(true)} />
+        aoSair={sair} saindo={saindo} caixa={caixa} aoAbrirCaixa={() => setPainelCaixa(true)} aoTrocarLoja={aoTrocarLoja} />
       {/* Novo pedido ocupa a tela toda, sem a margem creme. */}
       <main className={`conteudo ${!semCaixa && aba === 'delivery' && lancando ? 'conteudo--cheio' : ''}`}>
         {aviso && (

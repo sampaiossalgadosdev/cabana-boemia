@@ -9,7 +9,7 @@
 }
 .impressora--erro {
   background: #fde3e6;
-  color: var(--cor-vermelho-escuro);
+  color: var(--cor-erro-escuro);
 }
 .impressora--erro .conexao__ponto {
   animation: piscar 1s ease-in-out infinite;

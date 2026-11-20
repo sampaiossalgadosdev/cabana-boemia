@@ -15,8 +15,8 @@ kbd {
 }
 
 .botao--perigo {
-  background: var(--cor-vermelho-escuro);
-  border-color: var(--cor-vermelho-escuro);
+  background: var(--cor-erro-escuro);
+  border-color: var(--cor-erro-escuro);
 }
 .botao--grande {
   min-height: 60px;
@@ -109,7 +109,7 @@ kbd {
 }
 .etapa--atual {
   background: var(--cor-vermelho);
-  color: var(--cor-branco);
+  color: var(--cor-primaria-texto);
 }
 .etapa--atual .etapa__numero {
   background: var(--cor-branco);
@@ -436,7 +436,7 @@ kbd {
 }
 .linha__remover:hover {
   background: var(--cor-aviso-fundo);
-  color: var(--cor-vermelho);
+  color: var(--cor-erro);
 }
 .linha__obs {
   min-height: 36px;
@@ -533,7 +533,7 @@ kbd {
 .forma--marcada {
   border-color: var(--cor-vermelho);
   background: var(--cor-vermelho);
-  color: var(--cor-branco);
+  color: var(--cor-primaria-texto);
 }
 .forma:has(input:focus-visible) {
   outline: 3px solid var(--cor-dourado);

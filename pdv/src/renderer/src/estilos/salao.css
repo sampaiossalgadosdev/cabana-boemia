@@ -120,7 +120,7 @@
   border-radius: var(--raio);
   background: var(--cor-vermelho);
   box-shadow: var(--sombra);
-  color: var(--cor-branco);
+  color: var(--cor-primaria-texto);
   font: inherit;
   text-align: left;
   cursor: pointer;

@@ -111,12 +111,14 @@ function criarServidorFalso() {
       async requisitar(metodo, rota, corpo) {
         await esperar(1);
         if (fora) throw semConexao();
-        if (metodo === 'GET' && rota === '/equipe/impressoes/pendentes') {
+        if (metodo === 'POST' && rota === '/equipe/impressoes/reservar') {
+          assert.match(corpo?.agente ?? '', /^[A-Za-z0-9._:-]{1,64}$/, 'reserva com o agente');
           const lista = [...trabalhos.values()].filter((t) => t.status === 'PENDENTE').sort((a, b) => a.id - b.id);
           return { restaurante: { nome: 'Cabana Boemia' }, limite: 50, trabalhos: structuredClone(lista) };
         }
         const m = /^\/equipe\/impressoes\/(\d+)\/(confirmar|falha)$/.exec(rota);
         if (metodo === 'POST' && m) {
+          assert.ok(corpo?.agente, 'confirmar/falha levam o agente');
           const t = trabalhos.get(Number(m[1]));
           if (!t) throw Object.assign(new Error('não encontrado'), { status: 404 });
           if (m[2] === 'confirmar') {

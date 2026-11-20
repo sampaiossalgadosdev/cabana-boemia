@@ -6,7 +6,8 @@ import path from 'node:path';
 import { criarConfig, validarApiUrl } from '../src/main/config.js';
 import { criarTempoReal } from '../src/main/tempoReal.js';
 import { criarArmazemRefresh } from '../src/main/armazemRefresh.js';
-import { criarHandlers, executar, validarMinutos } from '../src/main/ipc.js';
+import { chaveNfceParaApi, criarHandlers, executar, validarMinutos } from '../src/main/ipc.js';
+import { criarEstadoLoja } from '../src/main/loja.js';
 
 const pastaTemp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pdv-teste-'));
 
@@ -100,7 +101,8 @@ describe('handlers IPC', () => {
     const cfg = criarConfig({ caminho, apiUrlPadrao: 'http://x' });
     const config = { ...cfg, definirApiUrl: (u) => validarApiUrl(u) };
     const listarImpressoras = async () => ['EPSON TM-T20', 'Microsoft Print to PDF'];
-    return { h: criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao: '0.1.0', consultarCep }), chamadas, agente, caminho };
+    const loja = criarEstadoLoja({ servidor: () => 'http://x', fetch: async () => new Response('', { status: 404 }) });
+    return { h: criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao: '0.1.0', consultarCep, loja }), chamadas, agente, caminho, loja };
   }
 
   test('finalizar valida id e forma de pagamento antes de chamar a API', async () => {
@@ -422,16 +424,96 @@ describe('handlers IPC', () => {
     });
   });
 
-  test('login liga o agente; sair desliga', async () => {
-    const { h, agente } = montar();
-    const api = { entrar: async () => ({ id: 1 }) };
-    Object.assign(h, criarHandlers({
-      config: {}, api: { ...api, sair: async () => {} }, tempoReal: { ligar() {}, desligar() {} }, agente,
-      listarImpressoras: async () => [], versao: 'x',
-    }));
-    await h['sessao:entrar']('a@b.com', 'senha');
+  /** Handlers com uma API falsa: login como `papel`, /equipe/loja devolve a loja do X-Loja (ou a do cadastro). */
+  function montarLogin(papel, { lojaLembrada = null } = {}) {
+    const { agente } = montar();
+    const caminho = path.join(pastaTemp(), 'config.json');
+    const config = criarConfig({ caminho, apiUrlPadrao: 'http://x' });
+    if (lojaLembrada) config.definirLojaAdmin(lojaLembrada);
+    const loja = criarEstadoLoja({
+      servidor: () => 'http://x',
+      fetch: async (url) => {
+        assert.equal(url, 'http://x/api/publico/imagens/7');
+        return new Response(new Uint8Array([137, 80, 78, 71]), { headers: { 'content-type': 'image/png' } });
+      },
+    });
+    const pedidas = [];
+    const api = {
+      entrar: async () => ({ id: 1, nome: 'Ana', papel }),
+      sair: async () => {},
+      requisitar: async (metodo, rota) => {
+        pedidas.push([metodo, rota, loja.informada()]);
+        if (rota === '/equipe/loja') {
+          if (papel === 'ADMIN' && loja.informada() === 'sumiu') throw Object.assign(new Error('Loja não encontrada'), { status: 404 });
+          const slug = loja.informada() ?? 'cabana-boemia';
+          return { loja: { id: 1, slug, nome: slug === 'cabana-boemia' ? 'Cabana Boemia' : 'Lanchonete do Zé', logoUrl: '/api/publico/imagens/7', corPrimaria: '#1D4ED8', corTexto: '#FFFFFF' } };
+        }
+        if (rota === '/plataforma/lojas') return { lojas: [{ id: 2, slug: 'lanchonete-do-ze', nome: 'Lanchonete do Zé', ativa: true, corPrimaria: '#1D4ED8', pedidos: 3 }] };
+        return {};
+      },
+    };
+    const h = criarHandlers({ config, api, tempoReal: { ligar() {}, desligar() {} }, agente, listarImpressoras: async () => [], versao: 'x', loja });
+    return { h, agente, loja, config, pedidas };
+  }
+
+  test('login (atendente) entra na loja do cadastro: identidade com a logo em data:, liga o agente; sair desliga', async () => {
+    const { h, agente, loja, pedidas } = montarLogin('ATENDENTE');
+    const u = await h['sessao:entrar']('a@b.com', 'senha');
+    assert.equal(u.loja.slug, 'cabana-boemia');
+    assert.equal(u.loja.logoDataUrl, 'data:image/png;base64,iVBORw==');
+    assert.equal(loja.informada(), null, 'atendente não manda X-Loja');
+    assert.deepEqual(pedidas[0], ['GET', '/equipe/loja', null]);
     await h['sessao:sair']();
-    assert.deepEqual(agente.eventos, ['ligar', 'desligar']);
+    assert.deepEqual(agente.eventos, ['desligar', 'ligar', 'desligar']);
+    assert.equal(loja.identidade(), null);
+    await assert.rejects(h['lojas:listar'](), /administrador/);
+  });
+
+  test('ADMIN sem loja escolhe depois do login; a escolha vai no X-Loja e fica guardada', async () => {
+    const { h, agente, loja, config, pedidas } = montarLogin('ADMIN');
+    const u = await h['sessao:entrar']('a@b.com', 'senha');
+    assert.equal(u.loja, null);
+    assert.deepEqual(agente.eventos, ['desligar'], 'sem loja: nada ligado');
+    assert.deepEqual(await h['lojas:listar'](), [{ slug: 'lanchonete-do-ze', nome: 'Lanchonete do Zé', ativa: true, corPrimaria: '#1D4ED8' }]);
+    await assert.rejects(h['loja:escolher']('Não Vale'), /Loja inválida/);
+    const id = await h['loja:escolher']('lanchonete-do-ze');
+    assert.equal(id.nome, 'Lanchonete do Zé');
+    assert.equal(loja.informada(), 'lanchonete-do-ze');
+    assert.deepEqual(pedidas.at(-1), ['GET', '/equipe/loja', 'lanchonete-do-ze']);
+    assert.equal(config.lojaAdmin(), 'lanchonete-do-ze');
+    assert.equal(agente.eventos.at(-1), 'ligar');
+    // Voltar à escolha desliga tudo.
+    assert.equal(await h['loja:escolher'](null), null);
+    assert.equal(loja.informada(), null);
+    assert.equal(agente.eventos.at(-1), 'desligar');
+  });
+
+  test('ADMIN volta na loja lembrada; loja que sumiu = escolhe de novo', async () => {
+    const lembrada = montarLogin('ADMIN', { lojaLembrada: 'lanchonete-do-ze' });
+    assert.equal((await lembrada.h['sessao:entrar']('a@b.com', 'senha')).loja.slug, 'lanchonete-do-ze');
+    const sumiu = montarLogin('ADMIN', { lojaLembrada: 'sumiu' });
+    assert.equal((await sumiu.h['sessao:entrar']('a@b.com', 'senha')).loja, null);
+    assert.equal(sumiu.config.lojaAdmin(), null);
+  });
+
+  test('NFC-e: 44 números (espaços e pontos saem); vazio apaga; bairros da própria loja', async () => {
+    const chave = '41261112345678000190650010000000011123456780';
+    assert.deepEqual(chaveNfceParaApi(chave.replace(/(\d{4})/g, '$1 ')), { chaveNfce: chave });
+    assert.deepEqual(chaveNfceParaApi(''), { chaveNfce: null });
+    assert.deepEqual(chaveNfceParaApi(null), { chaveNfce: null });
+    assert.throws(() => chaveNfceParaApi('123'), /44 números/);
+    const { h, chamadas } = montar();
+    await h['pedidos:nfce'](5, chave);
+    assert.deepEqual(chamadas.at(-1), ['PATCH', '/equipe/pedidos/5/nfce', { chaveNfce: chave }]);
+    await h['bairros:listar']();
+    assert.deepEqual(chamadas.at(-1), ['GET', '/equipe/bairros']);
+  });
+
+  test('id do agente de impressão: gerado uma vez e guardado', () => {
+    const caminho = path.join(pastaTemp(), 'config.json');
+    const id = criarConfig({ caminho, apiUrlPadrao: null }).idAgente();
+    assert.match(id, /^pdv-[0-9a-f-]{36}$/);
+    assert.equal(criarConfig({ caminho, apiUrlPadrao: null }).idAgente(), id);
   });
 });
 

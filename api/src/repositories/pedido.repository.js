@@ -15,6 +15,8 @@ const SELECT_ITEM = {
 export const SELECT_PEDIDO = {
   id: true,
   lojaId: true, // conferir a loja (não sai em pedidoPublico)
+  loja: { select: { nome: true, slug: true, logoUrl: true } },
+  chaveNfce: true, // só a equipe vê (pedidoDaEquipe)
   numeroDia: true,
   dataRef: true,
   canal: true,
@@ -128,19 +130,19 @@ export function buscarPorChave(chaveIdempotencia, db = prisma) {
   return db.pedido.findUnique({ where: { chaveIdempotencia }, select: SELECT_PEDIDO });
 }
 
-/** Histórico do cliente, mais novo primeiro; `antesDeId` pagina (ids menores). */
-export function listarDoCliente(clienteId, { antesDeId, limite }, db = prisma) {
+/** Histórico do cliente (todas as lojas, ou só `lojaId`), mais novo primeiro; `antesDeId` pagina (ids menores). */
+export function listarDoCliente(clienteId, { antesDeId, limite, lojaId }, db = prisma) {
   return db.pedido.findMany({
-    where: { clienteId, ...(antesDeId ? { id: { lt: antesDeId } } : {}) },
+    where: { clienteId, ...(lojaId ? { lojaId } : {}), ...(antesDeId ? { id: { lt: antesDeId } } : {}) },
     orderBy: { id: 'desc' },
     take: limite,
     select: SELECT_PEDIDO,
   });
 }
 
-export function ultimoDoCliente(clienteId, db = prisma) {
+export function ultimoDoCliente(clienteId, lojaId, db = prisma) {
   return db.pedido.findFirst({
-    where: { clienteId },
+    where: { clienteId, lojaId },
     orderBy: [{ criadoEm: 'desc' }, { id: 'desc' }],
     select: SELECT_PEDIDO,
   });
@@ -215,4 +217,8 @@ export async function devolverEstoqueProduto(id, quantidade, db = prisma) {
 
 export async function devolverEstoqueInsumo(id, quantidade, db = prisma) {
   await db.insumo.update({ where: { id }, data: { estoque: { increment: quantidade } } });
+}
+
+export function definirChaveNfce(id, chaveNfce, db = prisma) {
+  return db.pedido.update({ where: { id }, data: { chaveNfce }, select: { id: true } });
 }

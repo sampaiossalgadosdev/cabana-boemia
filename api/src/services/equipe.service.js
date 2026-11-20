@@ -49,6 +49,10 @@ export async function listarPedidosDoDia(lojaId, { dataRef, canais, somenteAbert
  * Avisa a equipe com "pedido:atualizado".
  */
 export async function finalizarPedido(lojaId, id, { formaPagamento }, agora = new Date()) {
+  // De outra loja = 404 antes de tudo (a loja do pedido nunca muda; o caixa é travado depois).
+  if (!ehDaLoja(await pedidoRepo.buscarStatus(id), lojaId)) {
+    throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+  }
   const pedido = await prisma.$transaction(async (tx) => {
     // Caixa primeiro (mesma ordem de travas do fechamento de comanda): caixa → pedido.
     const caixaId = await exigirCaixaAberto(lojaId, tx);

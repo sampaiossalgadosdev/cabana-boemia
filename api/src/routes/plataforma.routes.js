@@ -6,6 +6,7 @@ import * as c from '../controllers/plataforma.controller.js';
 
 /**
  * Rotas da plataforma (Delivery Abatiá): só ADMIN (o DONO leva 403), nunca em cache.
+ * - Lojas: listar, criar (com turnos iniciais opcionais), editar e criar o DONO de cada uma.
  * - Bairros da cidade: a lista única que todas as lojas usam (o DONO só escolhe
  *   os da área de entrega dele, com a taxa, em /retaguarda/bairros).
  * - Solicitações de exclusão de conta da página pública /excluir-conta (a
@@ -18,6 +19,10 @@ export function criarPlataformaRoutes() {
     next();
   });
   r.use(autenticar, exigirPapel('ADMIN'));
+  r.get('/lojas', assincrono(c.listarLojas));
+  r.post('/lojas', assincrono(c.criarLoja));
+  r.patch('/lojas/:id', assincrono(c.editarLoja));
+  r.post('/lojas/:id/dono', assincrono(c.criarDono));
   r.get('/bairros', assincrono(c.listarBairros));
   r.post('/bairros', assincrono(c.criarBairro));
   r.patch('/bairros/:id', assincrono(c.alterarBairro));

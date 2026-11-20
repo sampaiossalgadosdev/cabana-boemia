@@ -106,6 +106,11 @@ export async function config(lojaId) {
   const c = await lojaService.buscar(lojaId);
   return {
     nome: c.nome,
+    // Identidade da loja (app multi-loja; o site atual ignora).
+    slug: c.slug,
+    logoUrl: c.logoUrl ?? null,
+    corPrimaria: c.corPrimaria ?? null,
+    corFundo: c.corFundo ?? null,
     whatsapp: c.whatsapp,
     // null = desligado; { minimoCentavos } = frete grátis com subtotal >= mínimo.
     freteGratis: freteGratisDaConfig(c),

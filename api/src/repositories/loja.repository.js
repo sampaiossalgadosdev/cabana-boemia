@@ -41,3 +41,24 @@ export function atualizarGerais(
     },
   });
 }
+
+/** Lojas ativas na ordem da vitrine (ordem, nome). */
+export function listarAtivas(db = prisma) {
+  return db.loja.findMany({ where: { ativa: true }, orderBy: [{ ordem: 'asc' }, { nome: 'asc' }] });
+}
+
+/** Todas as lojas (ADMIN), com quantos usuários e pedidos têm. */
+export function listarTodas(db = prisma) {
+  return db.loja.findMany({
+    orderBy: [{ ordem: 'asc' }, { nome: 'asc' }],
+    include: { _count: { select: { usuarios: true, pedidos: true } } },
+  });
+}
+
+export function criar(dados, db = prisma) {
+  return db.loja.create({ data: dados });
+}
+
+export function atualizar(id, dados, db = prisma) {
+  return db.loja.update({ where: { id }, data: dados });
+}

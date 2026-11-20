@@ -23,6 +23,7 @@ import { calcularTurnoAtivo } from './turno.service.js';
 import { calcularTempoEstimado } from './publico.service.js';
 import { garantirTelefone } from './cliente.service.js';
 import { taxaDaLoja } from './bairro.service.js';
+import { limparChave, problemaNaChave } from '../lib/nfce.js';
 
 export const CANAIS = ['SITE', 'WHATSAPP', 'SALAO'];
 export const FORMAS_PAGAMENTO = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'];
@@ -263,6 +264,8 @@ export function pedidoPublico(p) {
     retirarNoBalcao: p.retirarNoBalcao ?? false,
     observacao: p.observacao ?? null,
     criadoEm: p.criadoEm,
+    // Loja do pedido (histórico do app multi-loja; o site atual ignora).
+    ...(p.loja && { loja: { nome: p.loja.nome, slug: p.loja.slug, logoUrl: p.loja.logoUrl ?? null } }),
     itens: p.itens.map((i) => ({
       id: i.id,
       produtoId: i.produtoId,
@@ -287,6 +290,7 @@ export function pedidoDaEquipe(p) {
     registradoPor: p.criadoPor?.nome ?? null,
     finalizadoEm: p.finalizadoEm ?? null,
     canceladoEm: p.canceladoEm ?? null,
+    chaveNfce: p.chaveNfce ?? null,
   };
 }
 
@@ -621,8 +625,8 @@ export const PEDIDOS_POR_PAGINA = 20;
  * Histórico do cliente (aba "Pedidos" do site), mais novo primeiro.
  * `proximo` = id para pedir a página seguinte (null = acabou).
  */
-export async function pedidosDoCliente(clienteId, { antesDeId } = {}) {
-  const lista = await pedidoRepo.listarDoCliente(clienteId, { antesDeId, limite: PEDIDOS_POR_PAGINA + 1 });
+export async function pedidosDoCliente(clienteId, { antesDeId, lojaId } = {}) {
+  const lista = await pedidoRepo.listarDoCliente(clienteId, { antesDeId, lojaId, limite: PEDIDOS_POR_PAGINA + 1 });
   const pagina = lista.slice(0, PEDIDOS_POR_PAGINA);
   return {
     pedidos: pagina.map(pedidoPublico),
@@ -630,9 +634,9 @@ export async function pedidosDoCliente(clienteId, { antesDeId } = {}) {
   };
 }
 
-/** Último pedido do cliente (para "Repetir último pedido"), ou null. */
-export async function ultimoPedidoDoCliente(clienteId) {
-  const p = await pedidoRepo.ultimoDoCliente(clienteId);
+/** Último pedido do cliente NA LOJA (para "Repetir último pedido"), ou null. */
+export async function ultimoPedidoDoCliente(clienteId, lojaId) {
+  const p = await pedidoRepo.ultimoDoCliente(clienteId, lojaId);
   return p ? pedidoPublico(p) : null;
 }
 
@@ -783,5 +787,40 @@ export async function cancelarPedido(lojaId, id, { usuarioId = null, agora = new
   const equipe = pedidoDaEquipe(pedido);
   emitirParaEquipe(lojaId, 'pedido:atualizado', equipe);
   if (trabalho) emitirParaEquipe(lojaId, 'impressao:nova', trabalho);
+  return equipe;
+}
+
+// ───────── NFC-e (prova de emissão da nota) ─────────
+
+/**
+ * Grava (ou apaga, com null) a chave de acesso da NFC-e da venda. Só pedido da
+ * loja (senão 404); cancelado = 409 PEDIDO_CANCELADO; chave inválida (44 números,
+ * modelo 65, dígito verificador) = 400 VALIDACAO; chave já usada em outro pedido
+ * = 409 CHAVE_NFCE_EM_USO. Avisa a equipe (`pedido:atualizado`).
+ * @param {string | null} chave como digitada (espaços e pontos são ignorados)
+ */
+export async function definirChaveNfce(lojaId, id, chave) {
+  const chaveNfce = chave == null ? null : limparChave(chave);
+  if (chaveNfce != null) {
+    const problema = problemaNaChave(chaveNfce);
+    if (problema) {
+      throw new ErroHttp(400, problema, { codigo: 'VALIDACAO', detalhes: [{ campo: 'chaveNfce', mensagem: problema }] });
+    }
+  }
+  const atual = await pedidoRepo.buscarStatus(id);
+  if (!ehDaLoja(atual, lojaId)) throw pedidoNaoEncontrado();
+  if (atual.status === 'CANCELADO') {
+    throw new ErroHttp(409, 'Pedido cancelado não tem nota', { codigo: 'PEDIDO_CANCELADO' });
+  }
+  try {
+    await pedidoRepo.definirChaveNfce(id, chaveNfce);
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw new ErroHttp(409, 'Esta chave de NFC-e já está em outro pedido', { codigo: 'CHAVE_NFCE_EM_USO' });
+    }
+    throw err;
+  }
+  const equipe = pedidoDaEquipe(await pedidoRepo.buscarPorId(id));
+  emitirParaEquipe(lojaId, 'pedido:atualizado', equipe);
   return equipe;
 }

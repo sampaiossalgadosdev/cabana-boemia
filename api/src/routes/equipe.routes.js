@@ -25,6 +25,7 @@ export function criarEquipeRoutes({ relogio } = {}) {
   r.patch('/pedidos/:id/status', assincrono(c.alterarStatus));
   r.patch('/pedidos/:id/agendamento', assincrono(c.alterarAgendamento));
   r.post('/pedidos/:id/reimprimir', assincrono(c.reimprimirPedido));
+  r.patch('/pedidos/:id/nfce', assincrono(c.definirNfce));
   r.get('/caixa/atual', assincrono(c.caixaAtual));
   r.post('/caixa/abrir', assincrono(c.abrirCaixa));
   r.post('/caixa/movimentos', assincrono(c.movimentoCaixa));
@@ -35,7 +36,8 @@ export function criarEquipeRoutes({ relogio } = {}) {
   r.post('/comandas/:id/itens', assincrono(c.lancarItemComanda));
   r.delete('/comandas/:id/itens/:itemId', assincrono(c.removerItemComanda));
   r.post('/comandas/:id/fechar', assincrono(c.fecharComanda));
-  r.get('/impressoes/pendentes', assincrono(c.impressoesPendentes));
+  r.get('/impressoes/pendentes', assincrono(c.impressoesPendentes)); // PDV antigo (sem reserva)
+  r.post('/impressoes/reservar', assincrono(c.reservarImpressoes)); // agente novo
   r.post('/impressoes/:id/confirmar', assincrono(c.confirmarImpressao));
   r.post('/impressoes/:id/falha', assincrono(c.falhaImpressao));
   r.get('/clientes', assincrono(c.buscarClientes));

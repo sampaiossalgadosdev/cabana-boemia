@@ -187,7 +187,16 @@ const fecharComandaSchema = z.object({
   imprimirConta: z.boolean().default(false),
 });
 
-const falhaSchema = z.object({ erro: z.string().max(2000).optional() });
+/** Identificador do agente de impressão (um por computador; gerado pelo PDV). */
+const agente = z.string({ error: 'Informe o agente' }).trim().regex(/^[A-Za-z0-9._:-]{1,64}$/, 'Agente inválido');
+const falhaSchema = z.object({ erro: z.string().max(2000).optional(), agente: agente.optional() });
+const confirmarSchema = z.object({ agente: agente.optional() });
+const reservarSchema = z.object({ agente, limite: z.number().int().min(1).max(50).optional() });
+
+/** Chave de acesso da NFC-e (aceita espaços/pontos); null ou "" = apagar. */
+const nfceSchema = z.object({
+  chaveNfce: z.union([z.literal('').transform(() => null), z.null(), z.string().max(80)]),
+});
 
 const finalizarSchema = z.object({
   formaPagamento: z.enum(FORMAS_PAGAMENTO, { error: 'Informe a forma de pagamento' }),
@@ -351,15 +360,29 @@ export function criarEquipeController(relogio = () => new Date()) {
       res.json(await impressaoService.listarPendentes(req.lojaId, relogio()));
     },
 
+    /** Agente novo: reserva os pendentes (dois PDVs da loja nunca pegam o mesmo cupom). */
+    async reservarImpressoes(req, res) {
+      const { agente: id, limite } = validar(reservarSchema, req.body ?? {});
+      res.json(await impressaoService.reservarPendentes(req.lojaId, id, relogio(), { limite }));
+    },
+
     async confirmarImpressao(req, res) {
       const { id } = validar(idSchema, req.params);
-      res.json(await impressaoService.confirmar(req.lojaId, id, relogio()));
+      const { agente: quem } = validar(confirmarSchema, req.body ?? {});
+      res.json(await impressaoService.confirmar(req.lojaId, id, relogio(), { agente: quem ?? null }));
     },
 
     async falhaImpressao(req, res) {
       const { id } = validar(idSchema, req.params);
-      const { erro } = validar(falhaSchema, req.body ?? {});
-      res.json(await impressaoService.registrarFalha(req.lojaId, id, erro));
+      const { erro, agente: quem } = validar(falhaSchema, req.body ?? {});
+      res.json(await impressaoService.registrarFalha(req.lojaId, id, erro, { agente: quem ?? null, agora: relogio() }));
+    },
+
+    /** Prova de emissão da NFC-e da venda (chave de 44 números); null apaga. */
+    async definirNfce(req, res) {
+      const { id } = validar(idSchema, req.params);
+      const { chaveNfce } = validar(nfceSchema, req.body ?? {});
+      res.json({ pedido: await pedidoService.definirChaveNfce(req.lojaId, id, chaveNfce) });
     },
 
     async reimprimirPedido(req, res) {

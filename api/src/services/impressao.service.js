@@ -18,6 +18,11 @@ import { resumoParaCupom } from './caixa.service.js';
 
 /** Quantos trabalhos por busca (o agente busca de novo enquanto vier cheio). */
 export const LIMITE_PENDENTES = 50;
+/**
+ * Quanto vale a reserva de um agente. Imprimir um cupom leva segundos (o agente
+ * desiste em 30 s); se o agente cair, depois disso o trabalho volta a ficar livre.
+ */
+export const RESERVA_MS = 2 * 60_000;
 /** Além do dia local, pega as últimas horas (pedido de 23h50 impresso depois da meia-noite). */
 const HORAS_ANTES_DO_DIA = 2;
 const MAX_ERRO = 500;
@@ -43,6 +48,8 @@ const trabalhoPublico = (t) => ({
   pedidoId: t.pedidoId,
   caixaId: t.caixaId,
   dataRelatorio: t.dataRelatorio ? t.dataRelatorio.toISOString().slice(0, 10) : null,
+  reservadoPor: t.reservadoPor ?? null,
+  reservadoAte: t.reservadoAte ?? null,
   ...(t.pedido ? { pedido: pedidoPublico(t.pedido) } : {}),
 });
 
@@ -64,6 +71,7 @@ export async function listarPendentes(lojaId, agora = new Date()) {
     lojaId,
     desde: inicioDaJanela(agora, horaViradaDe(loja)),
     limite: LIMITE_PENDENTES,
+    agora,
   });
   return {
     restaurante: { nome: loja.nome },
@@ -73,18 +81,58 @@ export async function listarPendentes(lojaId, agora = new Date()) {
 }
 
 /**
+ * Agente NOVO: reserva os pendentes livres da loja (atômico; ver
+ * `reservarPendentes`) e devolve só esses, no formato de `listarPendentes`.
+ * Chamar de novo com o mesmo `agente` renova a reserva dos que ele ainda tem.
+ * @param {string} agente identificador do PDV (estável por computador)
+ */
+export async function reservarPendentes(lojaId, agente, agora = new Date(), { limite = LIMITE_PENDENTES } = {}) {
+  const loja = await lojaService.buscar(lojaId);
+  const ids = await impressaoRepo.reservarPendentes({
+    lojaId,
+    agente,
+    desde: inicioDaJanela(agora, horaViradaDe(loja)),
+    agora,
+    ate: new Date(agora.getTime() + RESERVA_MS),
+    limite: Math.min(limite, LIMITE_PENDENTES),
+  });
+  const trabalhos = ids.length ? await impressaoRepo.buscarVarios(lojaId, ids) : [];
+  return {
+    restaurante: { nome: loja.nome },
+    limite: LIMITE_PENDENTES,
+    reservaMs: RESERVA_MS,
+    trabalhos: await Promise.all(trabalhos.map((t) => comResumo(lojaId, t, agora))),
+  };
+}
+
+/** Reservado por OUTRO agente, com a reserva valendo: este não pode confirmar nem falhar. */
+function conferirReserva(trabalho, agente, agora) {
+  if (!agente || !trabalho?.reservadoPor) return;
+  if (trabalho.reservadoPor !== agente && trabalho.reservadoAte > agora && trabalho.status === 'PENDENTE') {
+    throw new ErroHttp(409, 'Este cupom está com outro computador', { codigo: 'TRABALHO_RESERVADO' });
+  }
+}
+
+/**
  * Idempotente: a primeira chamada marca IMPRESSO; as seguintes devolvem o
  * mesmo trabalho com `jaConfirmado: true` (200, sem mudar `impressoEm`).
+ * Com `agente` (agente novo): reservado por outro = 409 TRABALHO_RESERVADO.
+ * Sem `agente` (PDV antigo): como antes.
  */
-export async function confirmar(lojaId, id, agora = new Date()) {
+export async function confirmar(lojaId, id, agora = new Date(), { agente = null } = {}) {
+  conferirReserva(await impressaoRepo.buscar(lojaId, id), agente, agora);
   const mudou = await impressaoRepo.confirmarSeNaoImpresso(lojaId, id, agora);
   const trabalho = await impressaoRepo.buscar(lojaId, id);
   if (!trabalho) throw new ErroHttp(404, 'Trabalho de impressão não encontrado', { codigo: 'NAO_ENCONTRADO' });
   return { trabalho: trabalhoPublico(trabalho), jaConfirmado: mudou === 0 };
 }
 
-/** Incrementa `tentativas` e guarda o erro. Já impresso = 409 (não volta a pendente). */
-export async function registrarFalha(lojaId, id, erro) {
+/**
+ * Incrementa `tentativas`, guarda o erro e libera a reserva. Já impresso = 409
+ * (não volta a pendente). Com `agente`: reservado por outro = 409 TRABALHO_RESERVADO.
+ */
+export async function registrarFalha(lojaId, id, erro, { agente = null, agora = new Date() } = {}) {
+  conferirReserva(await impressaoRepo.buscar(lojaId, id), agente, agora);
   const mensagem = String(erro ?? '').trim().slice(0, MAX_ERRO) || 'Falha na impressão';
   const mudou = await impressaoRepo.registrarFalhaSePendente(lojaId, id, mensagem);
   const trabalho = await impressaoRepo.buscar(lojaId, id);

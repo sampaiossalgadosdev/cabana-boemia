@@ -1,4 +1,11 @@
 {
+  "loja": {
+    "slug": "cabana-boemia",
+    "corPrimaria": "#C8102E",
+    "corFundo": "#FBF3E8",
+    "logo": "../../shared/assets/logo-cabana-boemia-recorte.png"
+  },
+  "pratoPorKg": true,
   "restaurante": {
     "nome": "Cabana Boemia",
     "subtitulo": "Restaurante e Lanchonete",

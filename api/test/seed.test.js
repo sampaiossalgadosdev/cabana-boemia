@@ -107,4 +107,48 @@ describe('seed do cardápio', { skip: semBancoDeTeste }, () => {
     assert.ok(avisos.some((a) => a.includes('Turno "Almoço" sem horários')));
     assert.ok(avisos.some((a) => a.includes('WhatsApp da loja vazio')));
   });
+
+  test('logo e cor padrão da Cabana: gravadas uma vez (logo do shared/assets); o seed não troca a do dono', async () => {
+    const cabana = await prisma.loja.findUnique({ where: { slug: 'cabana-boemia' } });
+    assert.match(cabana.logoUrlPadrao, /^\/api\/publico\/imagens\/\d+$/);
+    assert.equal(cabana.logoUrl, cabana.logoUrlPadrao);
+    assert.equal(cabana.corPrimariaPadrao, '#C8102E');
+    assert.equal(await prisma.imagemLoja.count(), 1, 'rodou várias vezes: uma imagem só');
+    const img = await prisma.imagemLoja.findFirst();
+    assert.equal(img.mime, 'image/png');
+
+    await prisma.loja.update({ where: { id: cabana.id }, data: { corPrimaria: '#1E3A5F', logoUrl: null } });
+    await seed(prisma, { log: () => {} });
+    const depois = await prisma.loja.findUnique({ where: { id: cabana.id } });
+    assert.equal(depois.corPrimaria, '#1E3A5F');
+    assert.equal(depois.logoUrl, null, 'o seed não mexe na logo atual');
+    await prisma.loja.update({ where: { id: cabana.id }, data: { corPrimaria: '#C8102E', logoUrl: cabana.logoUrl } });
+  });
+
+  test('seed por loja: o JSON da loja de teste cria outra loja, sem tocar na Cabana', async () => {
+    const antes = await contarTabelas(prisma);
+    const { CAMINHO_JSON } = await import('../prisma/seed.js');
+    const caminho = new URL('../prisma/cardapios/loja-teste.json', import.meta.url);
+    const { fileURLToPath } = await import('node:url');
+    await seed(prisma, { caminho: fileURLToPath(caminho), log: () => {} });
+    await seed(prisma, { caminho: fileURLToPath(caminho), log: () => {} }); // idempotente
+    assert.ok(CAMINHO_JSON.endsWith('cardapio-cabana-boemia.json'));
+
+    const teste = await prisma.loja.findUnique({ where: { slug: 'lanchonete-teste' } });
+    assert.equal(teste.nome, 'Lanchonete Teste');
+    assert.equal(teste.corPrimaria, '#1E7B3C');
+    assert.equal(teste.corPrimariaPadrao, '#1E7B3C');
+    assert.match(teste.logoUrl, /^\/api\/publico\/imagens\/\d+$/);
+    assert.equal(await prisma.produto.count({ where: { lojaId: teste.id } }), 4, 'sem Prato por kg');
+    assert.equal(await prisma.turno.count({ where: { lojaId: teste.id } }), 1);
+    assert.equal(await prisma.horarioTurno.count({ where: { turno: { lojaId: teste.id } } }), 7);
+    const areas = await prisma.areaEntrega.findMany({ where: { lojaId: teste.id }, include: { bairro: true }, orderBy: { taxaCentavos: 'asc' } });
+    assert.deepEqual(areas.map((a) => [a.bairro.nome, a.taxaCentavos]), [['Centro', 400], ['Jardim Primavera', 600]]);
+    // A Cabana continua igual (só ganhou os bairros na lista da cidade, que é da plataforma).
+    const depois = await contarTabelas(prisma);
+    assert.equal(depois.loja, antes.loja + 1);
+    assert.equal(depois.produto, antes.produto + 4);
+    assert.equal(await prisma.produto.count({ where: { lojaId: 1 } }), 30);
+    assert.equal(await prisma.areaEntrega.count({ where: { lojaId: 1 } }), 0);
+  });
 });

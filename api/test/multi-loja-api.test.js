@@ -377,17 +377,19 @@ describe('API multi-loja: vitrine, pedido por loja, ADMIN, tempo real, impressã
     // Falha libera: o trabalho volta para a fila.
     await api('POST', `/equipe/impressoes/${deB}/falha`, { token: tk.ze, corpo: { agente: dono, erro: 'sem papel' } });
     assert.ok((await api('POST', '/equipe/impressoes/reservar', { token: tk.ze, corpo: { agente: dono } })).corpo.trabalhos.some((t) => t.id === deB));
+    // Qual agente ficou com trabalhos (a corrida decide: pode ser só um deles).
+    const meu = idsA.length ? { ids: idsA, agente: 'pdv-a' } : { ids: idsB, agente: 'pdv-b' };
     // Confirmar e falhar exigem o agente (a rota do PDV antigo, sem reserva, saiu).
-    assert.equal((await api('POST', `/equipe/impressoes/${idsA[0]}/confirmar`, { token: tk.ze, corpo: {} })).status, 400);
-    assert.equal((await api('POST', `/equipe/impressoes/${idsA[0]}/falha`, { token: tk.ze, corpo: { erro: 'x' } })).status, 400);
+    assert.equal((await api('POST', `/equipe/impressoes/${meu.ids[0]}/confirmar`, { token: tk.ze, corpo: {} })).status, 400);
+    assert.equal((await api('POST', `/equipe/impressoes/${meu.ids[0]}/falha`, { token: tk.ze, corpo: { erro: 'x' } })).status, 400);
     assert.equal((await api('GET', '/equipe/impressoes/pendentes', { token: tk.ze })).status, 404);
     // Confirmar limpa a reserva.
-    const ok = await api('POST', `/equipe/impressoes/${idsA[0]}/confirmar`, { token: tk.ze, corpo: { agente: 'pdv-a' } });
+    const ok = await api('POST', `/equipe/impressoes/${meu.ids[0]}/confirmar`, { token: tk.ze, corpo: { agente: meu.agente } });
     assert.equal(ok.corpo.trabalho?.status, 'IMPRESSO', JSON.stringify({ idsA, idsB, deB, ok: ok.corpo }));
     assert.equal(ok.corpo.trabalho.reservadoPor, null);
 
     // Reserva vencida (agente caiu): outro agente pega.
-    const resto = idsA.slice(1);
+    const resto = meu.ids.slice(1);
     if (resto.length) {
       await prisma.trabalhoImpressao.updateMany({ where: { id: { in: resto } }, data: { reservadoAte: new Date(agora.getTime() - 1000) } }); // relógio da API no teste
       const pegou = (await api('POST', '/equipe/impressoes/reservar', { token: tk.ze, corpo: { agente: 'pdv-c' } })).corpo.trabalhos.map((t) => t.id);

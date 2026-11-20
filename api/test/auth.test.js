@@ -60,7 +60,7 @@ describe('autenticação e usuários', { skip: semBancoDeTeste }, () => {
     assert.equal(typeof r.corpo.accessToken, 'string');
     assert.equal(typeof r.corpo.refreshToken, 'string');
     assert.deepEqual(
-      { ...r.corpo.usuario, id: undefined },
+      { ...r.corpo.usuario, id: undefined, loja: { ...r.corpo.usuario.loja, logoUrl: null } },
       {
         id: undefined,
         nome: DONO.nome,

@@ -1,0 +1,53 @@
+{
+  "loja": {
+    "slug": "lanchonete-teste",
+    "corPrimaria": "#1E7B3C",
+    "corFundo": "#F3F8F4",
+    "descricao": "Loja de teste da plataforma (cardápio pequeno).",
+    "ordem": 90,
+    "logo": "loja-teste-logo.png"
+  },
+  "pratoPorKg": false,
+  "restaurante": {
+    "nome": "Lanchonete Teste",
+    "cidade": "Abatiá - PR"
+  },
+  "turnos": [
+    {
+      "nome": "Dia todo",
+      "horarios": [
+        { "dia": "domingo", "inicio": "00:00", "fim": "23:59" },
+        { "dia": "segunda", "inicio": "00:00", "fim": "23:59" },
+        { "dia": "terca", "inicio": "00:00", "fim": "23:59" },
+        { "dia": "quarta", "inicio": "00:00", "fim": "23:59" },
+        { "dia": "quinta", "inicio": "00:00", "fim": "23:59" },
+        { "dia": "sexta", "inicio": "00:00", "fim": "23:59" },
+        { "dia": "sabado", "inicio": "00:00", "fim": "23:59" }
+      ]
+    }
+  ],
+  "insumos": [{ "nome": "Pão de hambúrguer", "estoque_inicial": 50 }],
+  "areaEntrega": [
+    { "bairro": "Centro", "taxa_centavos": 400 },
+    { "bairro": "Jardim Primavera", "taxa_centavos": 600 }
+  ],
+  "categorias": [
+    {
+      "nome": "Lanches",
+      "turnos": ["Dia todo"],
+      "produtos": [
+        { "nome": "X-Teste", "descricao": "Pão, hambúrguer e queijo", "preco_centavos": 1500, "insumos": [{ "insumo": "Pão de hambúrguer", "qtd": 1 }] },
+        { "nome": "X-Salada Teste", "descricao": "Pão, hambúrguer, queijo, alface e tomate", "preco_centavos": 1800, "insumos": [{ "insumo": "Pão de hambúrguer", "qtd": 1 }] }
+      ]
+    },
+    {
+      "nome": "Bebidas",
+      "turnos": ["Dia todo"],
+      "controla_estoque": true,
+      "produtos": [
+        { "nome": "Suco de laranja", "descricao": "Copo 300 ml", "preco_centavos": 800, "estoque_inicial": 30 },
+        { "nome": "Água sem gás", "descricao": "500 ml", "preco_centavos": 400, "estoque_inicial": 40 }
+      ]
+    }
+  ]
+}

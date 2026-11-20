@@ -395,6 +395,9 @@ model Pedido {
   descontoCentavos    Int             @default(0) // só pedidos da equipe; total = subtotal + taxa − desconto
   observacao          String?         @db.VarChar(200) // observação do pedido inteiro
   pagoEm              DateTime? // "pago agora" no PDV: forma e caixaId gravados na criação
+  /// Chave de acesso da NFC-e emitida para a venda (prova de emissão), preenchida pela
+  /// equipe. 44 dígitos, modelo 65 e dígito verificador conferidos no service; CHECK só dígitos.
+  chaveNfce           String?         @unique @db.VarChar(44)
 
   loja       Loja                @relation(fields: [lojaId], references: [id])
   cliente    Cliente?            @relation(fields: [clienteId], references: [id])
@@ -459,6 +462,10 @@ model TrabalhoImpressao {
   ultimoErro    String?
   criadoEm      DateTime                @default(now())
   impressoEm    DateTime?
+  /// Reserva do agente de impressão (POST /equipe/impressoes/reservar): dois agentes da
+  /// mesma loja nunca imprimem o mesmo cupom. Vencida (reservadoAte < agora) = livre de novo.
+  reservadoPor  String?                 @db.VarChar(64)
+  reservadoAte  DateTime?
 
   loja   Loja    @relation(fields: [lojaId], references: [id])
   pedido Pedido? @relation(fields: [pedidoId], references: [id], onDelete: Restrict)

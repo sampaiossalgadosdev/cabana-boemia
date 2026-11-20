@@ -23,6 +23,6 @@ export function criarRotas(opcoes = {}) {
   routes.use('/cliente', criarClienteRoutes(opcoes));
   routes.use('/equipe', criarEquipeRoutes(opcoes));
   routes.use('/retaguarda', criarRetaguardaRoutes(opcoes));
-  routes.use('/plataforma', criarPlataformaRoutes());
+  routes.use('/plataforma', criarPlataformaRoutes(opcoes));
   return routes;
 }

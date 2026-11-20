@@ -128,3 +128,42 @@ export function descreverDiferenca(diferencaCentavos) {
 
 /** Peso em gramas → "1,250 kg". */
 export const formatarPeso = (g) => `${(g / 1000).toFixed(3).replace('.', ',')} kg`;
+
+// ───────── Anúncios ─────────
+
+const partesBrasilia = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/** ISO (UTC) → valor de <input type="datetime-local"> no horário de Brasília ("2026-11-20T08:00"). */
+export function paraCampoDataHora(iso) {
+  if (!iso) return '';
+  const p = Object.fromEntries(partesBrasilia.formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+}
+
+/** "2026-11-20T08:00" (Brasília, sem horário de verão) → "2026-11-20T08:00:00-03:00"; vazio/ inválido → null. */
+export function deCampoDataHora(valor) {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(valor ?? '') ? `${valor}:00-03:00` : null;
+}
+
+/** "11222333000181" → "11.222.333/0001-81"; "52998224725" → "529.982.247-25". */
+export function formatarDocumento(d) {
+  const s = String(d ?? '').replace(/\D/g, '');
+  if (s.length === 14) return s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  if (s.length === 11) return s.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+  return d ?? '';
+}
+
+export const SITUACOES_ANUNCIO = {
+  NO_AR: { texto: 'No ar', classe: 'etiqueta--ok' },
+  AGENDADO: { texto: 'Agendado', classe: 'etiqueta--ouro' },
+  ENCERRADO: { texto: 'Encerrado', classe: '' },
+  DESATIVADO: { texto: 'Desativado', classe: 'etiqueta--aviso' },
+};

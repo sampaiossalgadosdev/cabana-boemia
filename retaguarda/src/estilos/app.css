@@ -584,6 +584,46 @@ textarea.entrada {
   accent-color: var(--cor-primaria);
 }
 
+/* Declaração com caixa de seleção (texto longo, fora da pílula) */
+
+.declaracao {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--cor-borda-forte);
+  border-radius: var(--raio);
+  background: var(--cor-creme);
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.declaracao input {
+  margin-top: 3px;
+  accent-color: var(--cor-primaria);
+}
+
+/* Anúncios: miniatura na tabela e prévia no formulário (formato 2:1) */
+
+.anuncio-miniatura {
+  width: 80px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--cor-borda);
+  background: var(--cor-creme);
+  flex-shrink: 0;
+}
+
+.anuncio-previa {
+  width: 240px;
+  max-width: 100%;
+  aspect-ratio: 2 / 1;
+  object-fit: cover;
+  border-radius: var(--raio);
+  border: 1px solid var(--cor-borda);
+}
+
 /* Interruptor (checkbox com role=switch) */
 
 .interruptor {

@@ -49,6 +49,9 @@ export const temaCabana = {
     sucesso: '#2E7D4F',
     sombra: marcaCabana.preto,
     placeholder: '#F3EADF',
+    // Etiqueta "Patrocinado" sobre a imagem do anúncio (legível sobre qualquer foto).
+    sobreImagemFundo: 'rgba(17,17,17,0.78)',
+    sobreImagemTexto: marcaCabana.branco,
   },
   fontes: {
     // undefined = fonte do sistema (Roboto no Android, SF no iOS), como o site.

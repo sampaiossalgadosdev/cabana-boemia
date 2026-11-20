@@ -57,3 +57,24 @@ export async function excluirComAnonimizacao(clienteId, db = prisma) {
     return { pedidosAnonimizados: r.count };
   });
 }
+
+/**
+ * Aceite dos termos/política do app (versão `versao`): grava o estado no
+ * cliente e o histórico em `Consentimento`, juntos.
+ */
+export function registrarAceite(clienteId, { versao, ip, agora }, db = prisma) {
+  return db.$transaction(async (tx) => {
+    await tx.consentimento.create({ data: { clienteId, tipo: 'TERMOS', versao, ip, criadoEm: agora } });
+    return tx.cliente.update({ where: { id: clienteId }, data: { termosVersao: versao, termosAceitosEm: agora } });
+  });
+}
+
+/** Marketing (opcional): liga/desliga e guarda a escolha no histórico. */
+export function registrarMarketing(clienteId, { aceito, ip, agora }, db = prisma) {
+  return db.$transaction(async (tx) => {
+    await tx.consentimento.create({
+      data: { clienteId, tipo: aceito ? 'MARKETING_CONCEDIDO' : 'MARKETING_REVOGADO', ip, criadoEm: agora },
+    });
+    return tx.cliente.update({ where: { id: clienteId }, data: { marketing: aceito, marketingEm: agora } });
+  });
+}

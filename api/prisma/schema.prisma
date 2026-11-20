@@ -116,6 +116,7 @@ model Loja {
   caixas     Caixa[]
   impressoes TrabalhoImpressao[]
   imagens    ImagemLoja[]
+  anuncios   Anuncio[]
 }
 
 /// Imagem enviada pela retaguarda (logo da loja), servida em /api/publico/imagens/:id.
@@ -154,6 +155,7 @@ model Usuario {
   caixasAbertos   Caixa[]               @relation("CaixaAbertoPor")
   caixasFechados  Caixa[]               @relation("CaixaFechadoPor")
   movimentosCaixa MovimentoCaixa[]
+  anuncios        Anuncio[]
 
   @@index([lojaId])
 }
@@ -174,22 +176,29 @@ model RefreshToken {
 // ───────────── Clientes ─────────────
 
 model Cliente {
-  id           Int      @id @default(autoincrement())
-  googleId     String?  @unique
-  appleId      String?  @unique // "sub" do Entrar com Apple (app iOS)
-  nome         String
+  id              Int       @id @default(autoincrement())
+  googleId        String?   @unique
+  appleId         String?   @unique // "sub" do Entrar com Apple (app iOS)
+  nome            String
   /// Nome sem acento e minúsculo (busca do PDV: "joao" acha "João"). Calculado
   /// pela extensão em src/lib/prisma.js a cada gravação de `nome`; sem default.
-  nomeBusca    String
-  email        String?
-  telefone     String?
-  observacao   String?  @db.VarChar(300) // anotação da equipe (PDV)
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
+  nomeBusca       String
+  email           String?
+  telefone        String?
+  observacao      String?   @db.VarChar(300) // anotação da equipe (PDV)
+  /// Versão dos termos/política do app aceita por último (null = nunca aceitou; o site não usa).
+  termosVersao    String?   @db.VarChar(20)
+  termosAceitosEm DateTime?
+  /// Consentimento de marketing (opcional, revogável no Perfil do app; nasce desligado).
+  marketing       Boolean   @default(false)
+  marketingEm     DateTime?
+  criadoEm        DateTime  @default(now())
+  atualizadoEm    DateTime  @updatedAt
 
-  enderecos     Endereco[]
-  pedidos       Pedido[]
-  refreshTokens RefreshTokenCliente[]
+  enderecos      Endereco[]
+  pedidos        Pedido[]
+  refreshTokens  RefreshTokenCliente[]
+  consentimentos Consentimento[]
 
   @@index([telefone])
 }
@@ -587,4 +596,73 @@ model RegistroAcesso {
 
   @@index([criadoEm])
   @@index([clienteId])
+}
+
+// ───────── Consentimentos do cliente (app) ─────────
+
+enum TipoConsentimento {
+  TERMOS // aceitou os termos de uso e a política de privacidade da versão `versao`
+  MARKETING_CONCEDIDO
+  MARKETING_REVOGADO
+}
+
+/// Histórico (prova do consentimento, LGPD art. 8º §2º). O estado atual fica no Cliente.
+model Consentimento {
+  id        Int               @id @default(autoincrement())
+  clienteId Int
+  tipo      TipoConsentimento
+  versao    String?           @db.VarChar(20) // versão dos documentos (TERMOS)
+  ip        String            @db.VarChar(45)
+  criadoEm  DateTime          @default(now())
+
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([clienteId, criadoEm])
+}
+
+// ───────── Anúncios (carrossel "Patrocinado" do app) ─────────
+
+enum DestinoAnuncio {
+  LOJA // abre a página de uma loja do app
+  LINK // abre um link https
+}
+
+/// Imagem do anúncio (PNG/JPEG/WebP até 500 KB, CHECK), servida com cache longo: cada envio é outro id.
+model ImagemAnuncio {
+  id       Int      @id @default(autoincrement())
+  mime     String   @db.VarChar(20)
+  dados    Bytes
+  criadoEm DateTime @default(now())
+
+  anuncios Anuncio[]
+}
+
+/// Anúncio cadastrado pelo ADMIN. Sem exclusão pela API; um trigger impede
+/// apagar antes de 1 ano depois do `fim` (registro da veiculação).
+model Anuncio {
+  id                   Int            @id @default(autoincrement())
+  anuncianteNome       String         @db.VarChar(150)
+  anuncianteDocumento  String         @db.VarChar(14) // CPF (11) ou CNPJ (14), só dígitos (CHECK)
+  imagemId             Int
+  destino              DestinoAnuncio
+  destinoLojaId        Int? // destino LOJA (CHECK: um dos dois, conforme o destino)
+  destinoUrl           String?        @db.VarChar(500) // destino LINK, https
+  inicio               DateTime
+  fim                  DateTime // CHECK fim > inicio
+  valorPagoCentavos    Int // CHECK >= 0
+  ativo                Boolean        @default(true)
+  ordem                Int            @default(0)
+  /// Declaração do ADMIN de que a peça não é dirigida a crianças (CHECK = true).
+  naoDirigidoACriancas Boolean
+  criadoPorId          Int
+  criadoEm             DateTime       @default(now())
+  atualizadoEm         DateTime       @updatedAt
+
+  imagem      ImagemAnuncio @relation(fields: [imagemId], references: [id], onDelete: Restrict)
+  destinoLoja Loja?         @relation(fields: [destinoLojaId], references: [id], onDelete: Restrict)
+  criadoPor   Usuario       @relation(fields: [criadoPorId], references: [id], onDelete: Restrict)
+
+  @@index([inicio, fim])
+  @@index([imagemId])
+  @@index([destinoLojaId])
 }

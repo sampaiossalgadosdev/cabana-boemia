@@ -116,6 +116,10 @@ describe('cliente do site: login Google, perfil e endereços', { skip: semBancoD
       email: 'maria@gmail.com',
       telefone: null,
       precisaTelefone: true,
+      // campos do app (o site ignora): termos ainda não aceitos, marketing desligado
+      termosVersao: null,
+      precisaAceite: true,
+      marketing: false,
     });
     const payload = jwt.decode(r.corpo.token);
     assert.equal(payload.aud, 'cliente');

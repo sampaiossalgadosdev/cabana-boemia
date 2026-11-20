@@ -27,6 +27,8 @@ npm run seed:demo        # dados de demonstração do dia (roteiro em DEMO.md)
 npm run dist -w pdv      # instalador do PDV → pdv/dist/PDV-do-Abatia-Setup-<versão>.exe
 ```
 
+App Delivery Abatiá: login (Google Cloud, Apple) em `app/CONFIGURACAO_LOGIN.md`; build, envio às lojas, regra do `versionCode` e formulários de privacidade em `app/PUBLICACAO.md`.
+
 ### PDV do Abatiá (balcão)
 
 Um PDV só para **todas as lojas**: o programa se chama **PDV do Abatiá** (antes, "Cabana Boemia PDV"). A loja vem do login: dono e atendente entram na loja deles; o administrador da plataforma escolhe a loja ("Em qual loja?") e o computador lembra a escolha.

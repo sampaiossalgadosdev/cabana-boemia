@@ -74,7 +74,7 @@ export function criarApp({
 
   app.use(
     PREFIXO_API,
-    criarRotas({ limiteLogin, relogio, verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple, limiteAuthCliente }),
+    criarRotas({ limiteLogin, relogio, verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple, limiteAuthCliente, emailTitular }),
   );
   // Páginas públicas do app (exclusão de conta, privacidade e termos; links do Play Console
   // e do app): antes do site, que pegaria qualquer caminho.

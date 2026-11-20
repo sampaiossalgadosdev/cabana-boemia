@@ -15,7 +15,7 @@ import {
 } from '../src/lib/apple.js';
 import { validarSolicitacao } from '../src/routes/exclusao.routes.js';
 import { contatoHtml, paginaPrivacidade, paginaTermos, VIGENCIA } from '../src/routes/legal.routes.js';
-import { CONTROLADOR, emailDoTitular, identificacaoDoControlador } from '../src/lib/controlador.js';
+import { CONTROLADOR, DOCUMENTOS_APP, emailDoTitular, identificacaoDoControlador } from '../src/lib/controlador.js';
 import { limiteRetencao, normalizarIp, registrarAcesso } from '../src/services/registroAcesso.service.js';
 
 /**
@@ -394,6 +394,26 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
     assert.notEqual(salvos[0].hash, r.corpo.refreshToken);
     const dias = (salvos[0].expiraEm - salvos[0].criadoEm) / 86_400_000;
     assert.ok(dias > 59.9 && dias < 60.1, `~60 dias (${dias})`);
+  });
+
+  test('aceite marcado na tela de entrada (Google e Apple): grava versão e histórico; versão velha ou sem aceite não grava', async () => {
+    const versao = DOCUMENTOS_APP.versao;
+    const g = await entrarGoogle({}, { refresh: true, aceite: versao });
+    assert.equal(g.status, 200);
+    assert.equal(g.corpo.cliente.precisaAceite, false);
+    assert.equal(g.corpo.cliente.termosVersao, versao);
+    const reg = await prisma.consentimento.findMany({ where: { clienteId: g.corpo.cliente.id } });
+    assert.deepEqual(reg.map((c) => [c.tipo, c.versao]), [['TERMOS', versao]]);
+
+    const a = await entrarApple({}, { aceite: versao });
+    assert.equal(a.corpo.cliente.precisaAceite, false);
+
+    const velha = await entrarGoogle({}, { refresh: true, aceite: '2000-01-01' });
+    assert.equal(velha.status, 200, 'versão velha não impede o login');
+    assert.equal(velha.corpo.cliente.precisaAceite, true);
+    const site = await entrarGoogle({ aud: WEB }, {});
+    assert.equal(site.corpo.cliente.precisaAceite, true, 'o site não manda aceite (ele usa os textos da Cabana)');
+    assert.equal(await prisma.consentimento.count({ where: { clienteId: { in: [velha.corpo.cliente.id, site.corpo.cliente.id] } } }), 0);
   });
 
   // ───── Refresh ─────

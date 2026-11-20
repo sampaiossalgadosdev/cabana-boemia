@@ -111,3 +111,15 @@ test('relatório: largura das barras e diferença do caixa', async () => {
   assert.equal(descreverDiferenca(null), null);
   assert.equal(formatarPeso(487), '0,487 kg');
 });
+
+test('anúncios: campo datetime-local em Brasília (ida e volta) e documento formatado', async () => {
+  const { paraCampoDataHora, deCampoDataHora, formatarDocumento } = await import('../src/lib/formatar.js');
+  assert.equal(paraCampoDataHora('2026-11-20T11:00:00.000Z'), '2026-11-20T08:00');
+  assert.equal(paraCampoDataHora('2026-11-21T02:30:00.000Z'), '2026-11-20T23:30');
+  assert.equal(paraCampoDataHora(null), '');
+  assert.equal(deCampoDataHora('2026-11-20T08:00'), '2026-11-20T08:00:00-03:00');
+  assert.equal(new Date(deCampoDataHora(paraCampoDataHora('2026-11-20T11:00:00.000Z'))).toISOString(), '2026-11-20T11:00:00.000Z');
+  assert.equal(deCampoDataHora(''), null);
+  assert.equal(formatarDocumento('11222333000181'), '11.222.333/0001-81');
+  assert.equal(formatarDocumento('52998224725'), '529.982.247-25');
+});

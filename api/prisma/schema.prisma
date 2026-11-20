@@ -90,6 +90,8 @@ model Loja {
   logoUrl                   String?   @db.VarChar(500)
   corPrimaria               String?   @db.VarChar(7) // "#RRGGBB"
   corFundo                  String?   @db.VarChar(7)
+  corPrimariaPadrao         String?   @db.VarChar(7) // definida pelo ADMIN; "Voltar ao padrão" do dono
+  logoUrlPadrao             String?   @db.VarChar(500)
   descricao                 String?   @db.VarChar(500)
   ativa                     Boolean   @default(true)
   ordem                     Int       @default(0)
@@ -113,6 +115,21 @@ model Loja {
   contadores ContadorPedido[]
   caixas     Caixa[]
   impressoes TrabalhoImpressao[]
+  imagens    ImagemLoja[]
+}
+
+/// Imagem enviada pela retaguarda (logo da loja), servida em /api/publico/imagens/:id.
+/// CHECK: PNG/JPEG/WebP e até 500 KB (migration identidade_loja).
+model ImagemLoja {
+  id       Int      @id @default(autoincrement())
+  lojaId   Int
+  mime     String   @db.VarChar(20)
+  dados    Bytes
+  criadoEm DateTime @default(now())
+
+  loja Loja @relation(fields: [lojaId], references: [id], onDelete: Restrict)
+
+  @@index([lojaId])
 }
 
 // ───────────── Acesso ─────────────

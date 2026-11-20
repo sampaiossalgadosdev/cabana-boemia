@@ -119,3 +119,10 @@ export const IconeLixo = (p) => (
     <path d="M6 7l1 13h10l1-13M9 7V4h6v3" />
   </Svg>
 );
+
+export const IconeMegafone = (p) => (
+  <Svg {...p}>
+    <path d="M3 10v4h3l7 4V6L6 10H3z" />
+    <path d="M17 9a4 4 0 0 1 0 6M7 14l1 5h3l-1-4" />
+  </Svg>
+);

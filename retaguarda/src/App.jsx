@@ -14,6 +14,7 @@ import {
   IconeLixo,
   IconeLoja,
   IconeMenu,
+  IconeMegafone,
   IconePaleta,
   IconeProdutos,
   IconeRelatorio,
@@ -33,6 +34,7 @@ import { TelaConfiguracoes } from './telas/TelaConfiguracoes.jsx';
 import { TelaPerfil } from './telas/TelaPerfil.jsx';
 import { TelaLojas } from './telas/TelaLojas.jsx';
 import { TelaExclusoes } from './telas/TelaExclusoes.jsx';
+import { TelaAnuncios } from './telas/TelaAnuncios.jsx';
 
 const ICONES = {
   'cardapio-do-dia': IconeCardapioDia,
@@ -47,6 +49,7 @@ const ICONES = {
   configuracoes: IconeConfig,
   lojas: IconeLoja,
   'bairros-cidade': IconeBairros,
+  anuncios: IconeMegafone,
   exclusoes: IconeLixo,
 };
 
@@ -63,6 +66,7 @@ const COMPONENTES = {
   configuracoes: TelaConfiguracoes,
   lojas: TelaLojas,
   'bairros-cidade': TelaBairrosCidade,
+  anuncios: TelaAnuncios,
   exclusoes: TelaExclusoes,
 };
 

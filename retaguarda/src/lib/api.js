@@ -128,6 +128,12 @@ export const api = {
       logoPadrao: (id, arquivo) => put(`/plataforma/lojas/${id}/logo-padrao`, arquivo),
       criarDono: (id, dados) => post(`/plataforma/lojas/${id}/dono`, dados),
     },
+    anuncios: {
+      listar: () => get('/plataforma/anuncios'),
+      enviarImagem: (arquivo) => post('/plataforma/anuncios/imagens', arquivo),
+      criar: (dados) => post('/plataforma/anuncios', dados),
+      alterar: (id, dados) => patch(`/plataforma/anuncios/${id}`, dados),
+    },
     solicitacoes: {
       listar: () => get('/plataforma/solicitacoes-exclusao'),
       atender: (id) => patch(`/plataforma/solicitacoes-exclusao/${id}/atendida`),

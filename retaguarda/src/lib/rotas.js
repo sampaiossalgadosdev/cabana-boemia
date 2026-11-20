@@ -18,6 +18,7 @@ export const TELAS_LOJA = [
 export const TELAS_PLATAFORMA = [
   { caminho: 'lojas', titulo: 'Lojas' },
   { caminho: 'bairros-cidade', titulo: 'Bairros da cidade' },
+  { caminho: 'anuncios', titulo: 'Anúncios' },
   { caminho: 'exclusoes', titulo: 'Exclusão de contas' },
 ];
 

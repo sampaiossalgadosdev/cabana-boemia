@@ -2,6 +2,8 @@
 
 Levantamento do que existe hoje (branch `feat/painel-delivery`, 19/11/2026), feito lendo o código. Não propõe implementação: só descreve o que existe e as lacunas para um app multi-loja Android/iOS.
 
+> **Atualização (19/11/2026, branch `feat/multi-loja`)**: a API, a retaguarda e o banco já são multi-loja. A Cabana é a loja 1, e o site atual e o PDV instalado continuam funcionando como antes. A seção 6 descreve o estado atual e o que ainda falta. As outras seções continuam sendo o retrato do site de antes; onde mudou algo, a seção 6 diz. Detalhes em `CLAUDE.md` › Multi-loja.
+
 ---
 
 ## 1. Stack e estrutura
@@ -180,49 +182,53 @@ Uma transação: turno ativo (só SITE, `409 LOJA_FECHADA`) → revalida produto
 
 ---
 
-## 6. Multi-loja: onde o código assume um único restaurante
+## 6. Multi-loja: estado atual (atualizado na branch `feat/multi-loja`)
 
-O sistema é **single-tenant de ponta a ponta**. Nenhuma tabela tem `lojaId`.
+O levantamento original desta seção apontava um sistema **single-tenant de ponta a ponta**, sem `lojaId` em nenhuma tabela. Isso foi resolvido em três etapas.
 
-### Banco (`api/prisma/schema.prisma`)
-- `Configuracao` é **linha única** (`id = 1` com `@default(1)`): nome, WhatsApp, tempo estimado, virada do dia, frete grátis.
-- Unicidades globais que colidiriam entre lojas: `Produto.nome` (também chave do upsert do seed), `Categoria.nome`, `Bairro.nome`, `Turno.nome`, `Insumo.nome`.
-- `Pedido @@unique([dataRef, numeroDia])` e `ContadorPedido` com chave só `dataRef`: **um contador de pedidos por dia para o sistema todo**.
-- `Caixa`: índice parcial `Caixa_um_aberto` garante **um caixa aberto no sistema inteiro** (migration `caixa`).
-- `Usuario` (DONO/ATENDENTE) sem vínculo com loja; papel `DONO` vê tudo.
-- `Cliente` e `Endereco`: o cliente é do sistema (isso poderia continuar global), mas `Bairro`/taxa são de uma loja só.
-- `TrabalhoImpressao`: fila única.
+### 6.1 Banco
+- **`Loja`**: slug, nome, razão social, CPF/CNPJ, endereço, WhatsApp, logo, cores, descrição, ativa, ordem. Leva também a configuração que era da `Configuracao` de linha única (apagada): tempo estimado, virada do dia e frete grátis.
+- **`lojaId`** em categorias, produtos, insumos, turnos, pedidos, contador do dia, caixa, fila de impressão e usuários.
+- **Unicidades por loja**: nomes, número do pedido por loja e dia, e um caixa aberto por loja.
+- **Bairros**: lista única da cidade (ADMIN) + **`AreaEntrega`** (loja, bairro, taxa, ativo). O endereço do cliente vale para qualquer loja.
+- **Cliente**: cadastro único entre lojas (`Cliente`, `Endereco`, refresh, registros de acesso, solicitações de exclusão são da plataforma).
+- **Novos campos**:
+  - `Pedido.chaveNfce` (prova de emissão da NFC-e);
+  - `TrabalhoImpressao.reservadoPor` e `reservadoAte` (reserva do agente de impressão).
+- Migrations: `papel_admin`, `multi_loja`, `bairros_da_cidade` e `nfce_reserva_impressao`. Como reverter: `api/prisma/REVERTER_MULTI_LOJA.md`.
 
-### API
-- `api/src/services/publico.service.js`: `cardapio()`, `bairros()`, `config()` sem parâmetro de loja; fallback `nomeRestaurante: 'Cabana Boemia'` (também em `configuracao.service.js`, `impressao.service.js`).
-- `turno.service.js`: turno ativo calculado sobre todos os turnos; validação de sobreposição entre **todos** os turnos ativos (`HORARIO_SOBREPOSTO` impediria duas lojas com o mesmo horário).
-- `pedido.service.js`: `criarPedido` sem loja; frete grátis, tempo estimado e dia operacional vêm da única `Configuracao`.
-- `lib/tempoReal.js`: uma sala `equipe` recebe **todos** os pedidos e eventos; `lib/eventos.js` é um barramento em memória do processo.
-- `impressao.service.js`: `GET /equipe/impressoes/pendentes` devolve tudo pendente; o próprio projeto já registra que dois PDVs imprimindo duplicariam cupons.
-- `relatorio.service.js`, `caixa.service.js`: relatórios e caixas globais.
-- `exigirPapel('DONO')`: um dono só.
-- Seed: `api/prisma/cardapio-cabana-boemia.json`.
+### 6.2 Papéis e acesso
+- **ADMIN** (plataforma) não tem loja e passa onde o DONO passa. Nas rotas da equipe, informa a loja pelo cabeçalho `X-Loja`; no socket, por `auth.loja`. Sem informar, usa a Cabana.
+- **DONO e ATENDENTE** ficam presos à loja do cadastro. Dado de outra loja responde 404, e informar outra loja dá 403.
 
-### Site
-- Marca fixa no código: `NomeRestaurante.jsx` (logo `shared/assets/logo-cabana-boemia.jpg` via `lib/logo.js`, `alt="Cabana Boemia"`), `site/index.html` (título, metas, splash da Cabana), `manifest.webmanifest`, `PaginaLegal.jsx` (texto cita a Cabana Boemia), `InstalarApp.jsx`/`lib/instalacao.js` ("Instale o app da Cabana"), `PainelSacola.jsx` (padrão "Cabana Boemia"), `estilos/tokens.css` (cores da marca).
-- Chaves de `localStorage` com prefixo `cabana-boemia:`.
-- Não existe tela de escolha de loja nem conceito de "loja" no estado do site; o carrinho não guarda de qual loja é.
+### 6.3 API
+| Para quem | O que existe agora |
+|---|---|
+| App / lojas novas | `GET /publico/lojas` (vitrine: identidade, aberta, próxima abertura); `GET /publico/lojas/:slug/cardapio \| bairros \| config`; `POST /cliente/pedidos` com `lojaSlug`; histórico de todas as lojas com `loja { nome, slug, logoUrl }`; último pedido por loja (`?lojaSlug`). |
+| Site atual | Rotas antigas (`/publico/cardapio`, `/bairros`, `/config`, pedido sem `lojaSlug`, último pedido sem `lojaSlug`) respondem como a Cabana. Nada mudou em `site/`. |
+| Equipe (PDV/retaguarda) | Tudo filtrado pela loja do usuário. Turnos e sobreposição, frete grátis, tempo estimado, dia operacional e contador são por loja. Rota nova para a NFC-e: `PATCH /equipe/pedidos/:id/nfce`. |
+| Plataforma (ADMIN) | `/plataforma/lojas` (listar, criar com turnos iniciais, editar; `POST /:id/dono`), `/plataforma/bairros`, `/plataforma/solicitacoes-exclusao`. |
 
-### PDV, impressão, domínio, identidade
-- PDV conecta num servidor e recebe tudo da sala `equipe`; config de impressora por computador sem loja.
-- `shared/src/cupom.js`: `restaurante = 'Cabana Boemia'` como padrão.
-- Domínio único `cabana.managerpix.com.br`; cliente OAuth com nome/origens da Cabana; política de privacidade da Cabana.
-- Identidade visual (cores, logo, splash, animação de confirmação) é da Cabana.
+### 6.4 Tempo real e impressão
+- **Socket.IO**: uma sala por loja, `equipe:<lojaId>`. A sala legada `equipe` continua só para a Cabana, por causa do PDV antigo instalado.
+- **Impressão**:
+  - a fila é por loja;
+  - o agente novo usa `POST /equipe/impressoes/reservar`, uma reserva atômica que impede dois PDVs de imprimirem o mesmo cupom;
+  - o PDV antigo segue com `GET /equipe/impressoes/pendentes`, sem os trabalhos reservados.
+- Isso resolve os riscos "uma sala para tudo" e "dois agentes duplicam cupons" (seção 9).
 
-### O que seria preciso (descrição das lacunas, não plano)
-- Entidade `Loja` e `lojaId` em configuração, categorias, produtos, insumos, turnos/horários, bairros/taxas, pedidos, contador, caixa, impressão, usuários e relatórios; unicidades passando a ser por loja.
-- Usuários da equipe vinculados a uma loja (e um papel acima do dono, para quem administra a plataforma).
-- Rotas públicas e do cliente recebendo a loja (e uma listagem de lojas); regras de turno/frete/tempo/dia operacional por loja.
-- Socket.IO com sala por loja; fila de impressão filtrada por loja (e reserva de trabalho para mais de um agente).
-- Identidade visual (nome, logo, cores, WhatsApp) vinda do banco por loja, e não do código.
-- Sacola presa a uma loja (pedido de uma loja só) e histórico de pedidos com a loja.
-
----
+### 6.5 O que ainda falta
+- **PDV novo**:
+  - mostrar a loja e, para o ADMIN, escolhê-la;
+  - usar `reservar` com o identificador do agente;
+  - campo da NFC-e;
+  - bairros da própria loja.
+  Depois dele instalado, tirar a sala legada `equipe`.
+- **App**: tela de escolha da loja (vitrine), sacola presa a uma loja, rotas por slug e tema vindo da loja (cores, logo).
+- **Telas da plataforma** na retaguarda: lojas e solicitações de exclusão. Os bairros da cidade já têm tela.
+- **Criar turno na retaguarda**: hoje os turnos de uma loja nova vêm da criação feita pelo ADMIN.
+- **Barramento de eventos em memória** (`lib/eventos.js`): com mais de uma instância da API, eventos de uma não chegam aos sockets da outra (segue na seção 9).
+- **Documentos legais**: o controlador dos dados e as obrigações de cada loja (termo com as lojas) continuam pendentes de revisão jurídica (`CLAUDE.md` › Autenticação do cliente).
 
 ## 7. Reaproveitamento para o app
 

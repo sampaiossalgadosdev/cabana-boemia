@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import * as api from '../lib/api.js';
-import { obterConfig } from '../lib/config.js';
+import { obterConfig, obterDadosDoApp } from '../lib/config.js';
 import { apagarSessao, carregarSessao, precisaRenovar, salvarSessao, sessaoExpirou } from '../logica/sessao.js';
 import * as provedores from '../login/provedores.js';
 
@@ -129,16 +129,48 @@ export function ClienteProvider({ children }) {
     [guardar],
   );
 
+  /**
+   * Versão dos termos/política aceita na tela de entrada (a caixa marcada).
+   * Sem resposta da API, entra sem ela: o app pede o aceite logo depois.
+   */
+  const versaoAceita = async () => (await obterDadosDoApp().catch(() => null))?.documentos.versao ?? undefined;
+
   const entrarComGoogle = useCallback(async () => {
-    const config = await obterConfig().catch(() => null);
+    const [config, aceite] = await Promise.all([obterConfig().catch(() => null), versaoAceita()]);
     const { idToken } = await provedores.entrarComGoogle(config?.googleClientId);
-    return concluirLogin(await api.entrarComGoogle(idToken), 'google');
+    return concluirLogin(await api.entrarComGoogle(idToken, { aceite }), 'google');
   }, [concluirLogin]);
 
   const entrarComApple = useCallback(async () => {
+    const aceite = await versaoAceita();
     const { identityToken, nonce, nome } = await provedores.entrarComApple();
-    return concluirLogin(await api.entrarComApple({ identityToken, nonce, nome }), 'apple');
+    return concluirLogin(await api.entrarComApple({ identityToken, nonce, nome, aceite }), 'apple');
   }, [concluirLogin]);
+
+  /** Aceite da versão atual (tela de aceite). 409 VERSAO_DESATUALIZADA: busca a versão nova e tenta de novo. */
+  const aceitarTermos = useCallback(async () => {
+    let versao = (await obterDadosDoApp()).documentos.versao;
+    let r;
+    try {
+      r = await chamar((token) => api.aceitarTermos(token, versao));
+    } catch (e) {
+      if (e?.codigo !== 'VERSAO_DESATUALIZADA') throw e;
+      versao = (await obterDadosDoApp({ forcar: true })).documentos.versao;
+      r = await chamar((token) => api.aceitarTermos(token, versao));
+    }
+    setCliente(r.cliente);
+    return r.cliente;
+  }, [chamar]);
+
+  /** Consentimento de marketing (Perfil › Comunicações). */
+  const definirMarketing = useCallback(
+    async (aceito) => {
+      const { cliente: c } = await chamar((token) => api.definirMarketing(token, aceito));
+      setCliente(c);
+      return c;
+    },
+    [chamar],
+  );
 
   const sair = useCallback(async () => {
     const atual = sessao.current;
@@ -180,9 +212,11 @@ export function ClienteProvider({ children }) {
       sair,
       atualizarPerfil,
       excluirConta,
+      aceitarTermos,
+      definirMarketing,
       tentarDeNovo: abrir,
     }),
-    [status, cliente, chamar, entrarComGoogle, entrarComApple, sair, atualizarPerfil, excluirConta, abrir],
+    [status, cliente, chamar, entrarComGoogle, entrarComApple, sair, atualizarPerfil, excluirConta, aceitarTermos, definirMarketing, abrir],
   );
 
   return <ClienteContext.Provider value={valor}>{children}</ClienteContext.Provider>;

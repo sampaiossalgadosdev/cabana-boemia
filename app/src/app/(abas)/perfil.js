@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { formatarTelefone } from '@restaurante/shared/telefone';
 import { useCliente } from '../../estado/Cliente.js';
 import { AvisosNaTela, useAvisos } from '../../estado/Avisos.js';
@@ -61,7 +62,7 @@ function Endereco({ endereco, ocupado, onEditar, onPrincipal, onRemover }) {
 export default function Perfil() {
   const s = useEstilos(criarEstilos);
   const tema = useTema();
-  const { status, cliente, provedor, chamar, sair, excluirConta, tentarDeNovo } = useCliente();
+  const { status, cliente, provedor, chamar, sair, excluirConta, definirMarketing, tentarDeNovo } = useCliente();
   const { avisar } = useAvisos();
   const [enderecos, setEnderecos] = useState(null);
   const [bairros, setBairros] = useState([]);
@@ -69,6 +70,21 @@ export default function Perfil() {
   const [ocupado, setOcupado] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const [erro, setErro] = useState('');
+  const [salvandoMarketing, setSalvandoMarketing] = useState(false);
+  const [erroMarketing, setErroMarketing] = useState('');
+
+  const mudarMarketing = async (aceito) => {
+    setSalvandoMarketing(true);
+    setErroMarketing('');
+    try {
+      await definirMarketing(aceito);
+      avisar(aceito ? 'Pronto: você vai receber ofertas e novidades.' : 'Pronto: você não vai mais receber ofertas.');
+    } catch (e) {
+      if (e?.status !== 401) setErroMarketing(e?.status ? e.message : ERRO_GENERICO);
+    } finally {
+      setSalvandoMarketing(false);
+    }
+  };
 
   const tratarErro = useCallback((e) => {
     if (e?.status !== 401) setErro(e?.status ? e.message : ERRO_GENERICO);
@@ -131,6 +147,7 @@ export default function Perfil() {
     <View style={s.links}>
       <Botao titulo="Política de privacidade" variante="texto" onPress={() => Linking.openURL(URL_PRIVACIDADE)} />
       <Botao titulo="Termos de uso" variante="texto" onPress={() => Linking.openURL(URL_TERMOS)} />
+      <Botao titulo="Sobre o Delivery Abatiá" variante="texto" onPress={() => router.push('/sobre')} />
     </View>
   );
 
@@ -226,6 +243,27 @@ export default function Perfil() {
           )}
         </View>
 
+        <View style={s.cartao}>
+          <Text style={s.tituloCartao}>Comunicações</Text>
+          <View style={s.linhaSwitch}>
+            <Text style={[s.valor, { flex: 1 }]} nativeID="rotuloMarketing">
+              Quero receber ofertas e novidades das lojas e do Delivery Abatiá
+            </Text>
+            <Switch
+              value={Boolean(cliente.marketing)}
+              onValueChange={mudarMarketing}
+              disabled={salvandoMarketing}
+              accessibilityLabel="Quero receber ofertas e novidades"
+              trackColor={{ true: tema.cores.acao, false: tema.cores.desabilitado }}
+              thumbColor={tema.cores.superficie}
+            />
+          </View>
+          <Text style={s.nota}>
+            Opcional. Você pode desligar quando quiser; seus pedidos não mudam. Avisos sobre um pedido seu (pelo WhatsApp da loja) não dependem desta opção.
+          </Text>
+          <TextoErro>{erroMarketing}</TextoErro>
+        </View>
+
         <Botao titulo="Sair" variante="secundario" onPress={sair} bloco estilo={{ marginTop: 16 }} />
         {links}
         <Botao
@@ -277,4 +315,5 @@ const criarEstilos = (t) =>
     acoes: { flexDirection: 'row', flexWrap: 'wrap', marginLeft: -8 },
     alinharEsquerda: { alignSelf: 'flex-start', marginLeft: -8 },
     links: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 },
+    linhaSwitch: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 6, marginBottom: 6 },
   });

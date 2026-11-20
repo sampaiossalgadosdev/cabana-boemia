@@ -143,17 +143,32 @@ export const buscarConfig = () => requisitar('GET', '/publico/config');
 /** GET /publico/bairros → { bairros: [{ id, nome, taxaCentavos }] } */
 export const buscarBairros = () => requisitar('GET', '/publico/bairros');
 
+/** GET /publico/anuncios → { anuncios: [{ id, anunciante, imagemUrl, destino: { tipo: 'LOJA', slug, nome } | { tipo: 'LINK', url } }] } */
+export const buscarAnuncios = (signal, { forcar = false, fetch } = {}) => requisitar('GET', '/publico/anuncios', { signal, semCache: forcar, fetch });
+
+/** GET /publico/app → { plataforma, contato, documentos: { versao, ... } } (tela "Sobre" e aceite dos termos) */
+export const buscarDadosDoApp = () => requisitar('GET', '/publico/app');
+
 // ───── Cliente (login, pedidos e perfil entram no próximo passo do app) ─────
 
-/** POST /cliente/auth/google → { token, refreshToken, cliente } (o app sempre pede o refresh). */
-export const entrarComGoogle = (credential) =>
-  requisitar('POST', '/cliente/auth/google', { corpo: { credential, refresh: true } });
+/**
+ * POST /cliente/auth/google → { token, refreshToken, cliente } (o app sempre pede o refresh).
+ * `aceite` = versão dos termos/política marcada na tela de entrada.
+ */
+export const entrarComGoogle = (credential, { aceite } = {}) =>
+  requisitar('POST', '/cliente/auth/google', { corpo: { credential, refresh: true, ...(aceite ? { aceite } : {}) } });
 
 /** POST /cliente/auth/apple → { token, refreshToken, cliente }. `nonce` = o bruto (a Apple recebeu o SHA-256). */
-export const entrarComApple = ({ identityToken, nonce, nome }) =>
+export const entrarComApple = ({ identityToken, nonce, nome, aceite }) =>
   requisitar('POST', '/cliente/auth/apple', {
-    corpo: { identityToken, nonce, refresh: true, ...(nome ? { nome } : {}) },
+    corpo: { identityToken, nonce, refresh: true, ...(nome ? { nome } : {}), ...(aceite ? { aceite } : {}) },
   });
+
+/** POST /cliente/aceite { versao } → { cliente } (409 VERSAO_DESATUALIZADA se a versão mudou) */
+export const aceitarTermos = (token, versao) => requisitar('POST', '/cliente/aceite', { token, corpo: { versao } });
+
+/** PUT /cliente/marketing { aceito } → { cliente } (consentimento opcional e revogável) */
+export const definirMarketing = (token, aceito) => requisitar('PUT', '/cliente/marketing', { token, corpo: { aceito } });
 
 /** POST /cliente/auth/renovar → { token, refreshToken, cliente } (o refresh usado deixa de valer). */
 export const renovarSessao = (refreshToken) => requisitar('POST', '/cliente/auth/renovar', { corpo: { refreshToken } });

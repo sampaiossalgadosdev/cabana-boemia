@@ -11,6 +11,7 @@ import { CardapioProvider } from '../estado/Cardapio.js';
 import { ClienteProvider } from '../estado/Cliente.js';
 import { UltimoPedidoProvider } from '../estado/UltimoPedido.js';
 import { TelaSemInternet } from '../componentes/TelaSemInternet.js';
+import { AceiteTermos } from '../componentes/AceiteTermos.js';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -53,7 +54,9 @@ function Navegacao() {
         <Stack.Screen name="loja/[slug]" options={{ headerShown: false }} />
         <Stack.Screen name="produto" options={{ presentation: 'modal', headerShown: false }} />
         <Stack.Screen name="sacola" options={{ presentation: 'modal', headerShown: false }} />
+        <Stack.Screen name="sobre" options={{ title: 'Sobre' }} />
       </Stack>
+      <AceiteTermos />
     </>
   );
 }

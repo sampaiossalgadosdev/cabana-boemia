@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { AvisosNaTela } from '../../estado/Avisos.js';
 import { FaixaSemConexao } from '../../componentes/Faixas.js';
 import { TelaSemInternet } from '../../componentes/TelaSemInternet.js';
 import { LogoLoja } from '../../componentes/Loja.js';
+import { CarrosselAnuncios } from '../../componentes/Anuncios.js';
 import { filtrarLojas, situacaoDaLoja } from '../../logica/lojas.js';
 import { formatarPreco } from '../../logica/dinheiro.js';
 import { rotuloItens } from '../../logica/sacola.js';
@@ -74,6 +75,7 @@ export default function Vitrine() {
   const { lojas, semConexao, salvoEm, buscando, recarregar } = useLojas();
   const [busca, setBusca] = useState('');
   const [puxou, setPuxou] = useState(false);
+  const anuncios = useRef(null);
   const visiveis = useMemo(() => filtrarLojas(lojas, busca), [lojas, busca]);
 
   const topo = (
@@ -128,10 +130,19 @@ export default function Vitrine() {
             onRefresh={() => {
               setPuxou(true);
               recarregar();
+              anuncios.current?.recarregar();
             }}
           />
         }
-        ListHeaderComponent={semConexao ? <FaixaSemConexao salvoEm={salvoEm} podePedir textoSalvo={textoListaSalva} /> : null}
+        ListHeaderComponent={
+          <>
+            {semConexao ? <FaixaSemConexao salvoEm={salvoEm} podePedir textoSalvo={textoListaSalva} /> : null}
+            {/* Some durante a busca (a lista filtrada fica no topo); continua montado para não buscar de novo. */}
+            <View style={busca ? { display: 'none' } : null}>
+              <CarrosselAnuncios ref={anuncios} />
+            </View>
+          </>
+        }
         ListEmptyComponent={
           <Text style={s.vazio}>{busca ? `Nenhuma loja encontrada para "${busca}".` : 'Nenhuma loja disponível no momento.'}</Text>
         }

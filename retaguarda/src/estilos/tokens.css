@@ -8,6 +8,18 @@
   --cor-laranja: #d9541e;
   --cor-branco: #ffffff;
 
+  /*
+   * Tema da loja (cor primária). Estes são os do tema padrão (Delivery Abatiá /
+   * Cabana); com a loja definida, src/lib/tema.js troca por variaveisDoTema()
+   * do shared (contraste conferido). Erro/alerta continuam vermelhos sempre.
+   */
+  --cor-primaria: var(--cor-vermelho);
+  --cor-primaria-escura: var(--cor-vermelho-escuro);
+  --cor-primaria-suave: #fdecee;
+  --cor-primaria-texto: var(--cor-branco);
+  --cor-primaria-na-base: var(--cor-vermelho-escuro);
+  --cor-primaria-escura-texto: #f6e6d6;
+
   /* Usos */
   --cor-fundo: var(--cor-creme);
   --cor-superficie: var(--cor-branco);
@@ -15,10 +27,10 @@
   --cor-texto-suave: #5e5249;
   --cor-borda: #eaded0;
   --cor-borda-forte: #d8c8b4;
-  --cor-acao: var(--cor-vermelho);
-  --cor-acao-hover: var(--cor-vermelho-escuro);
-  --cor-menu: var(--cor-vermelho-escuro);
-  --cor-menu-texto: #f6e6d6;
+  --cor-acao: var(--cor-primaria);
+  --cor-acao-hover: var(--cor-primaria-escura);
+  --cor-menu: var(--cor-primaria-escura);
+  --cor-menu-texto: var(--cor-primaria-escura-texto);
   --cor-ok: #1f7a43;
   --cor-ok-fundo: #e3f2e8;
   --cor-alerta-fundo: #fbe0e3; /* vermelho clarinho: abaixo do mínimo */

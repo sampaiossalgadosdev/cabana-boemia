@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { sessao, aoExpirarSessao } from './lib/api.js';
-import { TELAS, useRota } from './lib/rotas.js';
-import { Logo, useAvisar } from './componentes/comuns.jsx';
+import { api, sessao, aoExpirarSessao } from './lib/api.js';
+import { TELAS, telaPermitida, telasDoMenu, useRota } from './lib/rotas.js';
+import { aplicarTema } from './lib/tema.js';
+import { escolherLoja, lembrarLoja } from './lib/lojaEscolhida.js';
+import { LogoLoja, useAvisar, useCarregar } from './componentes/comuns.jsx';
 import {
   IconeBairros,
   IconeCardapioDia,
@@ -9,7 +11,10 @@ import {
   IconeConfig,
   IconeEquipe,
   IconeEstoque,
+  IconeLixo,
+  IconeLoja,
   IconeMenu,
+  IconePaleta,
   IconeProdutos,
   IconeRelatorio,
   IconeRelogio,
@@ -22,9 +27,12 @@ import { TelaRelatorio } from './telas/TelaRelatorio.jsx';
 import { TelaCategorias } from './telas/TelaCategorias.jsx';
 import { TelaEstoque } from './telas/TelaEstoque.jsx';
 import { TelaTurnos } from './telas/TelaTurnos.jsx';
-import { TelaBairros } from './telas/TelaBairros.jsx';
+import { TelaBairros, TelaBairrosCidade } from './telas/TelaBairros.jsx';
 import { TelaEquipe } from './telas/TelaEquipe.jsx';
 import { TelaConfiguracoes } from './telas/TelaConfiguracoes.jsx';
+import { TelaPerfil } from './telas/TelaPerfil.jsx';
+import { TelaLojas } from './telas/TelaLojas.jsx';
+import { TelaExclusoes } from './telas/TelaExclusoes.jsx';
 
 const ICONES = {
   'cardapio-do-dia': IconeCardapioDia,
@@ -35,7 +43,11 @@ const ICONES = {
   turnos: IconeRelogio,
   bairros: IconeBairros,
   equipe: IconeEquipe,
+  perfil: IconePaleta,
   configuracoes: IconeConfig,
+  lojas: IconeLoja,
+  'bairros-cidade': IconeBairros,
+  exclusoes: IconeLixo,
 };
 
 const COMPONENTES = {
@@ -47,7 +59,11 @@ const COMPONENTES = {
   turnos: TelaTurnos,
   bairros: TelaBairros,
   equipe: TelaEquipe,
+  perfil: TelaPerfil,
   configuracoes: TelaConfiguracoes,
+  lojas: TelaLojas,
+  'bairros-cidade': TelaBairrosCidade,
+  exclusoes: TelaExclusoes,
 };
 
 export function App() {
@@ -55,10 +71,17 @@ export function App() {
   const [erroInicial, setErroInicial] = useState('');
   const avisar = useAvisar();
 
+  /** ADMIN volta na loja em que estava; DONO nunca manda X-Loja (a API sabe a loja dele). */
+  function prepararLoja(u) {
+    if (u?.papel === 'ADMIN') lembrarLoja();
+    else escolherLoja(null);
+    setUsuario(u);
+  }
+
   async function restaurar() {
     setErroInicial('');
     try {
-      setUsuario(await sessao.restaurar());
+      prepararLoja(await sessao.restaurar());
     } catch (err) {
       setErroInicial(err.message);
     }
@@ -73,6 +96,11 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Sem loja (login, plataforma): tema padrão do Delivery Abatiá.
+  useEffect(() => {
+    if (!usuario) aplicarTema(null);
+  }, [usuario]);
+
   if (erroInicial) {
     return (
       <div className="login">
@@ -86,19 +114,42 @@ export function App() {
     );
   }
   if (usuario === undefined) return <div className="login" aria-busy="true" />;
-  if (!usuario) return <TelaLogin aoEntrar={setUsuario} />;
+  if (!usuario) return <TelaLogin aoEntrar={prepararLoja} />;
   return <Estrutura usuario={usuario} aoSair={() => setUsuario(null)} />;
 }
 
 function Estrutura({ usuario, aoSair }) {
-  const [tela, ir] = useRota();
+  const admin = usuario.papel === 'ADMIN';
+  // Loja aberta (identidade: slug, nome, logo, cor). DONO: a dele. ADMIN: a que escolher (null = plataforma).
+  const [loja, setLoja] = useState(admin ? null : usuario.loja);
+  const lojas = useCarregar(() => (admin ? api.plataforma.lojas.listar() : Promise.resolve(null)), [admin]);
+  const [telaPedida, ir] = useRota();
   const [menuAberto, setMenuAberto] = useState(false);
+  // ADMIN: até a lista chegar não sabe se volta numa loja; não monta tela nenhuma (nada vai sem X-Loja).
+  const decidindo = admin && !lojas.dados && !lojas.erro;
+  const menu = telasDoMenu(usuario.papel, Boolean(loja));
+  const tela = telaPermitida(telaPedida, menu);
   const Tela = COMPONENTES[tela];
   const titulo = TELAS.find((t) => t.caminho === tela).titulo;
+  const [tema, setTema] = useState(() => aplicarTema(loja));
 
   useEffect(() => {
-    document.title = `${titulo} · Retaguarda · Cabana Boemia`;
-  }, [titulo]);
+    setTema(aplicarTema(loja));
+  }, [loja]);
+
+  // ADMIN: ao recarregar, volta na loja que tinha aberto (se ela ainda existe).
+  useEffect(() => {
+    if (!admin || !lojas.dados) return;
+    const slug = lembrarLoja();
+    const achada = lojas.dados.lojas.find((l) => l.slug === slug) ?? null;
+    if (!achada) escolherLoja(null);
+    setLoja((atual) => (atual && achada && atual.slug === achada.slug ? { ...atual, ...achada } : achada));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lojas.dados]);
+
+  useEffect(() => {
+    document.title = `${titulo} · ${tema.nome}`;
+  }, [titulo, tema.nome]);
 
   useEffect(() => {
     if (!menuAberto) return undefined;
@@ -108,8 +159,24 @@ function Estrutura({ usuario, aoSair }) {
   }, [menuAberto]);
 
   async function sair() {
+    escolherLoja(null);
     await sessao.sair();
     aoSair();
+  }
+
+  /** ADMIN abre a retaguarda de uma loja (ou volta à plataforma). */
+  function abrirLoja(slug) {
+    const achada = lojas.dados?.lojas.find((l) => l.slug === slug) ?? null;
+    escolherLoja(achada?.slug ?? null);
+    setLoja(achada);
+    ir(telasDoMenu(usuario.papel, Boolean(achada))[0].caminho);
+    setMenuAberto(false);
+  }
+
+  /** Perfil salvo (cor/logo) ou loja editada pelo ADMIN: o tema muda na hora. */
+  function lojaMudou(nova) {
+    if (nova && loja && nova.slug === loja.slug) setLoja((l) => ({ ...l, ...nova }));
+    if (admin) lojas.recarregar();
   }
 
   return (
@@ -118,7 +185,9 @@ function Estrutura({ usuario, aoSair }) {
         <button type="button" onClick={() => setMenuAberto(true)} aria-label="Abrir menu" aria-expanded={menuAberto}>
           <IconeMenu />
         </button>
-        <span>{titulo}</span>
+        <span>
+          {titulo} · {tema.nome}
+        </span>
       </header>
 
       <nav
@@ -129,9 +198,24 @@ function Estrutura({ usuario, aoSair }) {
         }}
       >
         <div className="menu__logo">
-          <Logo />
+          <LogoLoja nome={tema.nome} logoUrl={tema.logoUrl} />
         </div>
-        {TELAS.map((t) => {
+        {tema.logoUrl && <p className="menu__loja">{tema.nome}</p>}
+        {admin && (
+          <label className="menu__seletor">
+            <span>Loja aberta</span>
+            <select className="entrada" value={loja?.slug ?? ''} onChange={(e) => abrirLoja(e.target.value)}>
+              <option value="">Plataforma (todas as lojas)</option>
+              {(lojas.dados?.lojas ?? []).map((l) => (
+                <option key={l.slug} value={l.slug}>
+                  {l.nome}
+                  {l.ativa ? '' : ' (inativa)'}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {menu.map((t) => {
           const Icone = ICONES[t.caminho];
           return (
             <a
@@ -152,7 +236,10 @@ function Estrutura({ usuario, aoSair }) {
           );
         })}
         <div className="menu__rodape">
-          <p className="menu__usuario">{usuario.nome}</p>
+          <p className="menu__usuario">
+            {usuario.nome}
+            {admin && ' · administrador'}
+          </p>
           <button type="button" className="botao botao--menu-sair" onClick={sair}>
             <IconeSair /> Sair
           </button>
@@ -161,7 +248,12 @@ function Estrutura({ usuario, aoSair }) {
 
       <main className="conteudo">
         <div className="pagina">
-          <Tela ir={ir} usuario={usuario} />
+          {decidindo ? (
+            <div className="estado">Carregando…</div>
+          ) : (
+            // Trocar de loja remonta a tela (recarrega os dados da outra loja).
+            <Tela key={loja?.slug ?? 'plataforma'} ir={ir} usuario={usuario} loja={loja} aoMudarLoja={lojaMudou} abrirLoja={abrirLoja} />
+          )}
         </div>
       </main>
     </div>

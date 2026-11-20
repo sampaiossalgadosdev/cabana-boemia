@@ -7,9 +7,10 @@ import { Campo, CampoDinheiro, Dialogo, EstadoCarga, Interruptor, useAvisar, use
 /**
  * Bairros e taxas. Os bairros são da lista da cidade (cadastrada pelo ADMIN);
  * aqui o dono escolhe onde a loja entrega e por quanto. Desativar tira o bairro
- * do site e do PDV desta loja. O ADMIN também edita a lista da cidade.
+ * do site e do PDV desta loja. A lista da cidade o ADMIN edita na plataforma
+ * (TelaBairrosCidade).
  */
-export function TelaBairros({ usuario }) {
+export function TelaBairros() {
   const carga = useCarregar(() => api.bairros.listar());
   const [editando, setEditando] = useState(null); // área | 'novo'
   const avisar = useAvisar();
@@ -84,9 +85,6 @@ export function TelaBairros({ usuario }) {
           await carga.recarregar();
         }}
       />
-      {usuario?.papel === 'ADMIN' && (
-        <BairrosDaCidade aoMudar={() => carga.recarregar()} />
-      )}
     </>
   );
 }
@@ -200,8 +198,12 @@ function FormArea({ area, aoFechar, aoSalvar }) {
   );
 }
 
-/** Só ADMIN: a lista única de bairros da cidade, usada por todas as lojas. */
-function BairrosDaCidade({ aoMudar }) {
+/** Plataforma (só ADMIN): a lista única de bairros da cidade, usada por todas as lojas. */
+export function TelaBairrosCidade() {
+  return <BairrosDaCidade />;
+}
+
+function BairrosDaCidade({ aoMudar = async () => {} }) {
   const carga = useCarregar(() => api.plataforma.bairros.listar());
   const [editando, setEditando] = useState(null); // bairro | 'novo'
   const avisar = useAvisar();
@@ -219,10 +221,10 @@ function BairrosDaCidade({ aoMudar }) {
 
   return (
     <>
-      <div className="pagina__topo" style={{ marginTop: 32 }}>
+      <div className="pagina__topo">
         <div>
-          <h2 className="pagina__titulo">Bairros da cidade</h2>
-          <p className="pagina__sub">Só o administrador vê. Lista única usada por todas as lojas e pelos endereços dos clientes.</p>
+          <h1 className="pagina__titulo">Bairros da cidade</h1>
+          <p className="pagina__sub">Lista única usada por todas as lojas e pelos endereços dos clientes. Cada loja escolhe onde entrega (e a taxa) em Bairros e taxas.</p>
         </div>
         <button type="button" className="botao" onClick={() => setEditando('novo')}>
           + Novo bairro na cidade

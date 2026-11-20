@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
-/** Telas da retaguarda (caminho sob /admin). A primeira é a inicial. */
-export const TELAS = [
+/** Telas de uma loja (caminho sob /admin). A primeira é a inicial. */
+export const TELAS_LOJA = [
   { caminho: 'cardapio-do-dia', titulo: 'Cardápio do dia' },
   { caminho: 'relatorio', titulo: 'Relatório do dia' },
   { caminho: 'produtos', titulo: 'Produtos' },
@@ -10,8 +10,33 @@ export const TELAS = [
   { caminho: 'turnos', titulo: 'Turnos e horários' },
   { caminho: 'bairros', titulo: 'Bairros e taxas' },
   { caminho: 'equipe', titulo: 'Equipe' },
+  { caminho: 'perfil', titulo: 'Perfil da loja' },
   { caminho: 'configuracoes', titulo: 'Configurações' },
 ];
+
+/** Telas da plataforma (só ADMIN, sem loja escolhida). */
+export const TELAS_PLATAFORMA = [
+  { caminho: 'lojas', titulo: 'Lojas' },
+  { caminho: 'bairros-cidade', titulo: 'Bairros da cidade' },
+  { caminho: 'exclusoes', titulo: 'Exclusão de contas' },
+];
+
+/** Todas (para reconhecer o caminho). */
+export const TELAS = [...TELAS_LOJA, ...TELAS_PLATAFORMA];
+
+/**
+ * Telas do menu: DONO = as da loja; ADMIN sem loja = as da plataforma; ADMIN
+ * numa loja = as da loja (volta à plataforma pelo seletor).
+ */
+export function telasDoMenu(papel, lojaAberta) {
+  if (papel === 'ADMIN' && !lojaAberta) return TELAS_PLATAFORMA;
+  return TELAS_LOJA;
+}
+
+/** A tela pedida, se está no menu; senão a primeira do menu. */
+export function telaPermitida(tela, menu) {
+  return menu.some((t) => t.caminho === tela) ? tela : menu[0].caminho;
+}
 
 const BASE = import.meta.env.BASE_URL ?? '/admin/'; // "/admin/"
 

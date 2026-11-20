@@ -1,4 +1,5 @@
 import { criarSessao } from './sessao.js';
+import { lojaEscolhida } from './lojaEscolhida.js';
 
 // Mesmo domínio da API (/admin); em dev, o proxy do Vite repassa.
 // Rotas da API sob /api. Em produção a API serve esta página (mesmo domínio,
@@ -16,16 +17,21 @@ export class ErroApi extends Error {
   }
 }
 
+/** Arquivo (logo) vai cru, com o tipo dele; o resto, JSON. */
+const ehArquivo = (c) => typeof Blob !== 'undefined' && c instanceof Blob;
+
 async function enviar(metodo, rota, { corpo, token } = {}) {
   const headers = {};
-  if (corpo !== undefined) headers['content-type'] = 'application/json';
+  if (corpo !== undefined) headers['content-type'] = ehArquivo(corpo) ? corpo.type || 'application/octet-stream' : 'application/json';
   if (token) headers.authorization = `Bearer ${token}`;
+  // ADMIN numa loja: a API usa a loja do cabeçalho (DONO: a do cadastro).
+  if (token && lojaEscolhida()) headers['x-loja'] = lojaEscolhida();
   let res;
   try {
     res = await fetch(`${BASE}${rota}`, {
       method: metodo,
       headers,
-      body: corpo === undefined ? undefined : JSON.stringify(corpo),
+      body: corpo === undefined ? undefined : ehArquivo(corpo) ? corpo : JSON.stringify(corpo),
       cache: 'no-store',
     });
   } catch {
@@ -95,6 +101,8 @@ export const api = {
   },
   turnos: {
     listar: () => get('/retaguarda/turnos'),
+    criar: (nome) => post('/retaguarda/turnos', { nome }),
+    alterar: (id, dados) => patch(`/retaguarda/turnos/${id}`, dados),
     definirHorarios: (id, horarios) => put(`/retaguarda/turnos/${id}/horarios`, { horarios }),
   },
   // Área de entrega da loja (`id` = id do bairro da cidade).
@@ -104,8 +112,26 @@ export const api = {
     criar: (dados) => post('/retaguarda/bairros', dados),
     alterar: (id, dados) => patch(`/retaguarda/bairros/${id}`, dados),
   },
+  // Perfil da loja (cor e logo; o ADMIN define o padrão).
+  perfil: {
+    obter: () => get('/retaguarda/perfil'),
+    cor: (corPrimaria) => put('/retaguarda/perfil/cor', { corPrimaria }),
+    logo: (arquivo) => put('/retaguarda/perfil/logo', arquivo),
+    voltarAoPadrao: () => post('/retaguarda/perfil/padrao'),
+  },
   // Só ADMIN (plataforma).
   plataforma: {
+    lojas: {
+      listar: () => get('/plataforma/lojas'),
+      criar: (dados) => post('/plataforma/lojas', dados),
+      alterar: (id, dados) => patch(`/plataforma/lojas/${id}`, dados),
+      logoPadrao: (id, arquivo) => put(`/plataforma/lojas/${id}/logo-padrao`, arquivo),
+      criarDono: (id, dados) => post(`/plataforma/lojas/${id}/dono`, dados),
+    },
+    solicitacoes: {
+      listar: () => get('/plataforma/solicitacoes-exclusao'),
+      atender: (id) => patch(`/plataforma/solicitacoes-exclusao/${id}/atendida`),
+    },
     bairros: {
       listar: () => get('/plataforma/bairros'),
       criar: (dados) => post('/plataforma/bairros', dados),

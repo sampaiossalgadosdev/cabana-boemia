@@ -28,10 +28,12 @@ export function BarraSuperior({ aba, aoTrocarAba, statusConexao, usuario, aoSair
   const loja = useLoja();
   return (
     <header className="barra">
-      <div className="barra__loja">
-        <Logo className="barra__logo" />
-        {/* Com logo, o nome vem ao lado (com o nome em texto já no lugar da logo, não repete). */}
-        {loja?.logoDataUrl && <span className="barra__nome-loja">{loja.nome}</span>}
+      <div className={`barra__loja ${loja?.logoDataUrl ? 'barra__loja--com-nome' : ''}`}>
+        <div className="barra__marca">
+          <Logo className="barra__logo" />
+          {/* Com logo, o nome vem embaixo (sem logo, o nome em texto já está no lugar dela). */}
+          {loja?.logoDataUrl && <span className="barra__nome-loja">{loja.nome}</span>}
+        </div>
         {aoTrocarLoja && (
           <button type="button" className="botao botao--contorno botao--pequeno" onClick={aoTrocarLoja} title="Trabalhar em outra loja">
             Trocar loja

@@ -235,6 +235,10 @@ input:focus-visible {
   height: 56px;
   max-width: 220px;
 }
+/* Com o nome embaixo, a logo fica um pouco menor (a barra tem 76 px). */
+.barra__loja--com-nome .barra__logo {
+  height: 42px;
+}
 .barra__logo.logo--texto {
   font-size: 22px;
   min-height: 0;
@@ -245,8 +249,14 @@ input:focus-visible {
   gap: 12px;
   min-width: 0;
 }
+.barra__marca {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
 .barra__nome-loja {
-  max-width: 180px;
+  max-width: 200px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--cor-primaria-na-base);
   overflow: hidden;

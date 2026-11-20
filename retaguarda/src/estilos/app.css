@@ -104,6 +104,8 @@ h3 {
 }
 .menu__seletor .entrada {
   width: 100%;
+  color: var(--cor-texto);
+  background: var(--cor-superficie);
   text-transform: none;
   letter-spacing: normal;
   font-size: 14px;
@@ -536,6 +538,7 @@ textarea.entrada {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 16px;
+  align-items: start;
 }
 
 .grade-form .inteiro {

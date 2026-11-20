@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { io as conectarSocket } from 'socket.io-client';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 
 const local = (iso) => new Date(`${iso}-03:00`);
 const SABADO_20H = local('2026-11-14T20:00'); // turno Lanches aberto
@@ -80,7 +80,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
 
     for (const prod of await prisma.produto.findMany()) p[prod.nome] = prod;
     for (const i of await prisma.insumo.findMany()) insumo[i.nome] = i;
-    centro = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Centro', taxaCentavos: 500 } });
+    centro = await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
     await criarDono({ nome: 'Dono', email: 'dono@teste.com', senha: 'senha-do-dono' });
 
     const app = criarApp({ log: false, relogio: () => agora });

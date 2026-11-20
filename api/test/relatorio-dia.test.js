@@ -1,7 +1,7 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 import { porQuantidade, porValor, ticketMedio } from '../src/services/relatorio.service.js';
 
 const local = (iso) => new Date(`${iso}-03:00`);
@@ -77,7 +77,7 @@ describe('relatório do dia operacional', { skip: semBancoDeTeste }, () => {
     for (const prod of await prisma.produto.findMany()) p[prod.nome] = prod;
     const atendente = await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
     await criarDono({ nome: 'Dono', email: 'dono@teste.com', senha: 'senha-do-dono' });
-    const bairro = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Centro', taxaCentavos: 500 } });
+    const bairro = await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
     const cliente = await prisma.cliente.create({ data: { nome: 'Joana', telefone: '43999990000' } });
     const endereco = { texto: 'Rua A, 1', bairroId: bairro.id };
     const item = (nome, quantidade = 1) => ({ produtoId: p[nome].id, quantidade });

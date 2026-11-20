@@ -76,7 +76,8 @@ describe('seed:demo (dados de demonstração)', { skip: semBancoDeTeste }, () =>
     assert.equal(lata.estoque, 24 - 2 - 1 - 2, 'baixa no lançamento: 2 (site) + 1 (Roberto) + 2 (Seu Zé)');
 
     assert.equal(await prisma.trabalhoImpressao.count({ where: { status: 'PENDENTE' } }), 0, 'nada sai na impressora');
-    assert.equal(await prisma.bairro.count({ where: { ativo: true } }), 2, 'bairros criados (não havia nenhum)');
+    assert.equal(await prisma.bairro.count({ where: { ativo: true } }), 2, 'bairros da cidade criados (não havia nenhum)');
+    assert.equal(await prisma.areaEntrega.count({ where: { lojaId: 1, ativo: true } }), 2, 'na área de entrega da Cabana');
   });
 
   test('rodar de novo no mesmo dia é recusado (não duplica)', async () => {

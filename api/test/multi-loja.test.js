@@ -14,6 +14,7 @@ describe('multi-loja: Cabana é a loja 1 e as lojas não se misturam', { skip: s
   let svc;
   let outra;
   const tk = {};
+  const bairro = {};
 
   async function api(metodo, rota, { corpo, token } = {}) {
     const res = await fetch(`${base}${rota}`, {
@@ -66,12 +67,26 @@ describe('multi-loja: Cabana é a loja 1 e as lojas não se misturam', { skip: s
     assert.equal((await api('GET', '/publico/config')).corpo.nome, 'Cabana Boemia');
   });
 
-  test('nomes são únicos por loja (a outra pode ter o mesmo produto, categoria, bairro, turno e insumo)', async () => {
+  test('bairros da cidade: só o ADMIN cadastra; cada loja escolhe os seus com a própria taxa', async () => {
+    assert.equal((await api('POST', '/plataforma/bairros', { corpo: { nome: 'Centro' }, token: tk.outra })).status, 403);
+    const centro = await api('POST', '/plataforma/bairros', { corpo: { nome: 'Centro' }, token: tk.admin });
+    assert.equal(centro.status, 201);
+    assert.equal((await api('POST', '/plataforma/bairros', { corpo: { nome: 'Centro' }, token: tk.admin })).corpo.erro.codigo, 'NOME_EM_USO');
+    const jardim = await api('POST', '/plataforma/bairros', { corpo: { nome: 'Jardim' }, token: tk.admin });
+    bairro.centro = centro.corpo.bairro.id;
+    bairro.jardim = jardim.corpo.bairro.id;
+    // O mesmo bairro, uma taxa em cada loja; a Cabana também entrega no Jardim, a outra não.
+    assert.equal((await api('POST', '/retaguarda/bairros', { corpo: { bairroId: bairro.centro, taxaCentavos: 300 }, token: tk.outra })).status, 201);
+    assert.equal((await api('POST', '/retaguarda/bairros', { corpo: { bairroId: bairro.centro, taxaCentavos: 500 }, token: tk.cabana })).status, 201);
+    assert.equal((await api('POST', '/retaguarda/bairros', { corpo: { bairroId: bairro.jardim, taxaCentavos: 800 }, token: tk.cabana })).status, 201);
+    const lista = (await api('GET', '/plataforma/bairros', { token: tk.admin })).corpo.bairros;
+    assert.deepEqual(lista.map((b) => [b.nome, b.lojas]), [['Centro', 2], ['Jardim', 1]]);
+  });
+
+  test('nomes são únicos por loja (a outra pode ter o mesmo produto, categoria, turno e insumo)', async () => {
     const r = await api('POST', '/retaguarda/categorias', { corpo: { nome: 'Lanches' }, token: tk.outra });
     assert.equal(r.status, 201);
     assert.equal((await api('POST', '/retaguarda/categorias', { corpo: { nome: 'Lanches' }, token: tk.outra })).status, 409);
-    assert.equal((await api('POST', '/retaguarda/bairros', { corpo: { nome: 'Centro', taxaCentavos: 300 }, token: tk.outra })).status, 201);
-    assert.equal((await api('POST', '/retaguarda/bairros', { corpo: { nome: 'Centro', taxaCentavos: 500 }, token: tk.cabana })).status, 201);
     assert.equal((await api('POST', '/retaguarda/insumos', { corpo: { nome: 'Pão de lanche', estoqueMinimo: 0 }, token: tk.outra })).status, 201);
     await prisma.turno.create({ data: { lojaId: outra.id, nome: 'Lanches' } });
   });
@@ -85,8 +100,8 @@ describe('multi-loja: Cabana é a loja 1 e as lojas não se misturam', { skip: s
     assert.equal((await api('GET', '/retaguarda/config', { token: tk.cabana })).corpo.config.nomeRestaurante, 'Cabana Boemia');
     const equipe = (await api('GET', '/usuarios', { token: tk.outra })).corpo.usuarios.map((u) => u.email).sort();
     assert.deepEqual(equipe, ['ana@outra.test', 'dono@outra.test']);
-    // O site (loja padrão) não vê o bairro da outra loja.
-    assert.deepEqual((await api('GET', '/publico/bairros')).corpo.bairros.map((b) => b.taxaCentavos), [500]);
+    // O site (loja padrão) vê a área da Cabana, com a taxa dela.
+    assert.deepEqual((await api('GET', '/publico/bairros')).corpo.bairros.map((b) => [b.nome, b.taxaCentavos]), [['Centro', 500], ['Jardim', 800]]);
   });
 
   test('dono não altera dado de outra loja (404, como inexistente)', async () => {
@@ -109,9 +124,8 @@ describe('multi-loja: Cabana é a loja 1 e as lojas não se misturam', { skip: s
 
   test('pedido é de uma loja só: número do dia, caixa e fila por loja; produto da outra loja é recusado', async () => {
     const cliente = await prisma.cliente.create({ data: { nome: 'Cliente Único', telefone: '43999990001' } });
-    const bairroOutra = await prisma.bairro.findFirst({ where: { lojaId: outra.id } });
     const endereco = await prisma.endereco.create({
-      data: { clienteId: cliente.id, rua: 'Rua A', numero: '1', bairroId: bairroOutra.id, principal: true },
+      data: { clienteId: cliente.id, rua: 'Rua A', numero: '1', bairroId: bairro.centro, principal: true },
     });
     const cat = await prisma.categoria.findFirst({ where: { lojaId: outra.id } });
     const lanche = await prisma.produto.create({ data: { lojaId: outra.id, nome: 'X-Bacon', categoriaId: cat.id, precoCentavos: 2000 } });
@@ -124,7 +138,8 @@ describe('multi-loja: Cabana é a loja 1 e as lojas não se misturam', { skip: s
     const r = await pedir(tk.anaOutra, lanche.id);
     assert.equal(r.status, 201, JSON.stringify(r.corpo));
     assert.equal(r.corpo.pedido.numeroDia, 1);
-    assert.equal(r.corpo.pedido.totalCentavos, 2300); // taxa do bairro da outra loja
+    assert.equal(r.corpo.pedido.totalCentavos, 2300); // taxa da outra loja para o Centro
+    assert.equal(r.corpo.pedido.bairroNome, 'Centro');
     assert.equal((await prisma.pedido.findUnique({ where: { id: r.corpo.pedido.id } })).lojaId, outra.id);
 
     // Produto da Cabana pedido na outra loja: não existe lá.
@@ -146,6 +161,33 @@ describe('multi-loja: Cabana é a loja 1 e as lojas não se misturam', { skip: s
     assert.equal((await api('POST', '/equipe/caixa/abrir', { corpo: { valorInicialCentavos: 0 }, token: tk.anaOutra })).status, 201);
     assert.equal((await api('POST', '/equipe/caixa/abrir', { corpo: { valorInicialCentavos: 0 }, token: tk.cabana })).status, 201);
     assert.equal((await api('POST', '/equipe/caixa/abrir', { corpo: { valorInicialCentavos: 0 }, token: tk.cabana })).status, 409);
+  });
+
+  test('mesmo endereço em outra loja: taxa da loja; loja que não entrega no bairro = 422 BAIRRO_FORA_DA_AREA', async () => {
+    const cliente = await prisma.cliente.create({ data: { nome: 'Cliente do Jardim', telefone: '43999990002' } });
+    const noJardim = await prisma.endereco.create({
+      data: { clienteId: cliente.id, rua: 'Rua J', numero: '2', bairroId: bairro.jardim, principal: true },
+    });
+    const cat = await prisma.categoria.findFirst({ where: { lojaId: outra.id } });
+    const suco = await prisma.produto.create({ data: { lojaId: outra.id, nome: 'Suco', categoriaId: cat.id, precoCentavos: 700 } });
+    const fora = await api('POST', '/equipe/pedidos', {
+      corpo: { clienteId: cliente.id, enderecoId: noJardim.id, itens: [{ produtoId: suco.id, quantidade: 1 }], formaPagamento: 'PIX' },
+      token: tk.anaOutra,
+    });
+    assert.equal(fora.status, 422);
+    assert.equal(fora.corpo.erro.codigo, 'BAIRRO_FORA_DA_AREA');
+    assert.match(fora.corpo.erro.mensagem, /Lanchonete Teste não entrega no bairro Jardim/);
+    // Nada baixado nem numerado.
+    assert.equal(await prisma.pedido.count({ where: { clienteId: cliente.id } }), 0);
+    // Na lista do PDV da outra loja o endereço aparece como "não entregamos"; na Cabana, com a taxa dela.
+    const naOutra = (await api('GET', '/equipe/clientes?busca=Jardim', { token: tk.anaOutra })).corpo.clientes[0];
+    assert.deepEqual(naOutra.enderecos[0].bairro, { id: bairro.jardim, nome: 'Jardim', taxaCentavos: null, ativo: false });
+    const naCabana = (await api('GET', '/equipe/clientes?busca=Jardim', { token: tk.cabana })).corpo.clientes[0];
+    assert.deepEqual(naCabana.enderecos[0].bairro, { id: bairro.jardim, nome: 'Jardim', taxaCentavos: 800, ativo: true });
+    // Bairro desativado NA CIDADE: nenhuma loja entrega (some do site).
+    await api('PATCH', `/plataforma/bairros/${bairro.jardim}`, { corpo: { ativo: false }, token: tk.admin });
+    assert.deepEqual((await api('GET', '/publico/bairros')).corpo.bairros.map((b) => b.nome), ['Centro']);
+    await api('PATCH', `/plataforma/bairros/${bairro.jardim}`, { corpo: { ativo: true }, token: tk.admin });
   });
 
   test('ADMIN: sem loja, passa onde o DONO passa e usa a Cabana (loja padrão) por enquanto', async () => {

@@ -356,10 +356,16 @@ describe('retaguarda: catálogo, cardápio do dia, turnos, bairros e configuraç
 
   // ───────── Bairros ─────────
 
-  test('bairros: lista com inativos, cria, muda taxa, desativa (some do site); nome repetido = 409', async () => {
-    const r = await api('POST', '/retaguarda/bairros', { nome: 'Vila Nova', taxaCentavos: 500 });
+  test('bairros: escolhe da lista da cidade, muda taxa, desativa (some do site); repetido = 409; nome é do ADMIN', async () => {
+    const vila = await prisma.bairro.create({ data: { nome: 'Vila Nova' } }); // lista da cidade (ADMIN)
+    const opcoes = (await api('GET', '/retaguarda/bairros/cidade')).corpo.bairros;
+    assert.ok(opcoes.some((b) => b.id === vila.id));
+    const r = await api('POST', '/retaguarda/bairros', { bairroId: vila.id, taxaCentavos: 500 });
     assert.equal(r.status, 201, JSON.stringify(r.corpo));
     const id = r.corpo.bairro.id;
+    assert.equal(id, vila.id);
+    assert.equal(r.corpo.bairro.nome, 'Vila Nova');
+    assert.equal((await api('GET', '/retaguarda/bairros/cidade')).corpo.bairros.some((b) => b.id === vila.id), false);
     assert.ok((await publico('/publico/bairros')).bairros.some((b) => b.id === id));
 
     const taxa = await api('PATCH', `/retaguarda/bairros/${id}`, { taxaCentavos: 700 });
@@ -368,9 +374,13 @@ describe('retaguarda: catálogo, cardápio do dia, turnos, bairros e configuraç
     assert.equal((await publico('/publico/bairros')).bairros.some((b) => b.id === id), false);
     assert.ok((await api('GET', '/retaguarda/bairros')).corpo.bairros.some((b) => b.id === id && !b.ativo));
 
-    assert.equal((await api('POST', '/retaguarda/bairros', { nome: 'Vila Nova', taxaCentavos: 1 })).corpo.erro.codigo, 'NOME_EM_USO');
-    assert.equal((await api('POST', '/retaguarda/bairros', { nome: 'Centro', taxaCentavos: -1 })).status, 400);
+    assert.equal((await api('POST', '/retaguarda/bairros', { bairroId: vila.id, taxaCentavos: 1 })).corpo.erro.codigo, 'BAIRRO_JA_NA_AREA');
+    assert.equal((await api('POST', '/retaguarda/bairros', { bairroId: vila.id, taxaCentavos: -1 })).status, 400);
+    assert.equal((await api('POST', '/retaguarda/bairros', { bairroId: 999999, taxaCentavos: 100 })).corpo.erro.codigo, 'BAIRRO_INVALIDO');
     assert.equal((await api('PATCH', '/retaguarda/bairros/999999', { ativo: true })).status, 404);
+    // O dono não renomeia nem cria bairro da cidade (só a taxa e o ativo da área).
+    assert.equal((await api('PATCH', `/retaguarda/bairros/${id}`, { nome: 'Outro' })).status, 400);
+    assert.equal((await api('GET', '/plataforma/bairros')).status, 403);
     assert.equal(soCardapio().length, 3);
   });
 

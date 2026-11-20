@@ -2,7 +2,7 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { io as conectarSocket } from 'socket.io-client';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 
 const local = (iso) => new Date(`${iso}-03:00`);
 const SABADO_20H = local('2026-11-14T20:00'); // turno Lanches aberto
@@ -75,7 +75,7 @@ describe('rotas da equipe (PDV) e socket', { skip: semBancoDeTeste }, () => {
     await prisma.produto.updateMany({ data: { disponivelHoje: true, ativo: true } });
     await prisma.produto.updateMany({ where: { controlaEstoque: true }, data: { estoque: 50 } });
     await prisma.insumo.updateMany({ data: { estoque: 50 } });
-    centro = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Centro', taxaCentavos: 500 } });
+    centro = await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
     await criarDono({ nome: 'Dono', email: 'dono@teste.com', senha: 'senha-do-dono' });
     const anaCaixa = await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
     // Finalizar exige caixa aberto (as regras do caixa estão em caixa.test.js).

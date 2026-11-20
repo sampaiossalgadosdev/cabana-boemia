@@ -1,7 +1,7 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 
 /**
  * Um cliente do site nunca vê nem altera dados de outro: toda rota /cliente
@@ -34,7 +34,7 @@ describe('cliente do site: isolamento entre clientes (histórico, perfil, endere
     const { criarApp } = await import('../src/app.js');
     const { criarDono } = await import('../src/services/usuario.service.js');
 
-    const centro = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Centro', taxaCentavos: 500 } });
+    const centro = await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
     const salame = await prisma.produto.findUnique({ where: { lojaId_nome: { lojaId: 1, nome: 'Salame' } } });
     await prisma.produto.update({ where: { id: salame.id }, data: { ativo: true } });
 

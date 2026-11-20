@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { io as conectarSocket } from 'socket.io-client';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 
 const local = (iso) => new Date(`${iso}-03:00`);
 const SABADO_20H = local('2026-11-14T20:00'); // turno Lanches aberto
@@ -84,9 +84,9 @@ describe('delivery do WhatsApp pelo PDV: clientes, lançamento, cancelamento e g
 
     for (const prod of await prisma.produto.findMany()) p[prod.nome] = prod;
     for (const i of await prisma.insumo.findMany()) insumo[i.nome] = i;
-    centro = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Centro', taxaCentavos: 500 } });
-    vila = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Vila Nova', taxaCentavos: 700 } });
-    fechado = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Longe', taxaCentavos: 2000, ativo: false } });
+    centro = await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
+    vila = await criarBairro(prisma, { nome: 'Vila Nova', taxaCentavos: 700 });
+    fechado = await criarBairro(prisma, { nome: 'Longe', taxaCentavos: 2000, ativoNaCidade: false });
     ana = await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
     // Finalizar exige caixa aberto (as regras do caixa estão em caixa.test.js).
     await prisma.caixa.create({ data: { lojaId: 1, abertoPorId: ana.id, valorInicialCentavos: 0 } });
@@ -139,7 +139,7 @@ describe('delivery do WhatsApp pelo PDV: clientes, lançamento, cancelamento e g
     assert.equal(r.corpo.erro.detalhes.cliente.nome, 'Seu João');
   });
 
-  test('POST /equipe/clientes: telefone inválido = 400; bairro inativo = 422 sem criar o cliente', async () => {
+  test('POST /equipe/clientes: telefone inválido = 400; bairro desativado na cidade = 422 sem criar o cliente', async () => {
     const t = await api('POST', '/equipe/clientes', { corpo: { nome: 'X', telefone: '1234', endereco: endereco() } });
     assert.equal(t.status, 400);
     const b = await api('POST', '/equipe/clientes', {

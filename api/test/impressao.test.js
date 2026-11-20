@@ -2,7 +2,7 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { io as conectarSocket } from 'socket.io-client';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 
 const local = (iso) => new Date(`${iso}-03:00`);
 const SABADO_20H = local('2026-11-14T20:00'); // turno Lanches aberto
@@ -55,7 +55,7 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
 
     coca = await prisma.produto.findUnique({ where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 1L' } } });
     await prisma.produto.update({ where: { id: coca.id }, data: { ativo: true, estoque: 50 } });
-    centro = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Centro', taxaCentavos: 500 } });
+    centro = await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
     await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
 
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));

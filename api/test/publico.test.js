@@ -1,6 +1,6 @@
 import { test, describe, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 
 const local = (iso) => new Date(`${iso}-03:00`);
 const SABADO_20H = local('2026-11-14T20:00');
@@ -202,14 +202,12 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
     }
   });
 
-  test('GET /publico/bairros: só ativos, com taxa, em ordem alfabética', async () => {
-    await prisma.bairro.createMany({
-      data: [
-        { lojaId: 1, nome: 'Vila Nova', taxaCentavos: 700 },
-        { lojaId: 1, nome: 'Centro', taxaCentavos: 500 },
-        { lojaId: 1, nome: 'Sítio Desativado', taxaCentavos: 1500, ativo: false },
-      ],
-    });
+  test('GET /publico/bairros: onde a loja entrega (área ativa, bairro ativo na cidade), com a taxa dela, em ordem alfabética', async () => {
+    await criarBairro(prisma, { nome: 'Vila Nova', taxaCentavos: 700 });
+    await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
+    await criarBairro(prisma, { nome: 'Sítio Desativado', taxaCentavos: 1500, ativo: false });
+    await criarBairro(prisma, { nome: 'Fechado na Cidade', taxaCentavos: 900, ativoNaCidade: false });
+    await prisma.bairro.create({ data: { nome: 'Fora da Área' } }); // na cidade, mas a Cabana não entrega
     const { corpo } = await get('/publico/bairros');
     assert.deepEqual(
       corpo.bairros.map(({ nome, taxaCentavos }) => ({ nome, taxaCentavos })),

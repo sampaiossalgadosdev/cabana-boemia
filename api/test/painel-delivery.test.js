@@ -2,7 +2,7 @@ import { test, describe, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { io as conectarSocket } from 'socket.io-client';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 
 const local = (iso) => new Date(`${iso}-03:00`);
 const SABADO_20H = local('2026-11-14T20:00'); // dia operacional 2026-11-14 (virada às 4h)
@@ -54,7 +54,7 @@ describe('painel de delivery/encomendas do PDV', { skip: semBancoDeTeste }, () =
     const { criarAtendente } = await import('../src/services/usuario.service.js');
 
     for (const prod of await prisma.produto.findMany()) p[prod.nome] = prod;
-    centro = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Centro', taxaCentavos: 500 } });
+    centro = await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
     ana = await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
 
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));

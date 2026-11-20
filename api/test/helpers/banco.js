@@ -27,3 +27,14 @@ export function resetarBancoDeTeste() {
   });
   assert.equal(r.status, 0, `migrate reset falhou:\n${r.stdout}\n${r.stderr}`);
 }
+
+/**
+ * Bairro da cidade + área de entrega da loja (padrão: a Cabana, loja 1), no
+ * formato que os testes usavam antes dos bairros da cidade: `{ id, nome, taxaCentavos, ativo }`.
+ * `ativo` = a loja entrega lá; `ativoNaCidade: false` desativa o bairro na cidade.
+ */
+export async function criarBairro(prisma, { nome, taxaCentavos, ativo = true, lojaId = 1, ativoNaCidade = true }) {
+  const bairro = await prisma.bairro.upsert({ where: { nome }, update: {}, create: { nome, ativo: ativoNaCidade } });
+  await prisma.areaEntrega.create({ data: { lojaId, bairroId: bairro.id, taxaCentavos, ativo } });
+  return { id: bairro.id, nome, taxaCentavos, ativo };
+}

@@ -16,10 +16,10 @@ describe('multi-loja: Cabana é a loja 1 e as lojas não se misturam', { skip: s
   const tk = {};
   const bairro = {};
 
-  async function api(metodo, rota, { corpo, token } = {}) {
+  async function api(metodo, rota, { corpo, token, cabecalhos = {} } = {}) {
     const res = await fetch(`${base}${rota}`, {
       method: metodo,
-      headers: { 'content-type': 'application/json', ...(token && { authorization: `Bearer ${token}` }) },
+      headers: { 'content-type': 'application/json', ...(token && { authorization: `Bearer ${token}` }), ...cabecalhos },
       body: corpo === undefined ? undefined : JSON.stringify(corpo),
     });
     const texto = await res.text();
@@ -152,8 +152,8 @@ describe('multi-loja: Cabana é a loja 1 e as lojas não se misturam', { skip: s
     const daCabana = (await api('GET', '/equipe/pedidos?status=todos', { token: tk.cabana })).corpo.pedidos;
     assert.equal(daCabana.length, 0);
     assert.equal((await api('PATCH', `/equipe/pedidos/${r.corpo.pedido.id}/cancelar`, { token: tk.cabana })).status, 404);
-    assert.equal((await api('GET', '/equipe/impressoes/pendentes', { token: tk.cabana })).corpo.trabalhos.length, 0);
-    const fila = (await api('GET', '/equipe/impressoes/pendentes', { token: tk.anaOutra })).corpo;
+    assert.equal((await api('POST', '/equipe/impressoes/reservar', { corpo: { agente: 'teste' }, token: tk.cabana })).corpo.trabalhos.length, 0);
+    const fila = (await api('POST', '/equipe/impressoes/reservar', { corpo: { agente: 'teste' }, token: tk.anaOutra })).corpo;
     assert.equal(fila.restaurante.nome, 'Lanchonete Teste');
     assert.equal(fila.trabalhos.length, 1);
 
@@ -190,14 +190,15 @@ describe('multi-loja: Cabana é a loja 1 e as lojas não se misturam', { skip: s
     await api('PATCH', `/plataforma/bairros/${bairro.jardim}`, { corpo: { ativo: true }, token: tk.admin });
   });
 
-  test('ADMIN: sem loja, passa onde o DONO passa e usa a Cabana (loja padrão) por enquanto', async () => {
+  test('ADMIN: sem loja, passa onde o DONO passa na loja que informar (X-Loja)', async () => {
     const admin = await prisma.usuario.findUnique({ where: { email: 'admin@teste.test' } });
     assert.equal(admin.papel, 'ADMIN');
     assert.equal(admin.lojaId, null);
-    const cfg = await api('GET', '/retaguarda/config', { token: tk.admin });
+    const cfg = await api('GET', '/retaguarda/config', { token: tk.admin, cabecalhos: { 'x-loja': 'cabana-boemia' } });
     assert.equal(cfg.status, 200);
     assert.equal(cfg.corpo.config.nomeRestaurante, 'Cabana Boemia');
-    assert.equal((await api('GET', '/equipe/caixa/atual', { token: tk.admin })).status, 200);
+    assert.equal((await api('GET', '/equipe/caixa/atual', { token: tk.admin, cabecalhos: { 'x-loja': '1' } })).status, 200);
+    assert.equal((await api('GET', '/equipe/caixa/atual', { token: tk.admin })).corpo.erro.codigo, 'LOJA_OBRIGATORIA');
     // Desfazer: volta a DONO da Cabana.
     await svc.voltarADono('admin@teste.test', 1);
     assert.equal((await prisma.usuario.findUnique({ where: { id: admin.id } })).papel, 'DONO');

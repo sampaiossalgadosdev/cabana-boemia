@@ -1,5 +1,5 @@
 /**
- * Fila de impressão do agente do PDV (balcão), por loja. O agente busca os pendentes da sua loja,
+ * Fila de impressão do agente do PDV (balcão), por loja. O agente reserva os pendentes da sua loja,
  * imprime em ordem de id e só confirma depois que a impressora aceitou.
  * Confirmar é idempotente (UPDATE condicionado): o mesmo id duas vezes não
  * muda nada. Falha só incrementa `tentativas`; o trabalho continua PENDENTE
@@ -64,25 +64,10 @@ async function comResumo(lojaId, t, agora) {
   return publico;
 }
 
-/** @returns {{ restaurante: { nome: string }, limite: number, trabalhos: object[] }} */
-export async function listarPendentes(lojaId, agora = new Date()) {
-  const loja = await lojaService.buscar(lojaId);
-  const trabalhos = await impressaoRepo.listarPendentes({
-    lojaId,
-    desde: inicioDaJanela(agora, horaViradaDe(loja)),
-    limite: LIMITE_PENDENTES,
-    agora,
-  });
-  return {
-    restaurante: { nome: loja.nome },
-    limite: LIMITE_PENDENTES,
-    trabalhos: await Promise.all(trabalhos.map((t) => comResumo(lojaId, t, agora))),
-  };
-}
-
 /**
- * Agente NOVO: reserva os pendentes livres da loja (atômico; ver
- * `reservarPendentes`) e devolve só esses, no formato de `listarPendentes`.
+ * Agente de impressão: reserva os pendentes livres da loja (atômico; ver
+ * `reservarPendentes` no repository) e devolve só esses:
+ * `{ restaurante: { nome }, limite, reservaMs, trabalhos }`.
  * Chamar de novo com o mesmo `agente` renova a reserva dos que ele ainda tem.
  * @param {string} agente identificador do PDV (estável por computador)
  */
@@ -107,7 +92,7 @@ export async function reservarPendentes(lojaId, agente, agora = new Date(), { li
 
 /** Reservado por OUTRO agente, com a reserva valendo: este não pode confirmar nem falhar. */
 function conferirReserva(trabalho, agente, agora) {
-  if (!agente || !trabalho?.reservadoPor) return;
+  if (!trabalho?.reservadoPor) return;
   if (trabalho.reservadoPor !== agente && trabalho.reservadoAte > agora && trabalho.status === 'PENDENTE') {
     throw new ErroHttp(409, 'Este cupom está com outro computador', { codigo: 'TRABALHO_RESERVADO' });
   }
@@ -116,10 +101,9 @@ function conferirReserva(trabalho, agente, agora) {
 /**
  * Idempotente: a primeira chamada marca IMPRESSO; as seguintes devolvem o
  * mesmo trabalho com `jaConfirmado: true` (200, sem mudar `impressoEm`).
- * Com `agente` (agente novo): reservado por outro = 409 TRABALHO_RESERVADO.
- * Sem `agente` (PDV antigo): como antes.
+ * Reservado por outro agente (reserva valendo) = 409 TRABALHO_RESERVADO.
  */
-export async function confirmar(lojaId, id, agora = new Date(), { agente = null } = {}) {
+export async function confirmar(lojaId, id, agora = new Date(), { agente }) {
   conferirReserva(await impressaoRepo.buscar(lojaId, id), agente, agora);
   const mudou = await impressaoRepo.confirmarSeNaoImpresso(lojaId, id, agora);
   const trabalho = await impressaoRepo.buscar(lojaId, id);
@@ -129,9 +113,9 @@ export async function confirmar(lojaId, id, agora = new Date(), { agente = null 
 
 /**
  * Incrementa `tentativas`, guarda o erro e libera a reserva. Já impresso = 409
- * (não volta a pendente). Com `agente`: reservado por outro = 409 TRABALHO_RESERVADO.
+ * (não volta a pendente). Reservado por outro agente = 409 TRABALHO_RESERVADO.
  */
-export async function registrarFalha(lojaId, id, erro, { agente = null, agora = new Date() } = {}) {
+export async function registrarFalha(lojaId, id, erro, { agente, agora = new Date() }) {
   conferirReserva(await impressaoRepo.buscar(lojaId, id), agente, agora);
   const mensagem = String(erro ?? '').trim().slice(0, MAX_ERRO) || 'Falha na impressão';
   const mudou = await impressaoRepo.registrarFalhaSePendente(lojaId, id, mensagem);

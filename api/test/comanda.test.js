@@ -287,7 +287,7 @@ describe('comandas do salão: abrir, lançar aos poucos, remover, fechar', { ski
     assert.equal(r.status, 200);
     assert.equal(r.corpo.trabalho.tipo, 'CONTA');
     assert.equal(r.corpo.trabalho.status, 'PENDENTE');
-    const pend = await api('GET', '/equipe/impressoes/pendentes');
+    const pend = await api('POST', '/equipe/impressoes/reservar', { corpo: { agente: 'teste' } });
     const t = pend.corpo.trabalhos.find((x) => x.id === r.corpo.trabalho.id);
     assert.equal(t.pedido.totalCentavos, 2917);
     assert.equal(t.pedido.itens[0].pesoGramas, 487);

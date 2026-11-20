@@ -6,7 +6,7 @@ export const CABECALHO_LOJA = 'x-loja';
 /**
  * Usar depois de `autenticar`: `req.lojaId` = loja do usuário da equipe.
  * DONO/ATENDENTE: a do cadastro (X-Loja de outra loja = 403 LOJA_PROIBIDA).
- * ADMIN: a do X-Loja (slug ou id; inexistente = 404), senão a padrão. Todo dado
+ * ADMIN: a do X-Loja (slug ou id; inexistente = 404; sem X-Loja = 400 LOJA_OBRIGATORIA). Todo dado
  * lido ou gravado pelas rotas da equipe, da retaguarda e de usuários fica nela.
  */
 export async function lojaDaEquipe(req, res, next) {

@@ -262,7 +262,7 @@ describe('relatório do dia operacional', { skip: semBancoDeTeste }, () => {
     assert.equal(t.dataRelatorio.toISOString().slice(0, 10), '2026-11-13');
     assert.deepEqual(eventos.map((e) => e.evento), ['impressao:nova']);
 
-    const fila = await api('GET', '/equipe/impressoes/pendentes', { tk: tkAtendente });
+    const fila = await api('POST', '/equipe/impressoes/reservar', { corpo: { agente: 'teste' }, tk: tkAtendente });
     const noFila = fila.corpo.trabalhos.find((x) => x.id === t.id);
     assert.equal(noFila.tipo, 'RELATORIO_DIA');
     assert.equal(noFila.dataRelatorio, '2026-11-13');

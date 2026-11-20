@@ -269,7 +269,7 @@ describe('caixa: abrir, movimentos, fechamento cego e retaguarda', { skip: semBa
       respostas.push(await movimento('SANGRIA', 100));
       respostas.push(await api('GET', '/equipe/caixa/atual'));
       respostas.push(await fecharCaixa({ valorContadoCentavos: 1, esperadoCentavos: 999 }));
-      respostas.push(await api('GET', '/equipe/impressoes/pendentes'));
+      respostas.push(await api('POST', '/equipe/impressoes/reservar', { corpo: { agente: 'teste' } }));
       respostas.push(await api('GET', '/equipe/caixa/atual', { tk: tkDono }));
       await new Promise((r) => setTimeout(r, 100));
 
@@ -302,7 +302,7 @@ describe('caixa: abrir, movimentos, fechamento cego e retaguarda', { skip: semBa
     assert.equal(trabalho.status, 'PENDENTE');
     assert.equal(trabalho.pedidoId, null);
 
-    const pend = await api('GET', '/equipe/impressoes/pendentes');
+    const pend = await api('POST', '/equipe/impressoes/reservar', { corpo: { agente: 'teste' } });
     const t = pend.corpo.trabalhos.find((x) => x.id === trabalho.id);
     assert.equal(t.pedido, undefined);
     assert.equal(t.caixa.valorInicialCentavos, 3000);

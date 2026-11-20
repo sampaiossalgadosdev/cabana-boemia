@@ -274,8 +274,18 @@ describe('API multi-loja: vitrine, pedido por loja, ADMIN, tempo real, impressã
     assert.deepEqual(admZe.corpo.pedidos.map((p) => p.id), [doZe[0].id]);
     const admId = await api('GET', '/retaguarda/config', { token: tk.admin, cabecalhos: { 'x-loja': String(loja.ze.id) } });
     assert.equal(admId.corpo.config.nomeRestaurante, 'Lanchonete do Zé');
-    const admPadrao = await api('GET', '/retaguarda/config', { token: tk.admin });
-    assert.equal(admPadrao.corpo.config.nomeRestaurante, 'Cabana Boemia');
+    // Sem X-Loja o ADMIN não cai mais na Cabana (a compatibilidade com o PDV antigo saiu).
+    for (const rota of ['/retaguarda/config', '/equipe/pedidos', '/equipe/caixa/atual', '/usuarios']) {
+      const semLoja = await api('GET', rota, { token: tk.admin });
+      assert.equal(semLoja.status, 400, rota);
+      assert.equal(semLoja.corpo.erro.codigo, 'LOJA_OBRIGATORIA', rota);
+    }
+    // Identidade da loja escolhida (tema do PDV).
+    const idZe = await api('GET', '/equipe/loja', { token: tk.admin, cabecalhos: { 'x-loja': 'lanchonete-do-ze' } });
+    assert.equal(idZe.corpo.loja.nome, 'Lanchonete do Zé');
+    assert.equal(idZe.corpo.loja.corPrimaria, '#123456');
+    assert.equal(idZe.corpo.loja.corTexto, '#FFFFFF');
+    assert.equal((await api('GET', '/equipe/loja', { token: tk.cabana })).corpo.loja.slug, 'cabana-boemia');
     assert.equal((await api('GET', '/equipe/pedidos', { token: tk.admin, cabecalhos: { 'x-loja': 'nao-existe' } })).corpo.erro.codigo, 'LOJA_NAO_ENCONTRADA');
 
     const proibido = await api('GET', '/equipe/pedidos', { token: tk.cabana, cabecalhos: { 'x-loja': 'lanchonete-do-ze' } });
@@ -299,7 +309,7 @@ describe('API multi-loja: vitrine, pedido por loja, ADMIN, tempo real, impressã
       assert.equal(r.status, 404, `${metodo} ${rota} → ${r.status}`);
     }
     const trabalhoZe = await prisma.trabalhoImpressao.findFirst({ where: { lojaId: loja.ze.id } });
-    assert.equal((await api('POST', `/equipe/impressoes/${trabalhoZe.id}/confirmar`, { token: tk.cabana })).status, 404);
+    assert.equal((await api('POST', `/equipe/impressoes/${trabalhoZe.id}/confirmar`, { token: tk.cabana, corpo: { agente: 'pdv-cabana' } })).status, 404);
     assert.equal((await prisma.trabalhoImpressao.findUnique({ where: { id: trabalhoZe.id } })).status, 'PENDENTE');
     assert.equal((await prisma.pedido.findUnique({ where: { id: pedidoZe.id } })).status, 'CONFIRMADO');
     // Caixa e comandas de cada loja.
@@ -312,7 +322,7 @@ describe('API multi-loja: vitrine, pedido por loja, ADMIN, tempo real, impressã
 
   // ───────── Tempo real ─────────
 
-  test('Socket.IO: sala equipe:<lojaId>; Cabana também na sala legada "equipe"; ADMIN escolhe com auth.loja', async () => {
+  test('Socket.IO: sala equipe:<lojaId> (sem sala legada); ADMIN escolhe com auth.loja (obrigatória)', async () => {
     const cab = await conectar(tk.cabana);
     const ze = await conectar(tk.ze);
     const admZe = await conectar(tk.admin, { loja: 'lanchonete-do-ze' });
@@ -324,10 +334,11 @@ describe('API multi-loja: vitrine, pedido por loja, ADMIN, tempo real, impressã
       await api('POST', '/equipe/comandas', { token: tk.ze, corpo: { nomeCliente: 'Só do Zé' } });
       await api('POST', '/equipe/comandas', { token: tk.cabana, corpo: { nomeCliente: 'Só da Cabana' } });
       await new Promise((r) => setTimeout(r, 300));
-      assert.deepEqual(recebidos.cab, ['Só da Cabana'], 'uma vez só (sala da loja + legada)');
+      assert.deepEqual(recebidos.cab, ['Só da Cabana'], 'uma vez só');
       assert.deepEqual(recebidos.ze, ['Só do Zé']);
       assert.deepEqual(recebidos.admZe, ['Só do Zé']);
       await assert.rejects(conectar(tk.cabana, { loja: 'lanchonete-do-ze' }), /LOJA_PROIBIDA/);
+      await assert.rejects(conectar(tk.admin), /LOJA_OBRIGATORIA/);
     } finally {
       cab.close();
       ze.close();
@@ -357,17 +368,20 @@ describe('API multi-loja: vitrine, pedido por loja, ADMIN, tempo real, impressã
     const deB = idsB[0] ?? idsA[0];
     const dono = idsB.length ? 'pdv-b' : 'pdv-a';
     const outro = dono === 'pdv-a' ? 'pdv-b' : 'pdv-a';
-    // Outro agente não confirma nem falha o reservado; o PDV antigo não o vê na lista.
+    // Outro agente não confirma nem falha o reservado, nem o recebe ao reservar.
     const conf = await api('POST', `/equipe/impressoes/${deB}/confirmar`, { token: tk.ze, corpo: { agente: outro } });
     assert.equal(conf.corpo.erro?.codigo, 'TRABALHO_RESERVADO', JSON.stringify({ deB, dono, outro, idsA, idsB, conf: conf.corpo }));
     assert.equal((await api('POST', `/equipe/impressoes/${deB}/falha`, { token: tk.ze, corpo: { agente: outro, erro: 'x' } })).corpo.erro.codigo, 'TRABALHO_RESERVADO');
-    assert.equal((await api('GET', '/equipe/impressoes/pendentes', { token: tk.ze })).corpo.trabalhos.length, 0);
     // Reservar de novo (o mesmo agente) renova os dele; o outro não pega nada.
     assert.equal((await api('POST', '/equipe/impressoes/reservar', { token: tk.ze, corpo: { agente: outro } })).corpo.trabalhos.some((t) => t.id === deB), false);
     // Falha libera: o trabalho volta para a fila.
     await api('POST', `/equipe/impressoes/${deB}/falha`, { token: tk.ze, corpo: { agente: dono, erro: 'sem papel' } });
-    assert.ok((await api('GET', '/equipe/impressoes/pendentes', { token: tk.ze })).corpo.trabalhos.some((t) => t.id === deB));
-    // Confirmar limpa a reserva; sem agente (PDV antigo) continua valendo.
+    assert.ok((await api('POST', '/equipe/impressoes/reservar', { token: tk.ze, corpo: { agente: dono } })).corpo.trabalhos.some((t) => t.id === deB));
+    // Confirmar e falhar exigem o agente (a rota do PDV antigo, sem reserva, saiu).
+    assert.equal((await api('POST', `/equipe/impressoes/${idsA[0]}/confirmar`, { token: tk.ze, corpo: {} })).status, 400);
+    assert.equal((await api('POST', `/equipe/impressoes/${idsA[0]}/falha`, { token: tk.ze, corpo: { erro: 'x' } })).status, 400);
+    assert.equal((await api('GET', '/equipe/impressoes/pendentes', { token: tk.ze })).status, 404);
+    // Confirmar limpa a reserva.
     const ok = await api('POST', `/equipe/impressoes/${idsA[0]}/confirmar`, { token: tk.ze, corpo: { agente: 'pdv-a' } });
     assert.equal(ok.corpo.trabalho?.status, 'IMPRESSO', JSON.stringify({ idsA, idsB, deB, ok: ok.corpo }));
     assert.equal(ok.corpo.trabalho.reservadoPor, null);

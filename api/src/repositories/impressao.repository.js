@@ -17,21 +17,6 @@ const SELECT_TRABALHO = {
 };
 
 /** Livre para pegar: sem reserva ou com a reserva vencida. */
-const livre = (agora) => ({ OR: [{ reservadoAte: null }, { reservadoAte: { lt: agora } }] });
-
-/**
- * Pendentes da loja criados a partir de `desde`, do mais antigo para o mais novo
- * (ordem de impressão), SEM os reservados por um agente (reserva ainda valendo).
- */
-export function listarPendentes({ lojaId, desde, limite, agora }, db = prisma) {
-  return db.trabalhoImpressao.findMany({
-    where: { lojaId, status: 'PENDENTE', criadoEm: { gte: desde }, ...livre(agora) },
-    select: { ...SELECT_TRABALHO, pedido: { select: SELECT_PEDIDO } },
-    orderBy: { id: 'asc' },
-    take: limite,
-  });
-}
-
 /** Trabalho da loja (de outra loja = null). */
 export function buscar(lojaId, id, db = prisma) {
   return db.trabalhoImpressao.findFirst({ where: { id, lojaId }, select: SELECT_TRABALHO });

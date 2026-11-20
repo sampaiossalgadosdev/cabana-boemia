@@ -18,6 +18,7 @@ export function criarEquipeRoutes({ relogio } = {}) {
     next();
   });
   r.use(autenticar, exigirPapel('DONO', 'ATENDENTE'), lojaDaEquipe);
+  r.get('/loja', assincrono(c.loja));
   r.get('/pedidos', assincrono(c.listarPedidos));
   r.post('/pedidos', assincrono(c.criarPedido));
   r.patch('/pedidos/:id/finalizar', assincrono(c.finalizarPedido));
@@ -36,8 +37,8 @@ export function criarEquipeRoutes({ relogio } = {}) {
   r.post('/comandas/:id/itens', assincrono(c.lancarItemComanda));
   r.delete('/comandas/:id/itens/:itemId', assincrono(c.removerItemComanda));
   r.post('/comandas/:id/fechar', assincrono(c.fecharComanda));
-  r.get('/impressoes/pendentes', assincrono(c.impressoesPendentes)); // PDV antigo (sem reserva)
-  r.post('/impressoes/reservar', assincrono(c.reservarImpressoes)); // agente novo
+  // Agente de impressão: reserva atômica (dois PDVs da loja nunca pegam o mesmo cupom).
+  r.post('/impressoes/reservar', assincrono(c.reservarImpressoes));
   r.post('/impressoes/:id/confirmar', assincrono(c.confirmarImpressao));
   r.post('/impressoes/:id/falha', assincrono(c.falhaImpressao));
   r.get('/clientes', assincrono(c.buscarClientes));

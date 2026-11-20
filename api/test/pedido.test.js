@@ -512,7 +512,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
       assert.equal(r.corpo.pedido.taxaEntregaCentavos, 0);
 
       // O cupom sai do trabalho que o agente busca na fila, montado como no PDV.
-      const fila = await api('GET', '/equipe/impressoes/pendentes', { token: tokenDono });
+      const fila = await api('POST', '/equipe/impressoes/reservar', { corpo: { agente: 'teste' }, token: tokenDono });
       const trabalho = fila.corpo.trabalhos.find((t) => t.pedido?.id === r.corpo.pedido.id);
       for (const colunas of [48, 32]) {
         const texto = cupomParaTexto(montarCupom(trabalho, { colunas, restaurante: 'Cabana Boemia' }), colunas);

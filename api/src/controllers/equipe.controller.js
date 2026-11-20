@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import * as identidadeService from '../services/identidade.service.js';
 import { validar } from '../lib/validar.js';
 import { horaVirada } from '../services/diaOperacional.service.js';
 import * as pedidoService from '../services/pedido.service.js';
@@ -189,8 +190,8 @@ const fecharComandaSchema = z.object({
 
 /** Identificador do agente de impressão (um por computador; gerado pelo PDV). */
 const agente = z.string({ error: 'Informe o agente' }).trim().regex(/^[A-Za-z0-9._:-]{1,64}$/, 'Agente inválido');
-const falhaSchema = z.object({ erro: z.string().max(2000).optional(), agente: agente.optional() });
-const confirmarSchema = z.object({ agente: agente.optional() });
+const falhaSchema = z.object({ erro: z.string().max(2000).optional(), agente });
+const confirmarSchema = z.object({ agente });
 const reservarSchema = z.object({ agente, limite: z.number().int().min(1).max(50).optional() });
 
 /** Chave de acesso da NFC-e (aceita espaços/pontos); null ou "" = apagar. */
@@ -221,6 +222,10 @@ const tempoSchema = z.object({
 /** @param {() => Date} [relogio] fonte do "agora" (injetável nos testes) */
 export function criarEquipeController(relogio = () => new Date()) {
   return {
+    /** Loja em que o PDV está trabalhando (nome, logo, cor) para o tema e o cupom. */
+    async loja(req, res) {
+      res.json({ loja: await identidadeService.identidadeDaLoja(req.lojaId) });
+    },
     async listarPedidos(req, res) {
       const q = validar(listarSchema, req.query);
       res.json(
@@ -356,11 +361,7 @@ export function criarEquipeController(relogio = () => new Date()) {
       res.json(await comandaService.fecharComanda(req.lojaId, id, dados, { agora: relogio() }));
     },
 
-    async impressoesPendentes(req, res) {
-      res.json(await impressaoService.listarPendentes(req.lojaId, relogio()));
-    },
-
-    /** Agente novo: reserva os pendentes (dois PDVs da loja nunca pegam o mesmo cupom). */
+    /** Agente: reserva os pendentes (dois PDVs da loja nunca pegam o mesmo cupom). */
     async reservarImpressoes(req, res) {
       const { agente: id, limite } = validar(reservarSchema, req.body ?? {});
       res.json(await impressaoService.reservarPendentes(req.lojaId, id, relogio(), { limite }));
@@ -369,13 +370,13 @@ export function criarEquipeController(relogio = () => new Date()) {
     async confirmarImpressao(req, res) {
       const { id } = validar(idSchema, req.params);
       const { agente: quem } = validar(confirmarSchema, req.body ?? {});
-      res.json(await impressaoService.confirmar(req.lojaId, id, relogio(), { agente: quem ?? null }));
+      res.json(await impressaoService.confirmar(req.lojaId, id, relogio(), { agente: quem }));
     },
 
     async falhaImpressao(req, res) {
       const { id } = validar(idSchema, req.params);
       const { erro, agente: quem } = validar(falhaSchema, req.body ?? {});
-      res.json(await impressaoService.registrarFalha(req.lojaId, id, erro, { agente: quem ?? null, agora: relogio() }));
+      res.json(await impressaoService.registrarFalha(req.lojaId, id, erro, { agente: quem, agora: relogio() }));
     },
 
     /** Prova de emissão da NFC-e da venda (chave de 44 números); null apaga. */

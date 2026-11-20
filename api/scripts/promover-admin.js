@@ -3,7 +3,7 @@
  *   npm run promover-admin -w api -- --email voce@exemplo.com
  * Desfazer (volta a DONO da loja; padrão: Cabana Boemia):
  *   npm run promover-admin -w api -- --email voce@exemplo.com --desfazer [--loja cabana-boemia]
- * Por enquanto o ADMIN usa o PDV e a retaguarda na loja padrão; a escolha da loja vem depois.
+ * O ADMIN escolhe a loja no PDV (depois do login) e na retaguarda (seletor "Loja aberta", cabeçalho X-Loja).
  */
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
@@ -45,7 +45,7 @@ async function main() {
       console.log(`#${u.id} ${u.nome} <${u.email}> voltou a DONO da loja ${loja.nome}.`);
     } else {
       const u = await promoverAAdmin(dados.data.email);
-      console.log(`#${u.id} ${u.nome} <${u.email}> agora é ADMIN (sem loja; usa a loja padrão no PDV e na retaguarda).`);
+      console.log(`#${u.id} ${u.nome} <${u.email}> agora é ADMIN (sem loja; escolhe a loja no PDV e na retaguarda).`);
     }
     return 0;
   } catch (err) {

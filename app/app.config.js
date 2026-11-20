@@ -17,7 +17,7 @@ export default {
   name: 'Delivery Abatiá',
   slug: 'delivery-abatia',
   scheme: 'deliveryabatia',
-  version: '0.2.0',
+  version: '0.3.0',
   orientation: 'portrait',
   icon: './assets/icone.png',
   userInterfaceStyle: 'light',
@@ -27,7 +27,7 @@ export default {
     supportsTablet: false,
     // "Entrar com Apple" (exigido pela App Store quando há login com Google).
     usesAppleSignIn: true,
-    buildNumber: '2',
+    buildNumber: '3',
     infoPlist: {
       // Sem criptografia própria (só HTTPS do sistema): dispensa a pergunta da App Store.
       ITSAppUsesNonExemptEncryption: false,
@@ -36,7 +36,7 @@ export default {
   android: {
     package: ID_APP,
     // Aumentar a cada envio ao Google Play (appVersionSource: local no eas.json).
-    versionCode: 2,
+    versionCode: 3,
     adaptiveIcon: {
       foregroundImage: './assets/icone-android-frente.png',
       monochromeImage: './assets/icone-android-monocromatico.png',

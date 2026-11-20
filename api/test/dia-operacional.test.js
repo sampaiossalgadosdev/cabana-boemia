@@ -61,6 +61,7 @@ describe('dia operacional no banco (numeroDia, pedidos do dia, caixas)', { skip:
 
   const whatsapp = (quando) =>
     criarPedido({
+      lojaId: 1,
       canal: 'WHATSAPP',
       itens: [{ produtoId: p.Salame.id, quantidade: 1 }],
       cliente: { nome: 'Joana', telefone: '43999990000' },
@@ -103,7 +104,7 @@ describe('dia operacional no banco (numeroDia, pedidos do dia, caixas)', { skip:
   });
 
   beforeEach(async () => {
-    await prisma.configuracao.update({ where: { id: 1 }, data: { horaViradaDia: 4 } });
+    await prisma.loja.update({ where: { id: 1 }, data: { horaViradaDia: 4 } });
   });
 
   after(async () => {
@@ -114,7 +115,7 @@ describe('dia operacional no banco (numeroDia, pedidos do dia, caixas)', { skip:
   test('numeroDia não reinicia à meia-noite: 23:59 (#1) e 00:30 (#2) na sexta; 04:00 abre o sábado (#1)', async () => {
     const a = await whatsapp(local('2026-11-13T23:59'));
     const b = await whatsapp(local('2026-11-14T00:30'));
-    const comanda = await doBanco((await abrirComanda({ nomeCliente: 'Mesa 3' }, { agora: local('2026-11-14T03:59') })).id);
+    const comanda = await doBanco((await abrirComanda(1, { nomeCliente: 'Mesa 3' }, { agora: local('2026-11-14T03:59') })).id);
     const c = await whatsapp(local('2026-11-14T04:00'));
     assert.deepEqual([a.dataRef, a.numeroDia], ['2026-11-13', 1]);
     assert.deepEqual([b.dataRef, b.numeroDia], ['2026-11-13', 2]);
@@ -132,10 +133,10 @@ describe('dia operacional no banco (numeroDia, pedidos do dia, caixas)', { skip:
   });
 
   test('virada configurável (horaViradaDia = 0 volta ao dia civil)', async () => {
-    await prisma.configuracao.update({ where: { id: 1 }, data: { horaViradaDia: 0 } });
+    await prisma.loja.update({ where: { id: 1 }, data: { horaViradaDia: 0 } });
     const d = await whatsapp(local('2026-11-15T00:30'));
     assert.equal(d.dataRef, '2026-11-15');
-    await prisma.configuracao.update({ where: { id: 1 }, data: { horaViradaDia: 4 } });
+    await prisma.loja.update({ where: { id: 1 }, data: { horaViradaDia: 4 } });
     const e = await whatsapp(local('2026-11-16T00:30'));
     assert.equal(e.dataRef, '2026-11-15');
     assert.equal(e.numeroDia, d.numeroDia + 1, 'continua o contador do mesmo dia operacional');
@@ -145,6 +146,7 @@ describe('dia operacional no banco (numeroDia, pedidos do dia, caixas)', { skip:
     const criar = (abertoEm, fechadoEm) =>
       prisma.caixa.create({
         data: {
+          lojaId: 1,
           abertoPorId: atendente.id,
           abertoEm,
           valorInicialCentavos: 100,
@@ -172,6 +174,6 @@ describe('dia operacional no banco (numeroDia, pedidos do dia, caixas)', { skip:
   });
 
   test('o banco recusa horaViradaDia fora de 0–12 (CHECK)', async () => {
-    await assert.rejects(prisma.configuracao.update({ where: { id: 1 }, data: { horaViradaDia: 13 } }));
+    await assert.rejects(prisma.loja.update({ where: { id: 1 }, data: { horaViradaDia: 13 } }));
   });
 });

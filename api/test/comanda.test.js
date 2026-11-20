@@ -40,8 +40,8 @@ describe('comandas do salão: abrir, lançar aos poucos, remover, fechar', { ski
   const remover = (id, itemId) => api('DELETE', `/equipe/comandas/${id}/itens/${itemId}`);
   const fechar = (id, corpo) => api('POST', `/equipe/comandas/${id}/fechar`, { corpo });
 
-  const estoqueProduto = async (nome) => (await prisma.produto.findUnique({ where: { nome } })).estoque;
-  const estoqueInsumo = async (nome) => (await prisma.insumo.findUnique({ where: { nome } })).estoque;
+  const estoqueProduto = async (nome) => (await prisma.produto.findUnique({ where: { lojaId_nome: { lojaId: 1, nome } } })).estoque;
+  const estoqueInsumo = async (nome) => (await prisma.insumo.findUnique({ where: { lojaId_nome: { lojaId: 1, nome } } })).estoque;
   const trabalhosDo = (pedidoId) => prisma.trabalhoImpressao.findMany({ where: { pedidoId } });
 
   before(async () => {
@@ -54,12 +54,12 @@ describe('comandas do salão: abrir, lançar aos poucos, remover, fechar', { ski
     const { criarAtendente } = await import('../src/services/usuario.service.js');
 
     // O seed cria o "Prato por kg" sem preço e inativo; o dono define o preço.
-    await prisma.produto.update({ where: { nome: 'Prato por kg' }, data: { precoCentavos: 5990, ativo: true } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Prato por kg' } }, data: { precoCentavos: 5990, ativo: true } });
     for (const prod of await prisma.produto.findMany()) p[prod.nome] = prod;
     for (const i of await prisma.insumo.findMany()) insumo[i.nome] = i;
     const bia = await criarAtendente({ nome: 'Bia', email: 'bia@teste.com', senha: 'senha-da-bia' });
     // Fechar comanda exige caixa aberto (as regras do caixa estão em caixa.test.js).
-    await prisma.caixa.create({ data: { abertoPorId: bia.id, valorInicialCentavos: 0 } });
+    await prisma.caixa.create({ data: { lojaId: 1, abertoPorId: bia.id, valorInicialCentavos: 0 } });
 
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
     criarTempoReal(servidor);
@@ -172,7 +172,7 @@ describe('comandas do salão: abrir, lançar aos poucos, remover, fechar', { ski
   test('sem saldo = 409 ESTOQUE_INSUFICIENTE e a comanda não muda', async () => {
     const c = await abrir();
     await lancar(c.id, { produtoId: p['Coca-Cola 1L'].id });
-    await prisma.produto.update({ where: { nome: 'Coca-Cola 1L' }, data: { estoque: 1 } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 1L' } }, data: { estoque: 1 } });
     const r = await lancar(c.id, { produtoId: p['Coca-Cola 1L'].id, quantidade: 2 });
     assert.equal(r.status, 409);
     assert.equal(r.corpo.erro.codigo, 'ESTOQUE_INSUFICIENTE');
@@ -184,13 +184,13 @@ describe('comandas do salão: abrir, lançar aos poucos, remover, fechar', { ski
 
   test('produto inativo = 409 PRODUTO_INDISPONIVEL; "fora de hoje" e fora do turno são aceitos no salão', async () => {
     const c = await abrir();
-    await prisma.produto.update({ where: { nome: 'X-Salada' }, data: { ativo: false } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'X-Salada' } }, data: { ativo: false } });
     const r = await lancar(c.id, { produtoId: p['X-Salada'].id });
     assert.equal(r.status, 409);
     assert.equal(r.corpo.erro.codigo, 'PRODUTO_INDISPONIVEL');
-    await prisma.produto.update({ where: { nome: 'X-Burguer' }, data: { disponivelHoje: false } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'X-Burguer' } }, data: { disponivelHoje: false } });
     assert.equal((await lancar(c.id, { produtoId: p['X-Burguer'].id })).status, 201, 'sexta 12h: X-Burguer é do turno Lanches');
-    await prisma.produto.update({ where: { nome: 'X-Burguer' }, data: { disponivelHoje: true } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'X-Burguer' } }, data: { disponivelHoje: true } });
     assert.equal((await lancar(c.id, { produtoId: 999999 })).status, 409);
   });
 
@@ -355,7 +355,7 @@ describe('comandas do salão: abrir, lançar aos poucos, remover, fechar', { ski
     await lancar(fechada.id, { produtoId: p['Coca-Cola 1L'].id });
     await fechar(fechada.id, { formaPagamento: 'PIX' });
     const delivery = await prisma.pedido.create({
-      data: { numeroDia: 900, dataRef: new Date('2026-11-13T00:00:00Z'), canal: 'WHATSAPP', status: 'CONFIRMADO', nomeCliente: 'Zé' },
+      data: { lojaId: 1, numeroDia: 900, dataRef: new Date('2026-11-13T00:00:00Z'), canal: 'WHATSAPP', status: 'CONFIRMADO', nomeCliente: 'Zé' },
     });
 
     const r = await api('GET', '/equipe/comandas');

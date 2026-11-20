@@ -313,6 +313,7 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
     seq += 1;
     return prisma.pedido.create({
       data: {
+        lojaId: 1,
         numeroDia: seq,
         dataRef: new Date('2026-11-19T00:00:00Z'),
         canal: 'SITE',
@@ -342,9 +343,9 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
     const { criarApp } = await import('../src/app.js');
     const { criarDono } = await import('../src/services/usuario.service.js');
     await criarDono({ nome: 'Dono', email: 'dono@teste.com', senha: 'senha-do-dono' });
-    centro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
-    const cat = await prisma.categoria.create({ data: { nome: 'Lanches' } });
-    produto = await prisma.produto.create({ data: { nome: 'X-Bacon', categoriaId: cat.id, precoCentavos: 1600 } });
+    centro = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Centro', taxaCentavos: 500 } });
+    const cat = await prisma.categoria.create({ data: { lojaId: 1, nome: 'Lanches' } });
+    produto = await prisma.produto.create({ data: { lojaId: 1, nome: 'X-Bacon', categoriaId: cat.id, precoCentavos: 1600 } });
 
     servidor = await ouvir(
       criarApp({

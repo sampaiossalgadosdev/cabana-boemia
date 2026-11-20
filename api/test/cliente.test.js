@@ -80,9 +80,9 @@ describe('cliente do site: login Google, perfil e endereços', { skip: semBancoD
     const { criarDono } = await import('../src/services/usuario.service.js');
 
     await criarDono({ nome: 'Dono', email: 'dono@teste.com', senha: 'senha-do-dono' });
-    centro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
-    vilaNova = await prisma.bairro.create({ data: { nome: 'Vila Nova', taxaCentavos: 700 } });
-    desativado = await prisma.bairro.create({ data: { nome: 'Sítio', taxaCentavos: 1500, ativo: false } });
+    centro = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Centro', taxaCentavos: 500 } });
+    vilaNova = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Vila Nova', taxaCentavos: 700 } });
+    desativado = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Sítio', taxaCentavos: 1500, ativo: false } });
 
     const verificarIdTokenGoogle = criarVerificadorGoogle({
       clientId: CLIENT_ID,

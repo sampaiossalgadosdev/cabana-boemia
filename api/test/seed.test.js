@@ -30,7 +30,7 @@ describe('seed do cardápio', { skip: semBancoDeTeste }, () => {
 
   test('contagens por tabela batem com o JSON (30 produtos = 29 + Prato por kg)', async () => {
     assert.deepEqual(await contarTabelas(prisma), {
-      configuracao: 1,
+      loja: 1,
       turno: 2,
       horarioTurno: 4,
       insumo: 2,
@@ -52,7 +52,7 @@ describe('seed do cardápio', { skip: semBancoDeTeste }, () => {
 
   test('Prato por kg: POR_KG, categoria Pratos, turno Almoço, fora do site, inativo', async () => {
     const p = await prisma.produto.findUnique({
-      where: { nome: 'Prato por kg' },
+      where: { lojaId_nome: { lojaId: 1, nome: 'Prato por kg' } },
       include: { categoria: true, turnos: { include: { turno: true } } },
     });
     assert.equal(p.tipoPreco, 'POR_KG');
@@ -84,19 +84,19 @@ describe('seed do cardápio', { skip: semBancoDeTeste }, () => {
 
   test('rodar de novo não sobrescreve preço, estoque, ativo nem disponivelHoje editados pelo dono', async () => {
     await prisma.produto.update({
-      where: { nome: 'Coca-Cola 2L' },
+      where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 2L' } },
       data: { precoCentavos: 1600, estoque: 12, ativo: false, disponivelHoje: false },
     });
-    await prisma.insumo.update({ where: { nome: 'Pão de lanche' }, data: { estoque: 40 } });
+    await prisma.insumo.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de lanche' } }, data: { estoque: 40 } });
 
     await seed(prisma, { log: () => {} });
 
-    const coca = await prisma.produto.findUnique({ where: { nome: 'Coca-Cola 2L' } });
+    const coca = await prisma.produto.findUnique({ where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 2L' } } });
     assert.equal(coca.precoCentavos, 1600);
     assert.equal(coca.estoque, 12);
     assert.equal(coca.ativo, false);
     assert.equal(coca.disponivelHoje, false, 'o dono desligou: o seed não religa');
-    const pao = await prisma.insumo.findUnique({ where: { nome: 'Pão de lanche' } });
+    const pao = await prisma.insumo.findUnique({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de lanche' } } });
     assert.equal(pao.estoque, 40);
   });
 
@@ -105,6 +105,6 @@ describe('seed do cardápio', { skip: semBancoDeTeste }, () => {
     const semPreco = avisos.filter((a) => a.includes('sem preço'));
     assert.equal(semPreco.length, 4);
     assert.ok(avisos.some((a) => a.includes('Turno "Almoço" sem horários')));
-    assert.ok(avisos.some((a) => a.includes('whatsappNumero vazio')));
+    assert.ok(avisos.some((a) => a.includes('WhatsApp da loja vazio')));
   });
 });

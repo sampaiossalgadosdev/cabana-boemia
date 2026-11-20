@@ -52,7 +52,7 @@ describe('Cliente.nomeBusca: preenchido em toda gravação e usado na busca do P
     const { criarApp } = await import('../src/app.js');
     const { criarAtendente } = await import('../src/services/usuario.service.js');
     await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
-    centro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
+    centro = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Centro', taxaCentavos: 500 } });
 
     servidor = http.createServer(criarApp({ log: false }));
     await new Promise((resolve) => servidor.listen(0, resolve));

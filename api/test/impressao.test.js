@@ -32,6 +32,7 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
 
   const zap = (nome, quando = SABADO_20H) =>
     criarPedido({
+      lojaId: 1,
       canal: 'WHATSAPP',
       itens: [{ produtoId: coca.id, quantidade: 1, observacao: 'bem gelada' }],
       cliente: { nome, telefone: '43988887777' },
@@ -52,9 +53,9 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
     const { criarTempoReal } = await import('../src/lib/tempoReal.js');
     const { criarAtendente } = await import('../src/services/usuario.service.js');
 
-    coca = await prisma.produto.findUnique({ where: { nome: 'Coca-Cola 1L' } });
+    coca = await prisma.produto.findUnique({ where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 1L' } } });
     await prisma.produto.update({ where: { id: coca.id }, data: { ativo: true, estoque: 50 } });
-    centro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
+    centro = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Centro', taxaCentavos: 500 } });
     await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
 
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));

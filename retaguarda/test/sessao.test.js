@@ -118,6 +118,14 @@ test('refresh recusado apaga a sessão e avisa; erro de rede mantém o refresh',
   assert.equal(avisos, 1);
 });
 
+test('ADMIN (plataforma) entra na retaguarda como o dono', async () => {
+  const arm = memoria();
+  const f = apiFalsa({ papel: 'ADMIN' });
+  const s = criarSessao({ armazenamento: arm, enviar: f.enviar, agora: () => AGORA });
+  assert.equal((await s.entrar('admin@x', 'certa')).papel, 'ADMIN');
+  assert.ok(arm.getItem(CHAVE_REFRESH));
+});
+
 test('login de atendente é recusado e a sessão aberta por ele é encerrada', async () => {
   const arm = memoria();
   const f = apiFalsa({ papel: 'ATENDENTE' });

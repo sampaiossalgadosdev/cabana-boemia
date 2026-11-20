@@ -42,7 +42,7 @@ describe('painel de delivery/encomendas do PDV', { skip: semBancoDeTeste }, () =
     });
   }
 
-  const estoquePao = async () => (await prisma.insumo.findUnique({ where: { nome: 'Pão de lanche' } })).estoque;
+  const estoquePao = async () => (await prisma.insumo.findUnique({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de lanche' } } })).estoque;
 
   before(async () => {
     resetarBancoDeTeste();
@@ -54,7 +54,7 @@ describe('painel de delivery/encomendas do PDV', { skip: semBancoDeTeste }, () =
     const { criarAtendente } = await import('../src/services/usuario.service.js');
 
     for (const prod of await prisma.produto.findMany()) p[prod.nome] = prod;
-    centro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
+    centro = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Centro', taxaCentavos: 500 } });
     ana = await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
 
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
@@ -197,7 +197,7 @@ describe('painel de delivery/encomendas do PDV', { skip: semBancoDeTeste }, () =
 
   test('o site nunca usa desconto, taxa digitada, encomenda nem pago agora', async () => {
     const { criarPedido } = await import('../src/services/pedido.service.js');
-    const base = { canal: 'SITE', itens: [item('X-Burguer')], totalEsperadoCentavos: 0, agora };
+    const base = { lojaId: 1, canal: 'SITE', itens: [item('X-Burguer')], totalEsperadoCentavos: 0, agora };
     for (const extra of [
       { ajustes: { descontoCentavos: 100 } },
       { ajustes: { taxaManualCentavos: 0 } },
@@ -373,7 +373,7 @@ describe('painel de delivery/encomendas do PDV', { skip: semBancoDeTeste }, () =
     const { corpo } = await lancar({ descontoCentavos: 250 });
     await api('PATCH', `/equipe/pedidos/${corpo.pedido.id}/finalizar`, { corpo: { formaPagamento: 'PIX' } });
     const { relatorioDoDia } = await import('../src/services/relatorio.service.js');
-    const r = await relatorioDoDia('2026-11-14', agora);
+    const r = await relatorioDoDia(1, '2026-11-14', agora);
     assert.ok(r.descontoCentavos >= 250);
     assert.equal(r.subtotalCentavos + r.taxaEntregaCentavos - r.descontoCentavos, r.totalCentavos);
   });

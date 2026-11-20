@@ -71,24 +71,24 @@ describe('relatório do dia operacional', { skip: semBancoDeTeste }, () => {
     const { finalizarPedido } = await import('../src/services/equipe.service.js');
     pararEventos = aoEmitirParaEquipe((evento, dados) => eventos.push({ evento, dados }));
 
-    await prisma.produto.update({ where: { nome: 'Prato por kg' }, data: { precoCentavos: 5990, ativo: true } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Prato por kg' } }, data: { precoCentavos: 5990, ativo: true } });
     await prisma.produto.updateMany({ where: { controlaEstoque: true }, data: { estoque: 100 } });
     await prisma.insumo.updateMany({ data: { estoque: 100 } });
     for (const prod of await prisma.produto.findMany()) p[prod.nome] = prod;
     const atendente = await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
     await criarDono({ nome: 'Dono', email: 'dono@teste.com', senha: 'senha-do-dono' });
-    const bairro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
+    const bairro = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Centro', taxaCentavos: 500 } });
     const cliente = await prisma.cliente.create({ data: { nome: 'Joana', telefone: '43999990000' } });
     const endereco = { texto: 'Rua A, 1', bairroId: bairro.id };
     const item = (nome, quantidade = 1) => ({ produtoId: p[nome].id, quantidade });
 
     // Um caixa aberto desde quinta (finalizar exige caixa).
-    await caixa.abrirCaixa({ valorInicialCentavos: 10000 }, { usuarioId: atendente.id, agora: local('2026-11-12T10:00') });
+    await caixa.abrirCaixa(1, { valorInicialCentavos: 10000 }, { usuarioId: atendente.id, agora: local('2026-11-12T10:00') });
 
     async function comandaFechada(nome, itens, { abre, fecha, forma }) {
-      const c = await comanda.abrirComanda({ nomeCliente: nome }, { agora: abre });
-      for (const i of itens) await comanda.lancarItem(c.id, i);
-      await comanda.fecharComanda(c.id, { formaPagamento: forma }, { agora: fecha });
+      const c = await comanda.abrirComanda(1, { nomeCliente: nome }, { agora: abre });
+      for (const i of itens) await comanda.lancarItem(1, c.id, i);
+      await comanda.fecharComanda(1, c.id, { formaPagamento: forma }, { agora: fecha });
       return c.id;
     }
 
@@ -97,6 +97,7 @@ describe('relatório do dia operacional', { skip: semBancoDeTeste }, () => {
 
     // P1 SITE (loja aberta: Lanches sexta 19:00–00:00).
     const p1 = await pedidoService.criarPedido({
+      lojaId: 1,
       canal: 'SITE',
       itens: [item('X-Bacon', 2), item('Refrigerante Lata')],
       cliente: { id: cliente.id, nome: 'Joana', telefone: '43999990000' },
@@ -106,10 +107,11 @@ describe('relatório do dia operacional', { skip: semBancoDeTeste }, () => {
       agora: local('2026-11-13T19:30'),
     });
     ids.p1 = p1.pedido.id;
-    await finalizarPedido(ids.p1, { formaPagamento: 'PIX' }, local('2026-11-13T20:10'));
+    await finalizarPedido(1, ids.p1, { formaPagamento: 'PIX' }, local('2026-11-13T20:10'));
 
     // P2 WHATSAPP, finalizado 23:59.
     const p2 = await pedidoService.criarPedido({
+      lojaId: 1,
       canal: 'WHATSAPP',
       itens: [item('X-Salada'), item('Coca-Cola 1L')],
       cliente: { id: cliente.id, nome: 'Joana', telefone: '43999990000' },
@@ -118,10 +120,11 @@ describe('relatório do dia operacional', { skip: semBancoDeTeste }, () => {
       agora: local('2026-11-13T21:00'),
     });
     ids.p2 = p2.pedido.id;
-    await finalizarPedido(ids.p2, { formaPagamento: 'DINHEIRO' }, local('2026-11-13T23:59'));
+    await finalizarPedido(1, ids.p2, { formaPagamento: 'DINHEIRO' }, local('2026-11-13T23:59'));
 
     // P4 WHATSAPP cancelado 23:00.
     const p4 = await pedidoService.criarPedido({
+      lojaId: 1,
       canal: 'WHATSAPP',
       itens: [item('Pizza Calabresa')],
       cliente: { id: cliente.id, nome: 'Joana', telefone: '43999990000' },
@@ -130,17 +133,17 @@ describe('relatório do dia operacional', { skip: semBancoDeTeste }, () => {
       agora: local('2026-11-13T22:30'),
     });
     ids.p4 = p4.pedido.id;
-    await pedidoService.cancelarPedido(ids.p4, { agora: local('2026-11-13T23:00') });
+    await pedidoService.cancelarPedido(1, ids.p4, { agora: local('2026-11-13T23:00') });
 
     // P3 SALAO: 2 Refri, remove 1; fechada sábado 00:30 (ainda é sexta).
-    const c3 = await comanda.abrirComanda({ nomeCliente: 'Mesa do fundo' }, { agora: local('2026-11-13T22:00') });
-    await comanda.lancarItem(c3.id, { produtoId: p['Prato por kg'].id, pesoGramas: 487 });
-    await comanda.lancarItem(c3.id, item('X-Burguer'));
-    await comanda.lancarItem(c3.id, item('Refrigerante Lata'));
-    const comRefri = await comanda.lancarItem(c3.id, item('Refrigerante Lata'));
+    const c3 = await comanda.abrirComanda(1, { nomeCliente: 'Mesa do fundo' }, { agora: local('2026-11-13T22:00') });
+    await comanda.lancarItem(1, c3.id, { produtoId: p['Prato por kg'].id, pesoGramas: 487 });
+    await comanda.lancarItem(1, c3.id, item('X-Burguer'));
+    await comanda.lancarItem(1, c3.id, item('Refrigerante Lata'));
+    const comRefri = await comanda.lancarItem(1, c3.id, item('Refrigerante Lata'));
     const refri = comRefri.itens.filter((i) => i.produtoId === p['Refrigerante Lata'].id).at(-1);
-    await comanda.removerItem(c3.id, refri.id, { agora: local('2026-11-13T23:30') });
-    await comanda.fecharComanda(c3.id, { formaPagamento: 'DEBITO' }, { agora: local('2026-11-14T00:30') });
+    await comanda.removerItem(1, c3.id, refri.id, { agora: local('2026-11-13T23:30') });
+    await comanda.fecharComanda(1, c3.id, { formaPagamento: 'DEBITO' }, { agora: local('2026-11-14T00:30') });
     ids.p3 = c3.id;
 
     // P5: fechada sábado 04:00 → sábado.
@@ -275,9 +278,9 @@ describe('relatório do dia operacional', { skip: semBancoDeTeste }, () => {
   });
 
   test('o banco recusa trabalho com dois donos ou sem dono (CHECK)', async () => {
-    await assert.rejects(prisma.trabalhoImpressao.create({ data: { tipo: 'RELATORIO_DIA' } }));
+    await assert.rejects(prisma.trabalhoImpressao.create({ data: { lojaId: 1, tipo: 'RELATORIO_DIA' } }));
     await assert.rejects(
-      prisma.trabalhoImpressao.create({ data: { tipo: 'RELATORIO_DIA', pedidoId: ids.p1, dataRelatorio: new Date('2026-11-13T00:00:00Z') } }),
+      prisma.trabalhoImpressao.create({ data: { lojaId: 1, tipo: 'RELATORIO_DIA', pedidoId: ids.p1, dataRelatorio: new Date('2026-11-13T00:00:00Z') } }),
     );
   });
 });

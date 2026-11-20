@@ -34,8 +34,8 @@ describe('cliente do site: isolamento entre clientes (histórico, perfil, endere
     const { criarApp } = await import('../src/app.js');
     const { criarDono } = await import('../src/services/usuario.service.js');
 
-    const centro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
-    const salame = await prisma.produto.findUnique({ where: { nome: 'Salame' } });
+    const centro = await prisma.bairro.create({ data: { lojaId: 1, nome: 'Centro', taxaCentavos: 500 } });
+    const salame = await prisma.produto.findUnique({ where: { lojaId_nome: { lojaId: 1, nome: 'Salame' } } });
     await prisma.produto.update({ where: { id: salame.id }, data: { ativo: true } });
 
     for (const [c, nome, telefone] of [[a, 'Ana', '43999990001'], [b, 'Bruno', '43999990002']]) {
@@ -47,6 +47,7 @@ describe('cliente do site: isolamento entre clientes (histórico, perfil, endere
       c.pedidos = [];
       for (let i = 0; i < 2; i += 1) {
         const { pedido } = await criarPedido({
+          lojaId: 1,
           canal: 'WHATSAPP',
           itens: [{ produtoId: salame.id, quantidade: 1 }],
           cliente: { id: c.cliente.id, nome, telefone },
@@ -134,7 +135,7 @@ describe('cliente do site: isolamento entre clientes (histórico, perfil, endere
   });
 
   test('pedido do site com o endereço de outro cliente = 422 ENDERECO_INVALIDO (nada criado)', async () => {
-    const salame = await prisma.produto.findUnique({ where: { nome: 'Salame' } });
+    const salame = await prisma.produto.findUnique({ where: { lojaId_nome: { lojaId: 1, nome: 'Salame' } } });
     const antes = await prisma.pedido.count();
     const r = await api('POST', '/cliente/pedidos', {
       token: a.token,

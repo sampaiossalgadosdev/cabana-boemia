@@ -1,5 +1,5 @@
 /**
- * Relatório do dia OPERACIONAL (vira às Configuracao.horaViradaDia, padrão 4h).
+ * Relatório do dia OPERACIONAL de uma loja (vira às Loja.horaViradaDia, padrão 4h).
  *
  * - Venda = pedido FINALIZADO com finalizadoEm em [D virada, D+1 virada) local
  *   (o dinheiro entrou no expediente D; mesmo critério dos caixas do dia).
@@ -42,15 +42,15 @@ export const ticketMedio = (total, quantidade) => (quantidade ? Math.round(total
 /**
  * @param {string} data "hoje" ou "YYYY-MM-DD" (dia operacional)
  */
-export async function relatorioDoDia(data, agora = new Date()) {
-  const { dia, horaVirada, inicio, fim } = await resolverDia(data, agora);
+export async function relatorioDoDia(lojaId, data, agora = new Date()) {
+  const { dia, horaVirada, inicio, fim } = await resolverDia(lojaId, data, agora);
   const [resumo, formas, canais, produtos, cancelados, removidos] = await Promise.all([
-    relatorioRepo.resumo(inicio, fim),
-    relatorioRepo.porFormaPagamento(inicio, fim),
-    relatorioRepo.porCanal(inicio, fim),
-    relatorioRepo.porProduto(inicio, fim),
-    relatorioRepo.cancelados(inicio, fim),
-    relatorioRepo.itensRemovidos(inicio, fim),
+    relatorioRepo.resumo(lojaId, inicio, fim),
+    relatorioRepo.porFormaPagamento(lojaId, inicio, fim),
+    relatorioRepo.porCanal(lojaId, inicio, fim),
+    relatorioRepo.porProduto(lojaId, inicio, fim),
+    relatorioRepo.cancelados(lojaId, inicio, fim),
+    relatorioRepo.itensRemovidos(lojaId, inicio, fim),
   ]);
 
   const nomes = new Map(
@@ -91,13 +91,14 @@ export async function relatorioDoDia(data, agora = new Date()) {
  * "Imprimir fechamento do dia": trabalho RELATORIO_DIA com o dia operacional.
  * O resumo é calculado na hora de imprimir (fila de impressão), como o FECHAMENTO.
  */
-export async function imprimirRelatorio(data, agora = new Date()) {
-  const { dia } = await resolverDia(data, agora);
+export async function imprimirRelatorio(lojaId, data, agora = new Date()) {
+  const { dia } = await resolverDia(lojaId, data, agora);
   const trabalho = await pedidoRepo.criarTrabalhoImpressao({
+    lojaId,
     tipo: 'RELATORIO_DIA',
     status: 'PENDENTE',
     dataRelatorio: paraCampoData(dia),
   });
-  emitirParaEquipe('impressao:nova', trabalho);
+  emitirParaEquipe(lojaId, 'impressao:nova', trabalho);
   return { trabalho: { id: trabalho.id, tipo: trabalho.tipo, status: trabalho.status, dataRelatorio: dia } };
 }

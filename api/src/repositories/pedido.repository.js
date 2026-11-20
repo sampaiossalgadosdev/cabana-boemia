@@ -14,6 +14,7 @@ const SELECT_ITEM = {
 
 export const SELECT_PEDIDO = {
   id: true,
+  lojaId: true, // conferir a loja (não sai em pedidoPublico)
   numeroDia: true,
   dataRef: true,
   canal: true,
@@ -43,10 +44,13 @@ export const SELECT_PEDIDO = {
   itens: { where: { canceladoEm: null }, select: SELECT_ITEM, orderBy: { id: 'asc' } },
 };
 
-/** Produtos pedidos, com o que é preciso para revalidar, precificar e baixar estoque. */
-export function buscarProdutosParaPedido(ids, db = prisma) {
+/**
+ * Produtos pedidos, DA LOJA, com o que é preciso para revalidar, precificar e
+ * baixar estoque. Produto de outra loja não volta (vira "não existe mais").
+ */
+export function buscarProdutosParaPedido(lojaId, ids, db = prisma) {
   return db.produto.findMany({
-    where: { id: { in: ids } },
+    where: { lojaId, id: { in: ids } },
     select: {
       id: true,
       nome: true,
@@ -85,24 +89,22 @@ export async function baixarEstoqueInsumo(id, quantidade, db = prisma) {
 }
 
 /**
- * Próximo número do dia, atômico: a linha do contador fica travada até o
- * commit (outro pedido do mesmo dia espera) e volta junto num rollback.
- * @param {string} dia "YYYY-MM-DD" local
+ * Próximo número do dia da LOJA, atômico: a linha do contador fica travada até
+ * o commit (outro pedido da mesma loja e dia espera) e volta junto num rollback.
+ * Cada loja tem a sua numeração.
+ * @param {string} dia "YYYY-MM-DD" (dia operacional)
  */
-export async function proximoNumeroDoDia(dia, db = prisma) {
+export async function proximoNumeroDoDia(lojaId, dia, db = prisma) {
   const [{ ultimo }] = await db.$queryRaw`
-    INSERT INTO "ContadorPedido" ("dataRef", "ultimo") VALUES (${dia}::date, 1)
-    ON CONFLICT ("dataRef") DO UPDATE SET "ultimo" = "ContadorPedido"."ultimo" + 1
+    INSERT INTO "ContadorPedido" ("lojaId", "dataRef", "ultimo") VALUES (${lojaId}, ${dia}::date, 1)
+    ON CONFLICT ("lojaId", "dataRef") DO UPDATE SET "ultimo" = "ContadorPedido"."ultimo" + 1
     RETURNING "ultimo"`;
   return ultimo;
 }
 
-export function buscarBairro(id, db = prisma) {
-  return db.bairro.findUnique({ where: { id } });
-}
-
-export function buscarConfiguracao(db = prisma) {
-  return db.configuracao.findUnique({ where: { id: 1 } });
+/** Bairro da loja (de outra loja = null). */
+export function buscarBairro(lojaId, id, db = prisma) {
+  return db.bairro.findFirst({ where: { id, lojaId } });
 }
 
 export function criarPedido(dados, db = prisma) {
@@ -117,6 +119,7 @@ export function criarMovimentacoes(dados, db = prisma) {
   return db.movimentacaoEstoque.createMany({ data: dados });
 }
 
+/** `dados.lojaId` obrigatório: a fila de impressão é por loja. */
 export function criarTrabalhoImpressao(dados, db = prisma) {
   return db.trabalhoImpressao.create({ data: dados, select: { id: true, pedidoId: true, caixaId: true, tipo: true, status: true } });
 }
@@ -148,12 +151,13 @@ export function ultimoDoCliente(clienteId, db = prisma) {
 }
 
 /**
- * Pedidos de um dia local, do mais antigo para o mais novo.
- * @param {{ dataRef: string, canais?: string[], status?: string[] }} filtro
+ * Pedidos da loja num dia operacional, do mais antigo para o mais novo.
+ * @param {{ lojaId: number, dataRef: string, canais?: string[], status?: string[] }} filtro
  */
-export function listarDoDia({ dataRef, canais, status }, db = prisma) {
+export function listarDoDia({ lojaId, dataRef, canais, status }, db = prisma) {
   return db.pedido.findMany({
     where: {
+      lojaId,
       dataRef: new Date(`${dataRef}T00:00:00.000Z`),
       ...(canais?.length ? { canal: { in: canais } } : {}),
       ...(status?.length ? { status: { in: status } } : {}),
@@ -176,7 +180,7 @@ export async function finalizarSeAberto(id, { formaPagamento, trocoParaCentavos,
 }
 
 export function buscarStatus(id, db = prisma) {
-  return db.pedido.findUnique({ where: { id }, select: { id: true, status: true, canal: true, pagoEm: true } });
+  return db.pedido.findUnique({ where: { id }, select: { id: true, lojaId: true, status: true, canal: true, pagoEm: true } });
 }
 
 /** Atualiza só se ainda estiver aberto (UPDATE condicionado ao status). Devolve o count. */
@@ -189,9 +193,9 @@ export async function atualizarSeAberto(id, dados, statusAbertos, db = prisma) {
  * Cancela só se ainda estiver aberto (UPDATE condicionado: cancelar duas
  * vezes, ou cancelar e finalizar ao mesmo tempo, só um vence). Devolve o count.
  */
-export async function cancelarSeAberto(id, canceladoEm, statusAbertos, db = prisma) {
+export async function cancelarSeAberto(lojaId, id, canceladoEm, statusAbertos, db = prisma) {
   const { count } = await db.pedido.updateMany({
-    where: { id, status: { in: statusAbertos } },
+    where: { id, lojaId, status: { in: statusAbertos } },
     data: { status: 'CANCELADO', canceladoEm },
   });
   return count;

@@ -1,24 +1,17 @@
 /**
- * Configurações gerais (retaguarda): nome do restaurante, WhatsApp, tempo
- * estimado padrão, virada do dia e frete grátis. O tempo manual do dia continua no PDV (/equipe/config).
+ * Configurações gerais da loja (retaguarda): nome do restaurante, WhatsApp, tempo
+ * estimado padrão, virada do dia e frete grátis. Moram na tabela Loja (antes,
+ * na linha única Configuracao); as chaves da resposta continuam as mesmas.
+ * O tempo manual do dia continua no PDV (/equipe/config).
  */
 import { dddValido } from '@restaurante/shared/telefone';
 import { avisarCardapioAtualizado } from '../lib/eventos.js';
-import * as configRepo from '../repositories/configuracao.repository.js';
-
-const PADRAO = {
-  nomeRestaurante: 'Cabana Boemia',
-  whatsappNumero: '',
-  tempoEstimadoPadraoMin: 40,
-  horaViradaDia: 4,
-  freteGratisAtivo: false,
-  freteGratisMinimoCentavos: null,
-  freteGratisWhatsapp: true,
-};
+import * as lojaRepo from '../repositories/loja.repository.js';
+import * as lojaService from './loja.service.js';
 
 const publica = (c) => ({
-  nomeRestaurante: c.nomeRestaurante,
-  whatsappNumero: c.whatsappNumero,
+  nomeRestaurante: c.nome,
+  whatsappNumero: c.whatsapp,
   tempoEstimadoPadraoMin: c.tempoEstimadoPadraoMin,
   horaViradaDia: c.horaViradaDia,
   freteGratisAtivo: c.freteGratisAtivo ?? false,
@@ -40,16 +33,17 @@ export function normalizarWhatsapp(valor) {
   return d;
 }
 
-export async function obter() {
-  return publica((await configRepo.buscar()) ?? PADRAO);
+export async function obter(lojaId) {
+  return publica(await lojaService.buscar(lojaId));
 }
 
 /**
  * @param {{ nomeRestaurante: string, whatsappNumero: string, tempoEstimadoPadraoMin: number, horaViradaDia: number,
  *   freteGratisAtivo: boolean, freteGratisMinimoCentavos: number | null, freteGratisWhatsapp?: boolean }} dados (já validados; ligado exige mínimo)
  */
-export async function atualizar(dados) {
-  const config = await configRepo.atualizarGerais(dados);
-  avisarCardapioAtualizado('config');
+export async function atualizar(lojaId, dados) {
+  await lojaService.buscar(lojaId);
+  const config = await lojaRepo.atualizarGerais(lojaId, dados);
+  avisarCardapioAtualizado(lojaId, 'config');
   return publica(config);
 }

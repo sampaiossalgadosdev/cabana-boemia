@@ -26,29 +26,30 @@ export const SELECT_CAIXA = {
 };
 
 /**
- * Trava o caixa aberto em modo COMPARTILHADO até o fim da transação: várias
+ * Trava o caixa aberto DA LOJA em modo COMPARTILHADO até o fim da transação: várias
  * finalizações/movimentos ao mesmo tempo, mas o fechamento (FOR UPDATE)
  * espera todas terminarem. Se o fechamento vencer, o WHERE é reavaliado
  * depois do commit dele e não volta linha (caixa fechado). Devolve o id ou null.
  */
-export async function travarAbertoCompartilhado(tx) {
-  const [linha] = await tx.$queryRaw`SELECT "id" FROM "Caixa" WHERE "fechadoEm" IS NULL FOR SHARE`;
+export async function travarAbertoCompartilhado(lojaId, tx) {
+  const [linha] = await tx.$queryRaw`
+    SELECT "id" FROM "Caixa" WHERE "lojaId" = ${lojaId} AND "fechadoEm" IS NULL FOR SHARE`;
   return linha?.id ?? null;
 }
 
-/** Trava o caixa aberto em modo EXCLUSIVO (fechamento). Devolve a linha ou null. */
-export async function travarAbertoExclusivo(tx) {
+/** Trava o caixa aberto da loja em modo EXCLUSIVO (fechamento). Devolve a linha ou null. */
+export async function travarAbertoExclusivo(lojaId, tx) {
   const [linha] = await tx.$queryRaw`
-    SELECT "id", "valorInicialCentavos" FROM "Caixa" WHERE "fechadoEm" IS NULL FOR UPDATE`;
+    SELECT "id", "valorInicialCentavos" FROM "Caixa" WHERE "lojaId" = ${lojaId} AND "fechadoEm" IS NULL FOR UPDATE`;
   return linha ?? null;
 }
 
-export function criar({ abertoPorId, valorInicialCentavos, abertoEm }, db = prisma) {
-  return db.caixa.create({ data: { abertoPorId, valorInicialCentavos, abertoEm }, select: SELECT_CAIXA });
+export function criar({ lojaId, abertoPorId, valorInicialCentavos, abertoEm }, db = prisma) {
+  return db.caixa.create({ data: { lojaId, abertoPorId, valorInicialCentavos, abertoEm }, select: SELECT_CAIXA });
 }
 
-export function buscarAberto(db = prisma) {
-  return db.caixa.findFirst({ where: { fechadoEm: null }, select: SELECT_CAIXA });
+export function buscarAberto(lojaId, db = prisma) {
+  return db.caixa.findFirst({ where: { lojaId, fechadoEm: null }, select: SELECT_CAIXA });
 }
 
 export function buscarPorId(id, db = prisma) {
@@ -96,12 +97,12 @@ export async function totaisPorForma(caixaId, db = prisma) {
 }
 
 /**
- * Pedidos ainda abertos de QUALQUER dia (comandas do salão, delivery e site
- * confirmados): bloqueiam o fechamento do caixa.
+ * Pedidos ainda abertos da loja, de QUALQUER dia (comandas do salão, delivery e
+ * site confirmados): bloqueiam o fechamento do caixa dela.
  */
-export function pedidosAbertos(statusAbertos, db = prisma) {
+export function pedidosAbertos(lojaId, statusAbertos, db = prisma) {
   return db.pedido.findMany({
-    where: { status: { in: statusAbertos } },
+    where: { lojaId, status: { in: statusAbertos } },
     select: {
       id: true,
       numeroDia: true,
@@ -122,10 +123,10 @@ export function fechar(id, dados, db = prisma) {
   return db.caixa.update({ where: { id }, data: dados, select: SELECT_CAIXA });
 }
 
-/** Caixas abertos entre `inicio` (incluso) e `fim` (excluso), do mais antigo ao mais novo. */
-export function listarAbertosEntre(inicio, fim, db = prisma) {
+/** Caixas da loja abertos entre `inicio` (incluso) e `fim` (excluso), do mais antigo ao mais novo. */
+export function listarAbertosEntre(lojaId, inicio, fim, db = prisma) {
   return db.caixa.findMany({
-    where: { abertoEm: { gte: inicio, lt: fim } },
+    where: { lojaId, abertoEm: { gte: inicio, lt: fim } },
     select: SELECT_CAIXA,
     orderBy: [{ abertoEm: 'asc' }, { id: 'asc' }],
   });

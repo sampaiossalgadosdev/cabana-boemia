@@ -216,93 +216,93 @@ export function criarRetaguardaController(relogio = () => new Date()) {
     /** Caixas abertos no dia local, com esperado, contado, diferença e totais por forma. */
     async caixas(req, res) {
       const { data } = validar(caixasSchema, req.query);
-      res.json(await caixaService.caixasDoDia(data, relogio()));
+      res.json(await caixaService.caixasDoDia(req.lojaId, data, relogio()));
     },
 
     // Categorias
     async listarCategorias(req, res) {
-      res.json({ categorias: await categoriaService.listar() });
+      res.json({ categorias: await categoriaService.listar(req.lojaId) });
     },
     async criarCategoria(req, res) {
-      res.status(201).json({ categoria: await categoriaService.criar(validar(categoriaCriarSchema, req.body)) });
+      res.status(201).json({ categoria: await categoriaService.criar(req.lojaId, validar(categoriaCriarSchema, req.body)) });
     },
     async alterarCategoria(req, res) {
       const dados = validar(categoriaAlterarSchema, req.body);
-      res.json({ categoria: await categoriaService.atualizar(id(req), dados) });
+      res.json({ categoria: await categoriaService.atualizar(req.lojaId, id(req), dados) });
     },
 
     // Produtos
     async listarProdutos(req, res) {
-      res.json({ produtos: await produtoService.listar() });
+      res.json({ produtos: await produtoService.listar(req.lojaId) });
     },
     async obterProduto(req, res) {
-      res.json({ produto: await produtoService.obter(id(req)) });
+      res.json({ produto: await produtoService.obter(req.lojaId, id(req)) });
     },
     async criarProduto(req, res) {
-      res.status(201).json({ produto: await produtoService.criar(validar(produtoSchema, req.body)) });
+      res.status(201).json({ produto: await produtoService.criar(req.lojaId, validar(produtoSchema, req.body)) });
     },
     async alterarProduto(req, res) {
       const dados = validar(produtoSchema, req.body);
-      res.json({ produto: await produtoService.atualizar(id(req), dados) });
+      res.json({ produto: await produtoService.atualizar(req.lojaId, id(req), dados) });
     },
 
     // Cardápio do dia
     async cardapioDoDia(req, res) {
-      res.json(await produtoService.cardapioDoDia(validar(turnoQuerySchema, req.query), relogio()));
+      res.json(await produtoService.cardapioDoDia(req.lojaId, validar(turnoQuerySchema, req.query), relogio()));
     },
     async definirDisponivelHoje(req, res) {
       const { disponivelHoje } = validar(disponivelSchema, req.body);
-      res.json({ produto: await produtoService.definirDisponivelHoje(id(req), disponivelHoje) });
+      res.json({ produto: await produtoService.definirDisponivelHoje(req.lojaId, id(req), disponivelHoje) });
     },
     async definirDescricao(req, res) {
       const { descricao } = validar(descricaoSchema, req.body);
-      res.json({ produto: await produtoService.definirDescricao(id(req), descricao) });
+      res.json({ produto: await produtoService.definirDescricao(req.lojaId, id(req), descricao) });
     },
     async liberarTudo(req, res) {
       const { turnoId } = validar(liberarSchema, req.body);
-      res.json(await produtoService.liberarTudo(turnoId));
+      res.json(await produtoService.liberarTudo(req.lojaId, turnoId));
     },
 
     // Turnos
     async listarTurnos(req, res) {
-      res.json({ turnos: await turnoService.listarTurnos() });
+      res.json({ turnos: await turnoService.listarTurnos(req.lojaId) });
     },
     async definirHorarios(req, res) {
       const { horarios } = validar(horariosSchema, req.body);
-      res.json({ turno: await turnoService.definirHorarios(id(req), horarios) });
+      res.json({ turno: await turnoService.definirHorarios(req.lojaId, id(req), horarios) });
     },
 
     // Bairros
     async listarBairros(req, res) {
-      res.json({ bairros: await bairroService.listar() });
+      res.json({ bairros: await bairroService.listar(req.lojaId) });
     },
     async criarBairro(req, res) {
-      res.status(201).json({ bairro: await bairroService.criar(validar(bairroCriarSchema, req.body)) });
+      res.status(201).json({ bairro: await bairroService.criar(req.lojaId, validar(bairroCriarSchema, req.body)) });
     },
     async alterarBairro(req, res) {
       const dados = validar(bairroAlterarSchema, req.body);
-      res.json({ bairro: await bairroService.atualizar(id(req), dados) });
+      res.json({ bairro: await bairroService.atualizar(req.lojaId, id(req), dados) });
     },
 
     // Estoque
     async estoque(req, res) {
-      res.json(await estoqueService.visaoGeral());
+      res.json(await estoqueService.visaoGeral(req.lojaId));
     },
     async criarInsumo(req, res) {
-      res.status(201).json({ insumo: await estoqueService.criarInsumo(validar(insumoSchema, req.body)) });
+      res.status(201).json({ insumo: await estoqueService.criarInsumo(req.lojaId, validar(insumoSchema, req.body)) });
     },
     async alterarInsumo(req, res) {
       const dados = validar(insumoSchema, req.body);
-      res.json({ insumo: await estoqueService.atualizarInsumo(id(req), dados) });
+      res.json({ insumo: await estoqueService.atualizarInsumo(req.lojaId, id(req), dados) });
     },
     async entrada(req, res) {
       const d = validar(entradaSchema, req.body);
-      const r = await estoqueService.registrarEntrada(alvoDe(d), d, { usuarioId: req.usuario.id });
+      const r = await estoqueService.registrarEntrada(req.lojaId, alvoDe(d), d, { usuarioId: req.usuario.id });
       res.status(201).json(r);
     },
     async ajuste(req, res) {
       const d = validar(ajusteSchema, req.body);
-      const r = await estoqueService.registrarAjuste(alvoDe(d), d, { usuarioId: req.usuario.id });
+      const r = await estoqueService.registrarAjuste(req.lojaId, alvoDe(d), d, { usuarioId: req.usuario.id });
       res.status(r.movimentacao ? 201 : 200).json(r);
     },
     async movimentacoes(req, res) {
@@ -310,25 +310,25 @@ export function criarRetaguardaController(relogio = () => new Date()) {
       if (filtro.produtoId && filtro.insumoId) {
         throw new ErroHttp(400, 'Filtre por produto ou por insumo', { codigo: 'VALIDACAO' });
       }
-      res.json(await estoqueService.movimentacoes(filtro));
+      res.json(await estoqueService.movimentacoes(req.lojaId, filtro));
     },
 
     // Relatório do dia (operacional)
     async relatorioDia(req, res) {
       const { data } = validar(caixasSchema, req.query);
-      res.json(await relatorioService.relatorioDoDia(data, relogio()));
+      res.json(await relatorioService.relatorioDoDia(req.lojaId, data, relogio()));
     },
     async imprimirRelatorioDia(req, res) {
       const { data } = validar(imprimirSchema, req.body ?? {});
-      res.status(201).json(await relatorioService.imprimirRelatorio(data, relogio()));
+      res.status(201).json(await relatorioService.imprimirRelatorio(req.lojaId, data, relogio()));
     },
 
     // Configurações
     async obterConfig(req, res) {
-      res.json({ config: await configuracaoService.obter() });
+      res.json({ config: await configuracaoService.obter(req.lojaId) });
     },
     async definirConfig(req, res) {
-      res.json({ config: await configuracaoService.atualizar(validar(configSchema, req.body)) });
+      res.json({ config: await configuracaoService.atualizar(req.lojaId, validar(configSchema, req.body)) });
     },
   };
 }

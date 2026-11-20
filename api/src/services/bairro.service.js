@@ -9,14 +9,14 @@ import * as bairroRepo from '../repositories/bairro.repository.js';
 
 const nomeEmUso = () => new ErroHttp(409, 'Já existe um bairro com este nome', { codigo: 'NOME_EM_USO' });
 
-export function listar() {
-  return bairroRepo.listar();
+export function listar(lojaId) {
+  return bairroRepo.listar(lojaId);
 }
 
-async function gravar(fn) {
+async function gravar(lojaId, fn) {
   try {
     const bairro = await fn();
-    avisarCardapioAtualizado('bairros');
+    avisarCardapioAtualizado(lojaId, 'bairros');
     return bairro;
   } catch (err) {
     if (ehDuplicado(err)) throw nomeEmUso();
@@ -26,11 +26,11 @@ async function gravar(fn) {
 }
 
 /** @param {{ nome: string, taxaCentavos: number, ativo?: boolean }} dados */
-export function criar(dados) {
-  return gravar(() => bairroRepo.criar(dados));
+export function criar(lojaId, dados) {
+  return gravar(lojaId, () => bairroRepo.criar(lojaId, dados));
 }
 
 /** @param {{ nome?: string, taxaCentavos?: number, ativo?: boolean }} dados */
-export function atualizar(id, dados) {
-  return gravar(() => bairroRepo.atualizar(id, dados));
+export function atualizar(lojaId, id, dados) {
+  return gravar(lojaId, () => bairroRepo.atualizar(lojaId, id, dados));
 }

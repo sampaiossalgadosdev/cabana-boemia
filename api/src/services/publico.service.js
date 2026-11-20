@@ -1,28 +1,14 @@
-/** Dados públicos do site (sem login): cardápio do turno ativo, bairros, config. */
+/** Dados públicos do site (sem login) de uma loja: cardápio do turno ativo, bairros, config. */
 import { freteGratisDaConfig } from '@restaurante/shared/frete';
 import { diaOperacional } from '../lib/fuso.js';
 import { horaViradaDe } from './diaOperacional.service.js';
 import * as publicoRepo from '../repositories/publico.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
+import * as lojaService from './loja.service.js';
 import { calcularTurnoAtivo, calcularProximaAbertura } from './turno.service.js';
 
 /** Máximo por linha de pedido (itemPedidoSchema) e na sacola do site. */
 export const MAX_POR_ITEM = 20;
-
-// Mesmos defaults do schema, caso a linha única ainda não exista (seed não rodou).
-const CONFIG_PADRAO = {
-  nomeRestaurante: 'Cabana Boemia',
-  whatsappNumero: '',
-  tempoEstimadoPadraoMin: 40,
-  tempoEstimadoManualMin: null,
-  tempoManualDefinidoEm: null,
-  freteGratisAtivo: false,
-  freteGratisMinimoCentavos: null,
-};
-
-async function configuracao() {
-  return (await publicoRepo.buscarConfiguracao()) ?? CONFIG_PADRAO;
-}
 
 /**
  * Manual vale só no dia OPERACIONAL em que foi definido (o tempo digitado às
@@ -64,8 +50,8 @@ export function temSaldo(produto) {
  * SEM filtrar disponivelHoje nem saldo, que valem só para o dia corrente.
  * O site mostra a prévia com os botões desabilitados.
  */
-export async function cardapio(agora = new Date()) {
-  const [turnos, config] = await Promise.all([turnoRepo.listarAtivosComHorarios(), configuracao()]);
+export async function cardapio(lojaId, agora = new Date()) {
+  const [turnos, config] = await Promise.all([turnoRepo.listarAtivosComHorarios(lojaId), lojaService.buscar(lojaId)]);
   const turno = calcularTurnoAtivo(turnos, agora);
   const proximaAbertura = turno ? null : calcularProximaAbertura(turnos, agora);
   const base = {
@@ -81,7 +67,7 @@ export async function cardapio(agora = new Date()) {
   const turnoDoCardapio = turno ?? proximaAbertura?.turno;
   if (!turnoDoCardapio) return { ...base, categorias: [] };
 
-  const produtos = await publicoRepo.listarProdutosDoSite(turnoDoCardapio.id, {
+  const produtos = await publicoRepo.listarProdutosDoSite(lojaId, turnoDoCardapio.id, {
     somenteDisponiveisHoje: Boolean(turno),
   });
 
@@ -110,15 +96,15 @@ export async function cardapio(agora = new Date()) {
   return { ...base, categorias };
 }
 
-export function bairros() {
-  return publicoRepo.listarBairrosAtivos();
+export function bairros(lojaId) {
+  return publicoRepo.listarBairrosAtivos(lojaId);
 }
 
-export async function config() {
-  const c = await configuracao();
+export async function config(lojaId) {
+  const c = await lojaService.buscar(lojaId);
   return {
-    nome: c.nomeRestaurante,
-    whatsapp: c.whatsappNumero,
+    nome: c.nome,
+    whatsapp: c.whatsapp,
     // null = desligado; { minimoCentavos } = frete grátis com subtotal >= mínimo.
     freteGratis: freteGratisDaConfig(c),
     // O Client ID OAuth é público: o site precisa dele para desenhar o botão do Google.

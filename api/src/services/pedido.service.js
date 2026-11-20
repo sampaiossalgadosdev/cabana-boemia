@@ -18,6 +18,7 @@ import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoRepo from '../repositories/endereco.repository.js';
 import * as clienteRepo from '../repositories/cliente.repository.js';
 import * as caixaRepo from '../repositories/caixa.repository.js';
+import * as lojaRepo from '../repositories/loja.repository.js';
 import { calcularTurnoAtivo } from './turno.service.js';
 import { calcularTempoEstimado } from './publico.service.js';
 import { garantirTelefone } from './cliente.service.js';
@@ -217,6 +218,7 @@ const estoqueAcabou = (nomes, insumo) =>
  * lança 409 dizendo o que acabou; a transação desfaz as baixas anteriores.
  */
 export async function baixarEstoque(tx, { produtos, insumos }) {
+  // Produtos e insumos já vêm da loja do pedido (buscarProdutosParaPedido filtra a loja).
   for (const p of produtos) {
     if ((await pedidoRepo.baixarEstoqueProduto(p.id, p.quantidade, tx)) === 0) throw estoqueAcabou([p.nome]);
   }
@@ -352,6 +354,7 @@ export async function estornarVendas(tx, vendas, usuarioId = null) {
 
 /**
  * @param {{
+ *   lojaId: number,  // o pedido é sempre de uma loja: produtos, bairro, caixa, número e configuração dela
  *   canal: 'SITE' | 'WHATSAPP' | 'SALAO',
  *   itens: { produtoId: number, quantidade: number, pesoGramas?: number, observacao?: string | null }[],
  *   cliente?: { id?: number, nome: string, telefone?: string | null } | null,
@@ -370,6 +373,7 @@ export async function estornarVendas(tx, vendas, usuarioId = null) {
  * @returns {Promise<{ pedido: object, criado: boolean }>} criado=false: mesma chave já tinha pedido
  */
 export async function criarPedido({
+  lojaId,
   canal,
   itens,
   cliente = null,
@@ -385,6 +389,7 @@ export async function criarPedido({
   totalEsperadoCentavos,
   agora = new Date(),
 }) {
+  if (!Number.isInteger(lojaId)) throw new Error('criarPedido: lojaId obrigatório');
   if (!CANAIS.includes(canal)) throw new ErroHttp(400, 'Canal inválido', { codigo: 'VALIDACAO' });
   if (!itens?.length) throw new ErroHttp(400, 'O pedido não tem itens', { codigo: 'VALIDACAO' });
   if (canal === 'SITE' && !Number.isInteger(totalEsperadoCentavos)) {
@@ -416,7 +421,7 @@ export async function criarPedido({
 
   if (chaveIdempotencia) {
     const existente = await pedidoRepo.buscarPorChave(chaveIdempotencia);
-    if (existente) return reaproveitar(existente, cliente);
+    if (existente) return reaproveitar(existente, cliente, lojaId);
   }
 
   let resultado;
@@ -424,6 +429,7 @@ export async function criarPedido({
     resultado = await prisma.$transaction(
       (tx) =>
         criarNaTransacao(tx, {
+          lojaId,
           canal,
           itens,
           cliente,
@@ -450,19 +456,19 @@ export async function criarPedido({
       err.code === 'P2002' &&
       String(err.meta?.target).includes('chaveIdempotencia')
     ) {
-      return reaproveitar(await pedidoRepo.buscarPorChave(chaveIdempotencia), cliente);
+      return reaproveitar(await pedidoRepo.buscarPorChave(chaveIdempotencia), cliente, lojaId);
     }
     throw err;
   }
 
   // Só depois do commit: a equipe nunca recebe pedido que não existe.
-  emitirParaEquipe('pedido:novo', pedidoDaEquipe(resultado.pedido));
-  emitirParaEquipe('impressao:nova', resultado.trabalho);
+  emitirParaEquipe(lojaId, 'pedido:novo', pedidoDaEquipe(resultado.pedido));
+  emitirParaEquipe(lojaId, 'impressao:nova', resultado.trabalho);
   return { pedido: pedidoPublico(resultado.pedido), criado: true };
 }
 
-function reaproveitar(existente, cliente) {
-  if (cliente?.id && existente.clienteId !== cliente.id) {
+function reaproveitar(existente, cliente, lojaId) {
+  if ((cliente?.id && existente.clienteId !== cliente.id) || existente.lojaId !== lojaId) {
     throw new ErroHttp(409, 'Chave de pedido já usada', { codigo: 'CHAVE_EM_USO' });
   }
   return { pedido: pedidoPublico(existente), criado: false };
@@ -473,21 +479,21 @@ async function criarNaTransacao(tx, d) {
   //    da finalização: caixa → resto). O pedido já entra neste caixa.
   let caixaId = null;
   if (d.pagoAgora) {
-    caixaId = await caixaRepo.travarAbertoCompartilhado(tx);
+    caixaId = await caixaRepo.travarAbertoCompartilhado(d.lojaId, tx);
     if (!caixaId) {
       throw new ErroHttp(409, 'O caixa está fechado. Abra o caixa para continuar.', { codigo: 'CAIXA_FECHADO' });
     }
   }
 
   // 1. Loja aberta agora? (só o SITE; a equipe lança fora do horário)
-  const turno = calcularTurnoAtivo(await turnoRepo.listarAtivosComHorarios(tx), d.agora);
+  const turno = calcularTurnoAtivo(await turnoRepo.listarAtivosComHorarios(d.lojaId, tx), d.agora);
   if (!turno && canalExigeLojaAberta(d.canal)) {
     throw new ErroHttp(409, 'Estamos fechados agora. Os pedidos voltam quando abrirmos.', { codigo: 'LOJA_FECHADA' });
   }
 
   // 2. Produtos ainda vendáveis (lidos do banco, nunca do front).
   const ids = [...new Set(d.itens.map((i) => i.produtoId))];
-  const produtosPorId = new Map((await pedidoRepo.buscarProdutosParaPedido(ids, tx)).map((p) => [p.id, p]));
+  const produtosPorId = new Map((await pedidoRepo.buscarProdutosParaPedido(d.lojaId, ids, tx)).map((p) => [p.id, p]));
   const indisponiveis = [];
   for (const id of ids) {
     const motivo = motivoIndisponivel(produtosPorId.get(id), { canal: d.canal, turnoId: turno?.id });
@@ -501,17 +507,17 @@ async function criarNaTransacao(tx, d) {
     });
   }
 
-  // 3. Taxa de entrega pelo bairro (do banco).
+  // 3. Taxa de entrega pelo bairro (do banco), que precisa ser atendido pela loja.
   let bairro = null;
   if (d.endereco) {
-    bairro = await pedidoRepo.buscarBairro(d.endereco.bairroId, tx);
+    bairro = await pedidoRepo.buscarBairro(d.lojaId, d.endereco.bairroId, tx);
     if (!bairro?.ativo) throw new ErroHttp(422, 'Não entregamos neste bairro', { codigo: 'BAIRRO_INVALIDO' });
   }
 
   // 4. Preços e totais recalculados; pagamento conferido contra o total do servidor.
-  //    Frete grátis (configuração do banco): subtotal dos itens >= mínimo zera a
+  //    Frete grátis (configuração da loja): subtotal dos itens >= mínimo zera a
   //    taxa. Site sempre; WhatsApp só com `freteGratisWhatsapp` (padrão ligado). O site nunca manda taxa.
-  const config = await pedidoRepo.buscarConfiguracao(tx);
+  const config = await lojaRepo.buscarPorId(d.lojaId, tx);
   const freteGratis = freteGratisDaConfig(config, { canal: d.canal });
   const doItens = calcularValores(d.itens, produtosPorId);
   const taxa = bairro ? taxaDeEntrega(bairro.taxaCentavos, doItens.subtotalCentavos, freteGratis) : 0;
@@ -532,11 +538,12 @@ async function criarNaTransacao(tx, d) {
   // 6. Número do dia (dia OPERACIONAL: vira às horaViradaDia, não à meia-noite),
   //    atômico e sem buraco em caso de rollback.
   const dia = diaOperacional(d.agora, horaViradaDe(config));
-  const numeroDia = await pedidoRepo.proximoNumeroDoDia(dia, tx);
+  const numeroDia = await pedidoRepo.proximoNumeroDoDia(d.lojaId, dia, tx);
 
   // 7. Pedido com snapshots.
   const { id: pedidoId } = await pedidoRepo.criarPedido(
     {
+      lojaId: d.lojaId,
       numeroDia,
       dataRef: paraCampoData(dia),
       canal: d.canal,
@@ -571,7 +578,10 @@ async function criarNaTransacao(tx, d) {
   await gravarItens(tx, pedidoId, valores.linhas, d.usuarioId);
 
   // 9. Fila de impressão.
-  const trabalho = await pedidoRepo.criarTrabalhoImpressao({ pedidoId, tipo: 'PEDIDO', status: 'PENDENTE' }, tx);
+  const trabalho = await pedidoRepo.criarTrabalhoImpressao(
+    { lojaId: d.lojaId, pedidoId, tipo: 'PEDIDO', status: 'PENDENTE' },
+    tx,
+  );
 
   return { pedido: await pedidoRepo.buscarPorId(pedidoId, tx), trabalho };
 }
@@ -579,10 +589,11 @@ async function criarNaTransacao(tx, d) {
 // ───────── Site ─────────
 
 /**
- * Pedido do site: exige telefone e um endereço do próprio cliente; nome e
- * telefone vêm do cadastro, não do corpo da requisição.
+ * Pedido do site na loja dada: exige telefone e um endereço do próprio cliente;
+ * nome e telefone vêm do cadastro, não do corpo da requisição.
  */
 export async function criarPedidoDoSite(
+  lojaId,
   cliente,
   { itens, enderecoId, formaPagamento, trocoParaCentavos, chaveIdempotencia, totalEsperadoCentavos },
   { agora } = {},
@@ -593,6 +604,7 @@ export async function criarPedidoDoSite(
     throw new ErroHttp(422, 'Escolha um endereço de entrega', { codigo: 'ENDERECO_INVALIDO' });
   }
   return criarPedido({
+    lojaId,
     canal: 'SITE',
     itens,
     cliente: { id: cliente.id, nome: cliente.nome, telefone: cliente.telefone },
@@ -633,6 +645,7 @@ export async function ultimoPedidoDoCliente(clienteId) {
  * atômica, número do dia, impressão. Sem trava de horário (canal da equipe).
  */
 export async function criarPedidoDoWhatsapp(
+  lojaId,
   {
     clienteId,
     enderecoId,
@@ -661,6 +674,7 @@ export async function criarPedidoDoWhatsapp(
     }
   }
   return criarPedido({
+    lojaId,
     canal: 'WHATSAPP',
     itens,
     cliente: { id: cliente.id, nome: cliente.nome, telefone: cliente.telefone },
@@ -678,6 +692,11 @@ export async function criarPedidoDoWhatsapp(
 
 // ───────── Andamento no painel do PDV ─────────
 
+const pedidoNaoEncontrado = () => new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+
+/** Pedido de outra loja não existe para quem é desta (404, como inexistente). */
+export const ehDaLoja = (pedido, lojaId) => Boolean(pedido) && pedido.lojaId === lojaId;
+
 function pedidoEncerrado(status) {
   return new ErroHttp(409, `Pedido já está ${status === 'CANCELADO' ? 'cancelado' : 'finalizado'}`, {
     codigo: 'PEDIDO_ENCERRADO',
@@ -689,32 +708,32 @@ function pedidoEncerrado(status) {
  * Só pedido do site/WhatsApp (comanda do salão = 404); UPDATE condicionado
  * ao status aberto (já encerrado = 409 PEDIDO_ENCERRADO).
  */
-export async function alterarStatus(id, status) {
+export async function alterarStatus(lojaId, id, status) {
   if (!STATUS_ANDAMENTO.includes(status)) throw new ErroHttp(400, 'Status inválido', { codigo: 'VALIDACAO' });
   const pedido = await prisma.$transaction(async (tx) => {
     const atual = await pedidoRepo.buscarStatus(id, tx);
-    if (!atual || atual.canal === 'SALAO') throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+    if (!ehDaLoja(atual, lojaId) || atual.canal === 'SALAO') throw pedidoNaoEncontrado();
     if ((await pedidoRepo.atualizarSeAberto(id, { status }, STATUS_ABERTOS, tx)) === 0) throw pedidoEncerrado(atual.status);
     return pedidoRepo.buscarPorId(id, tx);
   }, OPCOES_TRANSACAO);
   const equipe = pedidoDaEquipe(pedido);
-  emitirParaEquipe('pedido:atualizado', equipe);
+  emitirParaEquipe(lojaId, 'pedido:atualizado', equipe);
   return equipe;
 }
 
 /** Novo horário de uma encomenda aberta (mesmas regras da criação: futuro e no mesmo dia operacional). */
-export async function alterarAgendamento(id, agendadoPara, agora = new Date()) {
+export async function alterarAgendamento(lojaId, id, agendadoPara, agora = new Date()) {
   const pedido = await prisma.$transaction(async (tx) => {
     const atual = await pedidoRepo.buscarPorId(id, tx);
-    if (!atual || atual.canal === 'SALAO') throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+    if (!ehDaLoja(atual, lojaId) || atual.canal === 'SALAO') throw pedidoNaoEncontrado();
     if (!STATUS_ABERTOS.includes(atual.status)) throw pedidoEncerrado(atual.status);
     if (!atual.encomenda) throw new ErroHttp(409, 'Este pedido não é encomenda', { codigo: 'NAO_E_ENCOMENDA' });
-    validarAgendamento(agendadoPara, agora, horaViradaDe(await pedidoRepo.buscarConfiguracao(tx)));
+    validarAgendamento(agendadoPara, agora, horaViradaDe(await lojaRepo.buscarPorId(lojaId, tx)));
     if ((await pedidoRepo.atualizarSeAberto(id, { agendadoPara }, STATUS_ABERTOS, tx)) === 0) throw pedidoEncerrado(atual.status);
     return pedidoRepo.buscarPorId(id, tx);
   }, OPCOES_TRANSACAO);
   const equipe = pedidoDaEquipe(pedido);
-  emitirParaEquipe('pedido:atualizado', equipe);
+  emitirParaEquipe(lojaId, 'pedido:atualizado', equipe);
   return equipe;
 }
 
@@ -743,12 +762,12 @@ export function somarDevolucoes(vendas) {
  * movimentação e cria o TrabalhoImpressao CANCELAMENTO. Comanda do salão não
  * imprime cancelamento (nada dela foi impresso). Eventos depois do commit.
  */
-export async function cancelarPedido(id, { usuarioId = null, agora = new Date() } = {}) {
+export async function cancelarPedido(lojaId, id, { usuarioId = null, agora = new Date() } = {}) {
   const { pedido, trabalho } = await prisma.$transaction(async (tx) => {
-    const count = await pedidoRepo.cancelarSeAberto(id, agora, STATUS_ABERTOS, tx);
+    const count = await pedidoRepo.cancelarSeAberto(lojaId, id, agora, STATUS_ABERTOS, tx);
     if (count === 0) {
       const atual = await pedidoRepo.buscarStatus(id, tx);
-      if (!atual) throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+      if (!ehDaLoja(atual, lojaId)) throw pedidoNaoEncontrado();
       throw pedidoEncerrado(atual.status);
     }
 
@@ -758,12 +777,12 @@ export async function cancelarPedido(id, { usuarioId = null, agora = new Date() 
     const trabalho =
       pedido.canal === 'SALAO'
         ? null
-        : await pedidoRepo.criarTrabalhoImpressao({ pedidoId: id, tipo: 'CANCELAMENTO', status: 'PENDENTE' }, tx);
+        : await pedidoRepo.criarTrabalhoImpressao({ lojaId, pedidoId: id, tipo: 'CANCELAMENTO', status: 'PENDENTE' }, tx);
     return { pedido, trabalho };
   }, OPCOES_TRANSACAO);
 
   const equipe = pedidoDaEquipe(pedido);
-  emitirParaEquipe('pedido:atualizado', equipe);
-  if (trabalho) emitirParaEquipe('impressao:nova', trabalho);
+  emitirParaEquipe(lojaId, 'pedido:atualizado', equipe);
+  if (trabalho) emitirParaEquipe(lojaId, 'impressao:nova', trabalho);
   return equipe;
 }

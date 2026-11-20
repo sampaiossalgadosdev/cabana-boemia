@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 /** Campos seguros para devolver ao cliente (nunca senhaHash). */
 export const CAMPOS_PUBLICOS = {
   id: true,
+  lojaId: true,
   nome: true,
   email: true,
   papel: true,
@@ -22,8 +23,10 @@ export function criar(dados, db = prisma) {
   return db.usuario.create({ data: dados, select: CAMPOS_PUBLICOS });
 }
 
-export function listar(db = prisma) {
+/** Equipe da loja (DONO e ATENDENTE; o ADMIN não tem loja e não aparece). */
+export function listar(lojaId, db = prisma) {
   return db.usuario.findMany({
+    where: { lojaId },
     select: CAMPOS_PUBLICOS,
     orderBy: [{ papel: 'asc' }, { nome: 'asc' }],
   });

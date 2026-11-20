@@ -2,16 +2,19 @@ import { Server } from 'socket.io';
 import { verificarAccessToken } from './tokens.js';
 import { aoEmitirParaEquipe, aoEventoInterno } from './eventos.js';
 import { buscarPorId } from '../repositories/usuario.repository.js';
+import { lojaDoUsuario } from '../services/loja.service.js';
 
-export const SALA_EQUIPE = 'equipe';
 export const CAMINHO_SOCKET = '/api/socket.io';
+/** Sala da equipe de uma loja: recebe só os pedidos, impressões, caixa e cardápio dela. */
+export const salaDaLoja = (lojaId) => `loja:${lojaId}`;
 /** Sala só com as conexões de um usuário (para derrubá-las ao desativar). */
 export const salaDoUsuario = (id) => `usuario:${id}`;
 
 /**
  * Socket.IO no mesmo servidor HTTP da API. Só entra quem manda o access
- * token da EQUIPE em `auth.token` (token de cliente é recusado); todo
- * conectado entra na sala "equipe", que recebe "pedido:novo" e "impressao:nova".
+ * token da EQUIPE em `auth.token` (token de cliente é recusado); cada
+ * conectado entra na sala da SUA loja (DONO/ATENDENTE: a do cadastro; ADMIN:
+ * a padrão, por enquanto), que recebe "pedido:novo", "impressao:nova" etc.
  * @param {import('node:http').Server} servidorHttp
  * @param {{ corsOrigins?: string[] }} [opcoes]
  */
@@ -34,6 +37,7 @@ export function criarTempoReal(servidorHttp, { corsOrigins = [] } = {}) {
       const usuario = await buscarPorId(Number(payload.sub));
       if (!usuario?.ativo) return next(new Error('NAO_AUTENTICADO'));
       socket.data.usuario = { id: usuario.id, papel: usuario.papel };
+      socket.data.lojaId = await lojaDoUsuario(usuario);
       next();
     } catch {
       next(new Error('NAO_AUTENTICADO'));
@@ -41,10 +45,10 @@ export function criarTempoReal(servidorHttp, { corsOrigins = [] } = {}) {
   });
 
   io.on('connection', (socket) => {
-    socket.join([SALA_EQUIPE, salaDoUsuario(socket.data.usuario.id)]);
+    socket.join([salaDaLoja(socket.data.lojaId), salaDoUsuario(socket.data.usuario.id)]);
   });
 
-  const pararEquipe = aoEmitirParaEquipe((evento, dados) => io.to(SALA_EQUIPE).emit(evento, dados));
+  const pararEquipe = aoEmitirParaEquipe((evento, dados, lojaId) => io.to(salaDaLoja(lojaId)).emit(evento, dados));
   // Desativado perde o acesso na hora também no tempo real (a reconexão é
   // recusada pelo middleware, que lê o usuário do banco).
   const pararDesativado = aoEventoInterno('usuario:desativado', ({ usuarioId }) => {

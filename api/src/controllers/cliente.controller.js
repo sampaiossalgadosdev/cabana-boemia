@@ -113,13 +113,13 @@ export function criarClienteController(
 
     async criarEndereco(req, res) {
       const dados = validar(enderecoSchema, req.body);
-      res.status(201).json({ endereco: await enderecoService.criar(req.cliente.id, dados) });
+      res.status(201).json({ endereco: await enderecoService.criar(req.cliente.id, dados, { lojaId: req.lojaId }) });
     },
 
     async atualizarEndereco(req, res) {
       const { id } = validar(idSchema, req.params);
       const dados = validar(enderecoSchema, req.body);
-      res.json({ endereco: await enderecoService.atualizar(req.cliente.id, id, dados) });
+      res.json({ endereco: await enderecoService.atualizar(req.cliente.id, id, dados, { lojaId: req.lojaId }) });
     },
 
     async removerEndereco(req, res) {
@@ -130,7 +130,7 @@ export function criarClienteController(
 
     async criarPedido(req, res) {
       const dados = validar(pedidoSchema, req.body);
-      const { pedido, criado } = await pedidoService.criarPedidoDoSite(req.cliente, dados, { agora: relogio() });
+      const { pedido, criado } = await pedidoService.criarPedidoDoSite(req.lojaId, req.cliente, dados, { agora: relogio() });
       await registrarAcesso({ clienteId: req.cliente.id, ip: req.ip, evento: 'PEDIDO' });
       res.status(criado ? 201 : 200).json({ pedido });
     },

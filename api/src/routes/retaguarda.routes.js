@@ -2,10 +2,12 @@ import { Router } from 'express';
 import { assincrono } from '../lib/assincrono.js';
 import { autenticar } from '../middlewares/autenticar.js';
 import { exigirPapel } from '../middlewares/exigirPapel.js';
+import { lojaDaEquipe } from '../middlewares/loja.js';
 import { criarRetaguardaController } from '../controllers/retaguarda.controller.js';
 
 /**
- * Rotas da retaguarda (só DONO), nunca em cache. Catálogo, estoque, turnos,
+ * Rotas da retaguarda (só DONO; ADMIN passa como DONO), na loja do usuário
+ * (`req.lojaId`), nunca em cache. Catálogo, estoque, turnos,
  * bairros e configuração emitem `cardapio:atualizado` para o PDV recarregar.
  * @param {{ relogio?: () => Date }} [opcoes]
  */
@@ -16,7 +18,7 @@ export function criarRetaguardaRoutes({ relogio } = {}) {
     res.set('Cache-Control', 'no-store');
     next();
   });
-  r.use(autenticar, exigirPapel('DONO'));
+  r.use(autenticar, exigirPapel('DONO'), lojaDaEquipe);
   r.get('/caixas', assincrono(c.caixas));
   // Pedidos de exclusão de conta feitos pela página /excluir-conta (tela na retaguarda: pendente).
   r.get('/solicitacoes-exclusao', assincrono(c.listarSolicitacoesExclusao));

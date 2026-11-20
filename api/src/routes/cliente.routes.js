@@ -5,6 +5,7 @@ import { criarVerificadorApple, criarRevogadorApple } from '../lib/apple.js';
 import { autenticarCliente, exigirTelefoneCliente } from '../middlewares/autenticarCliente.js';
 import { criarLimitadorAuthCliente } from '../middlewares/limitarLogin.js';
 import { criarClienteController } from '../controllers/cliente.controller.js';
+import { lojaDoSite } from '../middlewares/loja.js';
 
 /** Dados pessoais: nunca em cache. */
 function semCache(req, res, next) {
@@ -34,7 +35,8 @@ export function criarClienteRoutes({
   r.post('/auth/renovar', limitar, assincrono(c.renovar));
   r.post('/auth/sair', limitar, assincrono(c.sair));
 
-  r.use(autenticarCliente);
+  // Cadastro do cliente é único entre lojas; o pedido vai para a loja do site (padrão, por enquanto).
+  r.use(autenticarCliente, lojaDoSite);
   r.get('/me', c.me);
   r.put('/me', assincrono(c.atualizarMe));
   r.delete('/me', assincrono(c.excluirConta));

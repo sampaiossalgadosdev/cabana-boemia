@@ -1,5 +1,6 @@
 /**
- * Caixa do balcão: todo o dinheiro que passa pelo balcão (salão, delivery, site).
+ * Caixa do balcão de cada loja: todo o dinheiro que passa pelo balcão (salão,
+ * delivery, site). Um caixa aberto por loja (índice único parcial).
  *
  * esperado = valorInicial
  *          + Σ totalCentavos dos pedidos FINALIZADOS em DINHEIRO neste caixa
@@ -65,47 +66,47 @@ const caixaFechado = () =>
  * Dentro de uma transação: trava o caixa aberto (compartilhado) e devolve o
  * id; sem caixa aberto = 409 CAIXA_FECHADO. Usado ao finalizar pedido/comanda.
  */
-export async function exigirCaixaAberto(tx) {
-  const id = await caixaRepo.travarAbertoCompartilhado(tx);
+export async function exigirCaixaAberto(lojaId, tx) {
+  const id = await caixaRepo.travarAbertoCompartilhado(lojaId, tx);
   if (!id) throw caixaFechado();
   return id;
 }
 
-function avisar(caixa) {
-  emitirParaEquipe('caixa:atualizado', { caixa: caixaDaEquipe(caixa) });
+function avisar(lojaId, caixa) {
+  emitirParaEquipe(lojaId, 'caixa:atualizado', { caixa: caixaDaEquipe(caixa) });
 }
 
 // ───────── Equipe ─────────
 
-export async function caixaAtual() {
-  return caixaDaEquipe(await caixaRepo.buscarAberto());
+export async function caixaAtual(lojaId) {
+  return caixaDaEquipe(await caixaRepo.buscarAberto(lojaId));
 }
 
 const jaAberto = () =>
   new ErroHttp(409, 'Já existe um caixa aberto', { codigo: 'CAIXA_JA_ABERTO' });
 
-export async function abrirCaixa({ valorInicialCentavos }, { usuarioId, agora = new Date() }) {
-  if (await caixaRepo.buscarAberto()) throw jaAberto();
+export async function abrirCaixa(lojaId, { valorInicialCentavos }, { usuarioId, agora = new Date() }) {
+  if (await caixaRepo.buscarAberto(lojaId)) throw jaAberto();
   let caixa;
   try {
-    caixa = await caixaRepo.criar({ abertoPorId: usuarioId, valorInicialCentavos, abertoEm: agora });
+    caixa = await caixaRepo.criar({ lojaId, abertoPorId: usuarioId, valorInicialCentavos, abertoEm: agora });
   } catch (err) {
     // Duas aberturas ao mesmo tempo: a segunda bate no índice único parcial "Caixa_um_aberto".
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') throw jaAberto();
     throw err;
   }
-  avisar(caixa);
+  avisar(lojaId, caixa);
   return caixaDaEquipe(caixa);
 }
 
 /** Sangria (tira dinheiro da gaveta) ou suprimento (põe). Valor maior que a gaveta é permitido (fechamento cego). */
-export async function registrarMovimento({ tipo, valorCentavos, motivo }, { usuarioId, agora = new Date() }) {
+export async function registrarMovimento(lojaId, { tipo, valorCentavos, motivo }, { usuarioId, agora = new Date() }) {
   const caixa = await prisma.$transaction(async (tx) => {
-    const caixaId = await exigirCaixaAberto(tx);
+    const caixaId = await exigirCaixaAberto(lojaId, tx);
     await caixaRepo.criarMovimento({ caixaId, tipo, valorCentavos, motivo, usuarioId, criadoEm: agora }, tx);
     return caixaRepo.buscarPorId(caixaId, tx);
   }, OPCOES_TRANSACAO);
-  avisar(caixa);
+  avisar(lojaId, caixa);
   return caixaDaEquipe(caixa);
 }
 
@@ -142,12 +143,12 @@ async function valoresDoCaixa(caixaId, valorInicialCentavos, db) {
  * PEDIDOS_ABERTOS com a lista. Grava contado, esperado e diferença e cria o
  * TrabalhoImpressao FECHAMENTO. A resposta NÃO tem esperado nem diferença.
  */
-export async function fecharCaixa({ valorContadoCentavos, observacao = null }, { usuarioId, agora = new Date() }) {
+export async function fecharCaixa(lojaId, { valorContadoCentavos, observacao = null }, { usuarioId, agora = new Date() }) {
   const { caixa, trabalho } = await prisma.$transaction(async (tx) => {
-    const aberto = await caixaRepo.travarAbertoExclusivo(tx);
+    const aberto = await caixaRepo.travarAbertoExclusivo(lojaId, tx);
     if (!aberto) throw caixaFechado();
 
-    const pendentes = await caixaRepo.pedidosAbertos(STATUS_ABERTOS, tx);
+    const pendentes = await caixaRepo.pedidosAbertos(lojaId, STATUS_ABERTOS, tx);
     if (pendentes.length) {
       throw new ErroHttp(
         409,
@@ -170,14 +171,14 @@ export async function fecharCaixa({ valorContadoCentavos, observacao = null }, {
       tx,
     );
     const trabalho = await pedidoRepo.criarTrabalhoImpressao(
-      { caixaId: aberto.id, tipo: 'FECHAMENTO', status: 'PENDENTE' },
+      { lojaId, caixaId: aberto.id, tipo: 'FECHAMENTO', status: 'PENDENTE' },
       tx,
     );
     return { caixa, trabalho };
   }, OPCOES_TRANSACAO);
 
-  emitirParaEquipe('caixa:atualizado', { caixa: null });
-  emitirParaEquipe('impressao:nova', trabalho);
+  emitirParaEquipe(lojaId, 'caixa:atualizado', { caixa: null });
+  emitirParaEquipe(lojaId, 'impressao:nova', trabalho);
   return caixaDaEquipe(caixa);
 }
 
@@ -196,9 +197,9 @@ export async function resumoParaCupom(caixaId) {
  * contado e diferença null.
  * @param {string} data "YYYY-MM-DD" ou "hoje"
  */
-export async function caixasDoDia(data, agora = new Date()) {
-  const { dia, inicio, fim } = await resolverDia(data, agora);
-  const caixas = await caixaRepo.listarAbertosEntre(inicio, fim);
+export async function caixasDoDia(lojaId, data, agora = new Date()) {
+  const { dia, inicio, fim } = await resolverDia(lojaId, data, agora);
+  const caixas = await caixaRepo.listarAbertosEntre(lojaId, inicio, fim);
   const saida = [];
   for (const c of caixas) {
     const valores = await valoresDoCaixa(c.id, c.valorInicialCentavos);

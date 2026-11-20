@@ -84,14 +84,14 @@ export function calcularProximaAbertura(turnos, agora) {
   };
 }
 
-/** Turno ativo agora, lendo os turnos ativos do banco. */
-export async function turnoAtivo(agora = new Date(), db) {
-  return calcularTurnoAtivo(await turnoRepo.listarAtivosComHorarios(db), agora);
+/** Turno ativo agora na loja, lendo os turnos ativos do banco. */
+export async function turnoAtivo(lojaId, agora = new Date(), db) {
+  return calcularTurnoAtivo(await turnoRepo.listarAtivosComHorarios(lojaId, db), agora);
 }
 
-/** Próxima abertura depois de `agora`, lendo os turnos ativos do banco. */
-export async function proximaAbertura(agora = new Date(), db) {
-  return calcularProximaAbertura(await turnoRepo.listarAtivosComHorarios(db), agora);
+/** Próxima abertura da loja depois de `agora`, lendo os turnos ativos do banco. */
+export async function proximaAbertura(lojaId, agora = new Date(), db) {
+  return calcularProximaAbertura(await turnoRepo.listarAtivosComHorarios(lojaId, db), agora);
 }
 
 // ───────── Retaguarda: horários ─────────
@@ -99,22 +99,23 @@ export async function proximaAbertura(agora = new Date(), db) {
 // Regra de sobreposição mora no shared (a retaguarda avisa antes de gravar).
 export { acharSobreposicao };
 
-/** Todos os turnos com horários (inclusive inativos). */
-export function listarTurnos() {
-  return turnoRepo.listarComHorarios();
+/** Todos os turnos da loja com horários (inclusive inativos). */
+export function listarTurnos(lojaId) {
+  return turnoRepo.listarComHorarios(lojaId);
 }
 
 /**
  * Troca todos os horários do turno. Recusa (422 HORARIO_SOBREPOSTO) horário
- * que cruza outro do mesmo turno ou de outro turno ativo. Os turnos ficam
+ * que cruza outro do mesmo turno ou de outro turno ativo DA MESMA LOJA (lojas
+ * diferentes podem abrir no mesmo horário). Os turnos da loja ficam
  * travados durante a checagem (duas edições ao mesmo tempo não se cruzam).
  * @param {number} turnoId
  * @param {{ diaSemana: number, inicio: string, fim: string }[]} horarios (já validados: HH:MM, 0–6, inicio ≠ fim)
  */
-export async function definirHorarios(turnoId, horarios) {
+export async function definirHorarios(lojaId, turnoId, horarios) {
   await prisma.$transaction(async (tx) => {
-    await turnoRepo.travarTurnos(tx);
-    const turnos = await turnoRepo.listarComHorarios(tx);
+    await turnoRepo.travarTurnos(lojaId, tx);
+    const turnos = await turnoRepo.listarComHorarios(lojaId, tx);
     const turno = turnos.find((t) => t.id === turnoId);
     if (!turno) throw new ErroHttp(404, 'Turno não encontrado', { codigo: 'NAO_ENCONTRADO' });
 
@@ -139,6 +140,6 @@ export async function definirHorarios(turnoId, horarios) {
     }
     await turnoRepo.substituirHorarios(turnoId, horarios, tx);
   });
-  avisarCardapioAtualizado('turnos');
-  return (await turnoRepo.listarComHorarios()).find((t) => t.id === turnoId);
+  avisarCardapioAtualizado(lojaId, 'turnos');
+  return (await turnoRepo.listarComHorarios(lojaId)).find((t) => t.id === turnoId);
 }

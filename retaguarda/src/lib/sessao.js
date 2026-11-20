@@ -25,6 +25,9 @@ export function expiracaoDoToken(token) {
   }
 }
 
+/** A retaguarda é do DONO; o ADMIN (plataforma) está acima dele e também entra. */
+export const podeEntrar = (papel) => papel === 'DONO' || papel === 'ADMIN';
+
 export class SessaoExpirada extends Error {
   constructor(mensagem = 'Sua sessão expirou. Entre de novo.') {
     super(mensagem);
@@ -125,7 +128,7 @@ export function criarSessao({ armazenamento, enviar, travar = (fn) => fn(), agor
 
   async function exigirDono() {
     const { usuario: u } = await chamar('GET', '/auth/me');
-    if (u.papel !== 'DONO') {
+    if (!podeEntrar(u.papel)) {
       await sair();
       throw Object.assign(new Error('A retaguarda é só para o dono.'), { codigo: 'SO_DONO' });
     }
@@ -133,12 +136,12 @@ export function criarSessao({ armazenamento, enviar, travar = (fn) => fn(), agor
     return u;
   }
 
-  /** Login por email e senha; quem não é DONO não entra (a sessão aberta é encerrada). */
+  /** Login por email e senha; quem não é DONO (ou ADMIN) não entra (a sessão aberta é encerrada). */
   async function entrar(email, senha) {
     const r = await enviar('POST', '/auth/login', { corpo: { email, senha } });
     access = r.accessToken;
     gravarRefresh(r.refreshToken);
-    if (r.usuario?.papel !== 'DONO') {
+    if (!podeEntrar(r.usuario?.papel)) {
       await sair();
       throw Object.assign(new Error('A retaguarda é só para o dono.'), { codigo: 'SO_DONO' });
     }

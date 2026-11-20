@@ -58,15 +58,16 @@ export function conferirRegras(d) {
   return null;
 }
 
-async function conferirReferencias(d, tx) {
-  if ((await produtoRepo.contarCategorias([d.categoriaId], tx)) !== 1) {
+/** Categoria, turnos e insumos precisam existir NA LOJA do produto. */
+async function conferirReferencias(lojaId, d, tx) {
+  if ((await produtoRepo.contarCategorias(lojaId, [d.categoriaId], tx)) !== 1) {
     throw invalido('Categoria não encontrada.', 'CATEGORIA_INVALIDA');
   }
-  if ((await produtoRepo.contarTurnos(d.turnoIds, tx)) !== d.turnoIds.length) {
+  if ((await produtoRepo.contarTurnos(lojaId, d.turnoIds, tx)) !== d.turnoIds.length) {
     throw invalido('Turno não encontrado.', 'TURNO_INVALIDO');
   }
   const insumoIds = d.insumos.map((i) => i.insumoId);
-  if ((await produtoRepo.contarInsumos(insumoIds, tx)) !== insumoIds.length) {
+  if ((await produtoRepo.contarInsumos(lojaId, insumoIds, tx)) !== insumoIds.length) {
     throw invalido('Insumo não encontrado.', 'INSUMO_INVALIDO');
   }
 }
@@ -86,34 +87,35 @@ const camposDoProduto = (d) => ({
   ordem: d.ordem,
 });
 
-async function gravar(fn) {
+async function gravar(lojaId, fn) {
   try {
     const id = await prisma.$transaction(fn, OPCOES_TRANSACAO);
-    avisarCardapioAtualizado('produtos');
-    return produtoPublico(await produtoRepo.buscarPorId(id));
+    avisarCardapioAtualizado(lojaId, 'produtos');
+    return produtoPublico(await produtoRepo.buscarPorId(lojaId, id));
   } catch (err) {
     if (ehDuplicado(err)) throw new ErroHttp(409, 'Já existe um produto com este nome', { codigo: 'NOME_EM_USO' });
     throw err;
   }
 }
 
-export async function listar() {
-  return (await produtoRepo.listar()).map(produtoPublico);
+export async function listar(lojaId) {
+  return (await produtoRepo.listar(lojaId)).map(produtoPublico);
 }
 
-export async function obter(id) {
-  const p = await produtoRepo.buscarPorId(id);
+export async function obter(lojaId, id) {
+  const p = await produtoRepo.buscarPorId(lojaId, id);
   if (!p) throw naoEncontrado();
   return produtoPublico(p);
 }
 
 /** Produto novo nasce disponível hoje (como no seed) e, se controla estoque, com saldo 0. */
-export function criar(d) {
+export function criar(lojaId, d) {
   const erro = conferirRegras(d);
   if (erro) throw erro;
-  return gravar(async (tx) => {
-    await conferirReferencias(d, tx);
+  return gravar(lojaId, async (tx) => {
+    await conferirReferencias(lojaId, d, tx);
     const { id } = await produtoRepo.criar(
+      lojaId,
       { ...camposDoProduto(d), disponivelHoje: true, estoque: d.controlaEstoque ? 0 : null },
       tx,
     );
@@ -124,15 +126,15 @@ export function criar(d) {
 }
 
 /** Edição completa (o formulário manda tudo). `disponivelHoje` e `estoque` não mudam aqui. */
-export function atualizar(id, d) {
+export function atualizar(lojaId, id, d) {
   const erro = conferirRegras(d);
   if (erro) throw erro;
-  return gravar(async (tx) => {
-    const atual = await produtoRepo.buscarEstado(id, tx);
+  return gravar(lojaId, async (tx) => {
+    const atual = await produtoRepo.buscarEstado(lojaId, id, tx);
     if (!atual) throw naoEncontrado();
-    await conferirReferencias(d, tx);
+    await conferirReferencias(lojaId, d, tx);
     const ligouControle = d.controlaEstoque && atual.estoque == null;
-    await produtoRepo.atualizar(id, { ...camposDoProduto(d), ...(ligouControle && { estoque: 0 }) }, tx);
+    await produtoRepo.atualizar(lojaId, id, { ...camposDoProduto(d), ...(ligouControle && { estoque: 0 }) }, tx);
     await produtoRepo.definirTurnos(id, d.turnoIds, tx);
     await produtoRepo.definirInsumos(id, d.insumos, tx);
     return id;
@@ -145,8 +147,8 @@ export function atualizar(id, d) {
  * Produtos ativos (de categoria ativa) do turno escolhido; sem turno: o
  * ativo, senão o da próxima abertura, senão o primeiro (mesma regra do PDV).
  */
-export async function cardapioDoDia({ turnoId } = {}, agora = new Date()) {
-  const todos = await turnoRepo.listarComHorarios();
+export async function cardapioDoDia(lojaId, { turnoId } = {}, agora = new Date()) {
+  const todos = await turnoRepo.listarComHorarios(lojaId);
   const ativos = todos.filter((t) => t.ativo);
   const ativo = calcularTurnoAtivo(ativos, agora);
   let turno;
@@ -158,14 +160,14 @@ export async function cardapioDoDia({ turnoId } = {}, agora = new Date()) {
     const primeiro = todos[0] ? { id: todos[0].id, nome: todos[0].nome } : null;
     turno = ativo ?? calcularProximaAbertura(ativos, agora)?.turno ?? primeiro;
   }
-  const produtos = turno ? (await produtoRepo.listarDoTurno(turno.id)).map(produtoPublico) : [];
+  const produtos = turno ? (await produtoRepo.listarDoTurno(lojaId, turno.id)).map(produtoPublico) : [];
   return { turno, turnoAtivo: ativo, turnos: todos.map((t) => ({ id: t.id, nome: t.nome })), produtos };
 }
 
-async function definirCampo(id, dados) {
+async function definirCampo(lojaId, id, dados) {
   try {
-    const p = await produtoRepo.definirCampo(id, dados);
-    avisarCardapioAtualizado('cardapio-do-dia');
+    const p = await produtoRepo.definirCampo(lojaId, id, dados);
+    avisarCardapioAtualizado(lojaId, 'cardapio-do-dia');
     return produtoPublico(p);
   } catch (err) {
     if (err?.code === 'P2025') throw naoEncontrado();
@@ -173,17 +175,17 @@ async function definirCampo(id, dados) {
   }
 }
 
-export const definirDisponivelHoje = (id, disponivelHoje) => definirCampo(id, { disponivelHoje });
+export const definirDisponivelHoje = (lojaId, id, disponivelHoje) => definirCampo(lojaId, id, { disponivelHoje });
 
-export const definirDescricao = (id, descricao) => definirCampo(id, { descricao });
+export const definirDescricao = (lojaId, id, descricao) => definirCampo(lojaId, id, { descricao });
 
 /** Liga disponivelHoje em todos os produtos ativos do turno. */
-export async function liberarTudo(turnoId) {
-  const turnos = await turnoRepo.listarComHorarios();
+export async function liberarTudo(lojaId, turnoId) {
+  const turnos = await turnoRepo.listarComHorarios(lojaId);
   if (!turnos.some((t) => t.id === turnoId)) {
     throw new ErroHttp(404, 'Turno não encontrado', { codigo: 'NAO_ENCONTRADO' });
   }
-  const liberados = await produtoRepo.liberarTudo(turnoId);
-  avisarCardapioAtualizado('cardapio-do-dia');
+  const liberados = await produtoRepo.liberarTudo(lojaId, turnoId);
+  avisarCardapioAtualizado(lojaId, 'cardapio-do-dia');
   return { liberados };
 }

@@ -68,9 +68,10 @@ export function atualizarCliente(id, dados, db = prisma) {
  * unidade (o "por kg" é do salão). Sem filtrar vendidoNoSite (o PDV vê tudo)
  * nem disponivelHoje/saldo (o service marca, a grade desabilita o esgotado).
  */
-export function listarProdutosDoTurno(turnoId, db = prisma) {
+export function listarProdutosDoTurno(lojaId, turnoId, db = prisma) {
   return db.produto.findMany({
     where: {
+      lojaId,
       ativo: true,
       tipoPreco: 'UNIDADE',
       categoria: { ativo: true },
@@ -92,9 +93,10 @@ export function listarProdutosDoTurno(turnoId, db = prisma) {
 }
 
 /** Produtos por quilo do turno (o "Prato por kg" do salão): ativos, de categoria ativa. */
-export function listarPorKgDoTurno(turnoId, db = prisma) {
+export function listarPorKgDoTurno(lojaId, turnoId, db = prisma) {
   return db.produto.findMany({
     where: {
+      lojaId,
       ativo: true,
       tipoPreco: 'POR_KG',
       categoria: { ativo: true },

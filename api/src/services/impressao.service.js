@@ -1,5 +1,5 @@
 /**
- * Fila de impressão do agente do PDV (balcão). O agente busca os pendentes,
+ * Fila de impressão do agente do PDV (balcão), por loja. O agente busca os pendentes da sua loja,
  * imprime em ordem de id e só confirma depois que a impressora aceitou.
  * Confirmar é idempotente (UPDATE condicionado): o mesmo id duas vezes não
  * muda nada. Falha só incrementa `tentativas`; o trabalho continua PENDENTE
@@ -12,8 +12,8 @@ import { horaViradaDe } from './diaOperacional.service.js';
 import { relatorioDoDia } from './relatorio.service.js';
 import * as impressaoRepo from '../repositories/impressao.repository.js';
 import * as pedidoRepo from '../repositories/pedido.repository.js';
-import * as configRepo from '../repositories/configuracao.repository.js';
-import { pedidoPublico } from './pedido.service.js';
+import * as lojaService from './loja.service.js';
+import { pedidoPublico, ehDaLoja } from './pedido.service.js';
 import { resumoParaCupom } from './caixa.service.js';
 
 /** Quantos trabalhos por busca (o agente busca de novo enquanto vier cheio). */
@@ -50,24 +50,25 @@ const trabalhoPublico = (t) => ({
  * FECHAMENTO não tem pedido: leva o resumo do caixa (sem esperado nem
  * diferença). RELATORIO_DIA leva o relatório do dia operacional, calculado agora.
  */
-async function comResumo(t, agora) {
+async function comResumo(lojaId, t, agora) {
   const publico = trabalhoPublico(t);
   if (t.caixaId) publico.caixa = await resumoParaCupom(t.caixaId);
-  if (t.dataRelatorio) publico.relatorio = await relatorioDoDia(publico.dataRelatorio, agora);
+  if (t.dataRelatorio) publico.relatorio = await relatorioDoDia(lojaId, publico.dataRelatorio, agora);
   return publico;
 }
 
 /** @returns {{ restaurante: { nome: string }, limite: number, trabalhos: object[] }} */
-export async function listarPendentes(agora = new Date()) {
-  const config = await configRepo.buscar();
+export async function listarPendentes(lojaId, agora = new Date()) {
+  const loja = await lojaService.buscar(lojaId);
   const trabalhos = await impressaoRepo.listarPendentes({
-    desde: inicioDaJanela(agora, horaViradaDe(config)),
+    lojaId,
+    desde: inicioDaJanela(agora, horaViradaDe(loja)),
     limite: LIMITE_PENDENTES,
   });
   return {
-    restaurante: { nome: config?.nomeRestaurante ?? 'Cabana Boemia' },
+    restaurante: { nome: loja.nome },
     limite: LIMITE_PENDENTES,
-    trabalhos: await Promise.all(trabalhos.map((t) => comResumo(t, agora))),
+    trabalhos: await Promise.all(trabalhos.map((t) => comResumo(lojaId, t, agora))),
   };
 }
 
@@ -75,18 +76,18 @@ export async function listarPendentes(agora = new Date()) {
  * Idempotente: a primeira chamada marca IMPRESSO; as seguintes devolvem o
  * mesmo trabalho com `jaConfirmado: true` (200, sem mudar `impressoEm`).
  */
-export async function confirmar(id, agora = new Date()) {
-  const mudou = await impressaoRepo.confirmarSeNaoImpresso(id, agora);
-  const trabalho = await impressaoRepo.buscar(id);
+export async function confirmar(lojaId, id, agora = new Date()) {
+  const mudou = await impressaoRepo.confirmarSeNaoImpresso(lojaId, id, agora);
+  const trabalho = await impressaoRepo.buscar(lojaId, id);
   if (!trabalho) throw new ErroHttp(404, 'Trabalho de impressão não encontrado', { codigo: 'NAO_ENCONTRADO' });
   return { trabalho: trabalhoPublico(trabalho), jaConfirmado: mudou === 0 };
 }
 
 /** Incrementa `tentativas` e guarda o erro. Já impresso = 409 (não volta a pendente). */
-export async function registrarFalha(id, erro) {
+export async function registrarFalha(lojaId, id, erro) {
   const mensagem = String(erro ?? '').trim().slice(0, MAX_ERRO) || 'Falha na impressão';
-  const mudou = await impressaoRepo.registrarFalhaSePendente(id, mensagem);
-  const trabalho = await impressaoRepo.buscar(id);
+  const mudou = await impressaoRepo.registrarFalhaSePendente(lojaId, id, mensagem);
+  const trabalho = await impressaoRepo.buscar(lojaId, id);
   if (!trabalho) throw new ErroHttp(404, 'Trabalho de impressão não encontrado', { codigo: 'NAO_ENCONTRADO' });
   if (mudou === 0) {
     throw new ErroHttp(409, 'Trabalho já foi impresso', { codigo: 'TRABALHO_IMPRESSO' });
@@ -98,11 +99,11 @@ export async function registrarFalha(id, erro) {
  * "Reimprimir" do PDV: um trabalho NOVO (outro id), nunca reabre o antigo.
  * Pedido cancelado reimprime o cupom de cancelamento; senão, o do pedido.
  */
-export async function reimprimir(pedidoId) {
+export async function reimprimir(lojaId, pedidoId) {
   const pedido = await pedidoRepo.buscarStatus(pedidoId);
-  if (!pedido) throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+  if (!ehDaLoja(pedido, lojaId)) throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
   const tipo = pedido.status === 'CANCELADO' ? 'CANCELAMENTO' : 'PEDIDO';
-  const trabalho = await pedidoRepo.criarTrabalhoImpressao({ pedidoId, tipo, status: 'PENDENTE' });
-  emitirParaEquipe('impressao:nova', trabalho);
+  const trabalho = await pedidoRepo.criarTrabalhoImpressao({ lojaId, pedidoId, tipo, status: 'PENDENTE' });
+  emitirParaEquipe(lojaId, 'impressao:nova', trabalho);
   return trabalho;
 }

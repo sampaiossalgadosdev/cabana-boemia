@@ -19,26 +19,26 @@ const senhaSchema = z.object({ senha });
 const idSchema = z.object({ id: z.coerce.number().int().positive() });
 
 export async function criar(req, res) {
-  res.status(201).json({ usuario: await usuarioService.criarAtendente(validar(criarSchema, req.body)) });
+  res.status(201).json({ usuario: await usuarioService.criarAtendente({ ...validar(criarSchema, req.body), lojaId: req.lojaId }) });
 }
 
 export async function listar(req, res) {
-  res.json({ usuarios: await usuarioService.listar() });
+  res.json({ usuarios: await usuarioService.listar(req.lojaId) });
 }
 
 export async function desativar(req, res) {
   const { id } = validar(idSchema, req.params);
-  res.json({ usuario: await usuarioService.desativar(id) });
+  res.json({ usuario: await usuarioService.desativar(req.lojaId, id) });
 }
 
 export async function reativar(req, res) {
   const { id } = validar(idSchema, req.params);
-  res.json({ usuario: await usuarioService.reativar(id) });
+  res.json({ usuario: await usuarioService.reativar(req.lojaId, id) });
 }
 
 export async function trocarSenha(req, res) {
   const { id } = validar(idSchema, req.params);
   const { senha: nova } = validar(senhaSchema, req.body);
-  await usuarioService.trocarSenha(id, nova);
+  await usuarioService.trocarSenha(req.lojaId, id, nova);
   res.status(204).end();
 }

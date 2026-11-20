@@ -7,9 +7,13 @@ export const ENDERECOS_MAX = 10;
 const naoEncontrado = () =>
   new ErroHttp(404, 'Endereço não encontrado', { codigo: 'NAO_ENCONTRADO' });
 
-async function garantirBairroAtivo(bairroId, db) {
+/**
+ * O endereço é do cliente (cadastro único entre lojas), mas o bairro é de uma
+ * loja: com `lojaId`, o bairro precisa ser atendido por ela.
+ */
+async function garantirBairroAtivo(bairroId, lojaId, db) {
   const bairro = await enderecoRepo.buscarBairro(bairroId, db);
-  if (!bairro || !bairro.ativo) {
+  if (!bairro || !bairro.ativo || (lojaId != null && bairro.lojaId !== lojaId)) {
     throw new ErroHttp(422, 'Não entregamos neste bairro', { codigo: 'BAIRRO_INVALIDO' });
   }
 }
@@ -22,9 +26,9 @@ export function listar(clienteId) {
  * O primeiro endereço vira principal. Marcar um como principal desmarca os
  * outros: no máximo um principal por cliente (regra sem suporte no schema).
  */
-export function criar(clienteId, { principal, ...dados }) {
+export function criar(clienteId, { principal, ...dados }, { lojaId = null } = {}) {
   return prisma.$transaction(async (tx) => {
-    await garantirBairroAtivo(dados.bairroId, tx);
+    await garantirBairroAtivo(dados.bairroId, lojaId, tx);
     const total = await enderecoRepo.contarDoCliente(clienteId, tx);
     if (total >= ENDERECOS_MAX) {
       throw new ErroHttp(409, `Limite de ${ENDERECOS_MAX} endereços. Apague um para cadastrar outro.`, {
@@ -37,10 +41,10 @@ export function criar(clienteId, { principal, ...dados }) {
   });
 }
 
-export function atualizar(clienteId, id, { principal, ...dados }) {
+export function atualizar(clienteId, id, { principal, ...dados }, { lojaId = null } = {}) {
   return prisma.$transaction(async (tx) => {
     if (!(await enderecoRepo.buscarDoCliente(clienteId, id, tx))) throw naoEncontrado();
-    await garantirBairroAtivo(dados.bairroId, tx);
+    await garantirBairroAtivo(dados.bairroId, lojaId, tx);
     if (principal === true) await enderecoRepo.desmarcarPrincipais(clienteId, id, tx);
     const campos = principal === undefined ? dados : { ...dados, principal };
     return enderecoRepo.atualizar(id, campos, tx);

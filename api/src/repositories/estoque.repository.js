@@ -8,10 +8,10 @@ const SELECT_INSUMO = {
   produtos: { select: { produto: { select: { id: true, nome: true } } }, orderBy: { produtoId: 'asc' } },
 };
 
-/** Produtos com estoque próprio (bebidas etc.), inclusive inativos. */
-export function listarProdutosComEstoque(db = prisma) {
+/** Produtos da loja com estoque próprio (bebidas etc.), inclusive inativos. */
+export function listarProdutosComEstoque(lojaId, db = prisma) {
   return db.produto.findMany({
-    where: { controlaEstoque: true },
+    where: { lojaId, controlaEstoque: true },
     select: {
       id: true,
       nome: true,
@@ -24,35 +24,36 @@ export function listarProdutosComEstoque(db = prisma) {
   });
 }
 
-export function listarInsumos(db = prisma) {
-  return db.insumo.findMany({ select: SELECT_INSUMO, orderBy: { nome: 'asc' } });
+export function listarInsumos(lojaId, db = prisma) {
+  return db.insumo.findMany({ where: { lojaId }, select: SELECT_INSUMO, orderBy: { nome: 'asc' } });
 }
 
-export function buscarInsumo(id, db = prisma) {
-  return db.insumo.findUnique({ where: { id }, select: SELECT_INSUMO });
+export function buscarInsumo(lojaId, id, db = prisma) {
+  return db.insumo.findFirst({ where: { id, lojaId }, select: SELECT_INSUMO });
 }
 
-export function criarInsumo(dados, db = prisma) {
-  return db.insumo.create({ data: dados, select: SELECT_INSUMO });
+export function criarInsumo(lojaId, dados, db = prisma) {
+  return db.insumo.create({ data: { ...dados, lojaId }, select: SELECT_INSUMO });
 }
 
-export function atualizarInsumo(id, dados, db = prisma) {
-  return db.insumo.update({ where: { id }, data: dados, select: SELECT_INSUMO });
+/** Só da loja: de outra loja = P2025 (não encontrado). */
+export function atualizarInsumo(lojaId, id, dados, db = prisma) {
+  return db.insumo.update({ where: { id, lojaId }, data: dados, select: SELECT_INSUMO });
 }
 
 // ───────── Saldo (sempre atômico) ─────────
 
 /** Entrada: incremento atômico. Produto só se controla estoque. @returns count */
-export async function somarProduto(id, quantidade, db = prisma) {
+export async function somarProduto(lojaId, id, quantidade, db = prisma) {
   const { count } = await db.produto.updateMany({
-    where: { id, controlaEstoque: true },
+    where: { id, lojaId, controlaEstoque: true },
     data: { estoque: { increment: quantidade } },
   });
   return count;
 }
 
-export async function somarInsumo(id, quantidade, db = prisma) {
-  const { count } = await db.insumo.updateMany({ where: { id }, data: { estoque: { increment: quantidade } } });
+export async function somarInsumo(lojaId, id, quantidade, db = prisma) {
+  const { count } = await db.insumo.updateMany({ where: { id, lojaId }, data: { estoque: { increment: quantidade } } });
   return count;
 }
 
@@ -61,15 +62,15 @@ export async function somarInsumo(id, quantidade, db = prisma) {
  * (pedido, comanda) esperam o ajuste terminar e reavaliam `estoque >= qtd`.
  * @returns {Promise<{ id: number, nome: string, estoque: number|null, controlaEstoque: boolean } | null>}
  */
-export async function travarProduto(id, db) {
+export async function travarProduto(lojaId, id, db) {
   const [linha] = await db.$queryRaw`
-    SELECT "id", "nome", "estoque", "controlaEstoque" FROM "Produto" WHERE "id" = ${id} FOR UPDATE`;
+    SELECT "id", "nome", "estoque", "controlaEstoque" FROM "Produto" WHERE "id" = ${id} AND "lojaId" = ${lojaId} FOR UPDATE`;
   return linha ?? null;
 }
 
-export async function travarInsumo(id, db) {
+export async function travarInsumo(lojaId, id, db) {
   const [linha] = await db.$queryRaw`
-    SELECT "id", "nome", "estoque" FROM "Insumo" WHERE "id" = ${id} FOR UPDATE`;
+    SELECT "id", "nome", "estoque" FROM "Insumo" WHERE "id" = ${id} AND "lojaId" = ${lojaId} FOR UPDATE`;
   return linha ? { ...linha, controlaEstoque: true } : null;
 }
 
@@ -81,12 +82,12 @@ export function definirSaldoInsumo(id, estoque, db) {
   return db.insumo.update({ where: { id }, data: { estoque }, select: { id: true } });
 }
 
-export function saldoProduto(id, db = prisma) {
-  return db.produto.findUnique({ where: { id }, select: { id: true, nome: true, estoque: true, estoqueMinimo: true } });
+export function saldoProduto(lojaId, id, db = prisma) {
+  return db.produto.findFirst({ where: { id, lojaId }, select: { id: true, nome: true, estoque: true, estoqueMinimo: true } });
 }
 
-export function saldoInsumo(id, db = prisma) {
-  return db.insumo.findUnique({ where: { id }, select: { id: true, nome: true, estoque: true, estoqueMinimo: true } });
+export function saldoInsumo(lojaId, id, db = prisma) {
+  return db.insumo.findFirst({ where: { id, lojaId }, select: { id: true, nome: true, estoque: true, estoqueMinimo: true } });
 }
 
 // ───────── Histórico ─────────
@@ -108,12 +109,14 @@ export function criarMovimentacao(dados, db = prisma) {
 }
 
 /**
- * Mais recentes primeiro, paginado por id (`antesDeId`).
- * @param {{ produtoId?: number, insumoId?: number, tipo?: string, antesDeId?: number, limite: number }} filtro
+ * Movimentações da loja (do produto ou do insumo dela), mais recentes primeiro,
+ * paginado por id (`antesDeId`).
+ * @param {{ lojaId: number, produtoId?: number, insumoId?: number, tipo?: string, antesDeId?: number, limite: number }} filtro
  */
-export function listarMovimentacoes({ produtoId, insumoId, tipo, antesDeId, limite }, db = prisma) {
+export function listarMovimentacoes({ lojaId, produtoId, insumoId, tipo, antesDeId, limite }, db = prisma) {
   return db.movimentacaoEstoque.findMany({
     where: {
+      OR: [{ produto: { lojaId } }, { insumo: { lojaId } }],
       ...(produtoId && { produtoId }),
       ...(insumoId && { insumoId }),
       ...(tipo && { tipo }),

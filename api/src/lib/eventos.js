@@ -2,32 +2,40 @@ import { EventEmitter } from 'node:events';
 
 /**
  * Barramento interno de eventos para a equipe (PDV/retaguarda). Os services
- * publicam aqui SÓ DEPOIS do commit; o Socket.IO (lib/tempoReal.js) repassa
- * para a sala da equipe. Sem Socket.IO (testes), ninguém escuta e nada quebra.
+ * publicam aqui SÓ DEPOIS do commit, sempre com a loja do dado; o Socket.IO
+ * (lib/tempoReal.js) repassa só para a sala daquela loja. Sem Socket.IO
+ * (testes), ninguém escuta e nada quebra.
  */
 const barramento = new EventEmitter();
 barramento.setMaxListeners(50);
 
-/** @param {'pedido:novo' | 'pedido:atualizado' | 'impressao:nova' | 'caixa:atualizado' | 'cardapio:atualizado'} evento */
-export function emitirParaEquipe(evento, dados) {
-  barramento.emit('equipe', evento, dados);
+/**
+ * @param {number} lojaId loja do pedido/caixa/cardápio: só a equipe dela recebe
+ * @param {'pedido:novo' | 'pedido:atualizado' | 'impressao:nova' | 'caixa:atualizado' | 'cardapio:atualizado'} evento
+ */
+export function emitirParaEquipe(lojaId, evento, dados) {
+  barramento.emit('equipe', evento, dados, lojaId);
 }
 
 /**
  * A retaguarda mudou algo que o PDV mostra (produtos, categorias, cardápio do
  * dia, turnos, bairros, estoque, configuração): o PDV recarrega o que estiver
  * na tela. Chamar SÓ depois do commit.
+ * @param {number} lojaId
  * @param {'produtos' | 'categorias' | 'cardapio-do-dia' | 'turnos' | 'bairros' | 'estoque' | 'config'} origem
  */
-export function avisarCardapioAtualizado(origem) {
-  emitirParaEquipe('cardapio:atualizado', { origem });
+export function avisarCardapioAtualizado(lojaId, origem) {
+  emitirParaEquipe(lojaId, 'cardapio:atualizado', { origem });
 }
 
-/** @returns {() => void} função para parar de escutar */
+/**
+ * @param {(evento: string, dados: unknown, lojaId: number) => void} ouvinte
+ * @returns {() => void} função para parar de escutar
+ */
 export function aoEmitirParaEquipe(ouvinte) {
-  const seguro = (evento, dados) => {
+  const seguro = (evento, dados, lojaId) => {
     try {
-      ouvinte(evento, dados);
+      ouvinte(evento, dados, lojaId);
     } catch (err) {
       console.error(`Falha ao repassar o evento "${evento}":`, err);
     }

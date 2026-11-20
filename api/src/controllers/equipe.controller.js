@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import * as identidadeService from '../services/identidade.service.js';
+import * as bairroService from '../services/bairro.service.js';
 import { validar } from '../lib/validar.js';
 import { horaVirada } from '../services/diaOperacional.service.js';
 import * as pedidoService from '../services/pedido.service.js';
@@ -222,6 +223,10 @@ const tempoSchema = z.object({
 /** @param {() => Date} [relogio] fonte do "agora" (injetável nos testes) */
 export function criarEquipeController(relogio = () => new Date()) {
   return {
+    /** Bairros onde ESTA loja entrega (área ativa, bairro ativo na cidade), com a taxa dela. */
+    async bairros(req, res) {
+      res.json({ bairros: await bairroService.listarOndeEntrega(req.lojaId) });
+    },
     /** Loja em que o PDV está trabalhando (nome, logo, cor) para o tema e o cupom. */
     async loja(req, res) {
       res.json({ loja: await identidadeService.identidadeDaLoja(req.lojaId) });

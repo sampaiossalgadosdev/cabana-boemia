@@ -19,6 +19,7 @@ export function criarEquipeRoutes({ relogio } = {}) {
   });
   r.use(autenticar, exigirPapel('DONO', 'ATENDENTE'), lojaDaEquipe);
   r.get('/loja', assincrono(c.loja));
+  r.get('/bairros', assincrono(c.bairros));
   r.get('/pedidos', assincrono(c.listarPedidos));
   r.post('/pedidos', assincrono(c.criarPedido));
   r.patch('/pedidos/:id/finalizar', assincrono(c.finalizarPedido));

@@ -8,6 +8,7 @@
  */
 import { prisma } from '../lib/prisma.js';
 import { ErroHttp, ehDuplicado, ehInexistente } from '../lib/erros.js';
+import { avisarCardapioAtualizado } from '../lib/eventos.js';
 import * as lojaRepo from '../repositories/loja.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import { calcularTurnoAtivo, calcularProximaAbertura } from './turno.service.js';
@@ -184,6 +185,8 @@ export async function editarLoja(id, dados) {
   try {
     const loja = await lojaRepo.atualizar(id, dados);
     await limparImagensDaLoja(loja);
+    // Nome, logo ou cor podem ter mudado: o PDV da loja troca o tema na hora.
+    avisarCardapioAtualizado(id, 'loja');
     return lojaDaPlataforma(loja);
   } catch (err) {
     if (ehDuplicado(err)) throw slugEmUso();

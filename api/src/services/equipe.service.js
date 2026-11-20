@@ -7,11 +7,13 @@ import { paraBusca } from '../lib/texto.js';
 import { emitirParaEquipe } from '../lib/eventos.js';
 import { prisma } from '../lib/prisma.js';
 import * as pedidoRepo from '../repositories/pedido.repository.js';
-import * as configRepo from '../repositories/configuracao.repository.js';
+import * as lojaRepo from '../repositories/loja.repository.js';
+import * as lojaService from './loja.service.js';
 import * as equipeRepo from '../repositories/equipe.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoService from './endereco.service.js';
-import { OPCOES_TRANSACAO, pedidoDaEquipe, STATUS_ABERTOS } from './pedido.service.js';
+import { bairroParaLoja } from './bairro.service.js';
+import { OPCOES_TRANSACAO, pedidoDaEquipe, STATUS_ABERTOS, ehDaLoja } from './pedido.service.js';
 import { exigirCaixaAberto } from './caixa.service.js';
 import { calcularTempoEstimado, manualDeHoje, saldoDisponivel, temSaldo } from './publico.service.js';
 
@@ -28,9 +30,10 @@ export const TEMPO_MAX = 240;
  * @param {{ dataRef: string, canais?: string[], somenteAbertos?: boolean }} filtro
  *   `dataRef`: "YYYY-MM-DD" ou "hoje" (dia operacional de `agora`).
  */
-export async function listarPedidosDoDia({ dataRef, canais, somenteAbertos = true }, agora = new Date()) {
-  const dia = dataRef === 'hoje' ? diaOperacional(agora, await horaVirada()) : dataRef;
+export async function listarPedidosDoDia(lojaId, { dataRef, canais, somenteAbertos = true }, agora = new Date()) {
+  const dia = dataRef === 'hoje' ? diaOperacional(agora, await horaVirada(lojaId)) : dataRef;
   const pedidos = await pedidoRepo.listarDoDia({
+    lojaId,
     dataRef: dia,
     canais,
     status: somenteAbertos ? STATUS_ABERTOS : undefined,
@@ -45,12 +48,16 @@ export async function listarPedidosDoDia({ dataRef, canais, somenteAbertos = tru
  * e grava o `caixaId`: o pedido entra no caixa em que foi finalizado.
  * Avisa a equipe com "pedido:atualizado".
  */
-export async function finalizarPedido(id, { formaPagamento }, agora = new Date()) {
+export async function finalizarPedido(lojaId, id, { formaPagamento }, agora = new Date()) {
+  // De outra loja = 404 antes de tudo (a loja do pedido nunca muda; o caixa é travado depois).
+  if (!ehDaLoja(await pedidoRepo.buscarStatus(id), lojaId)) {
+    throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+  }
   const pedido = await prisma.$transaction(async (tx) => {
     // Caixa primeiro (mesma ordem de travas do fechamento de comanda): caixa → pedido.
-    const caixaId = await exigirCaixaAberto(tx);
+    const caixaId = await exigirCaixaAberto(lojaId, tx);
     const atual = await pedidoRepo.buscarPorId(id, tx);
-    if (!atual) throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+    if (!ehDaLoja(atual, lojaId)) throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
     // Já pago ("pago agora" no PDV): vale a forma em que foi pago; a informada é ignorada.
     // O caixa do pagamento é o aberto agora (com pedido aberto o caixa não fecha).
     const forma = atual.pagoEm ? atual.formaPagamento : formaPagamento;
@@ -76,15 +83,12 @@ export async function finalizarPedido(id, { formaPagamento }, agora = new Date()
   }, OPCOES_TRANSACAO);
 
   const equipe = pedidoDaEquipe(pedido);
-  emitirParaEquipe('pedido:atualizado', equipe);
+  emitirParaEquipe(lojaId, 'pedido:atualizado', equipe);
   return equipe;
 }
 
-const CONFIG_PADRAO = { tempoEstimadoPadraoMin: 40, tempoEstimadoManualMin: null, tempoManualDefinidoEm: null };
-
 /** `manualMin` só aparece se foi definido hoje (dia operacional); senão null. */
-function tempoPublico(config, agora) {
-  const c = config ?? CONFIG_PADRAO;
+function tempoPublico(c, agora) {
   return {
     padraoMin: c.tempoEstimadoPadraoMin,
     manualMin: manualDeHoje(c, agora) ? c.tempoEstimadoManualMin : null,
@@ -92,13 +96,14 @@ function tempoPublico(config, agora) {
   };
 }
 
-export async function obterTempoEstimado(agora = new Date()) {
-  return tempoPublico(await configRepo.buscar(), agora);
+export async function obterTempoEstimado(lojaId, agora = new Date()) {
+  return tempoPublico(await lojaService.buscar(lojaId), agora);
 }
 
 /** `minutos` null = volta ao padrão (limpa o manual e a data). */
-export async function definirTempoEstimado(minutos, agora = new Date()) {
-  const config = await configRepo.definirTempoManual({
+export async function definirTempoEstimado(lojaId, minutos, agora = new Date()) {
+  await lojaService.buscar(lojaId);
+  const config = await lojaRepo.definirTempoManual(lojaId, {
     tempoEstimadoManualMin: minutos,
     tempoManualDefinidoEm: minutos == null ? null : agora,
   });
@@ -110,10 +115,11 @@ export async function definirTempoEstimado(minutos, agora = new Date()) {
 export const BUSCA_LIMITE = 10;
 
 /**
- * Cliente com endereços (principal primeiro) e a taxa de cada bairro.
+ * Cliente com endereços (principal primeiro) e o bairro de cada um visto pela
+ * loja (taxa dela; `ativo` = a loja entrega lá).
  * `doSite`: cadastro feito pelo login do Google (nome e e-mail são do cliente).
  */
-function clienteDaEquipe(c) {
+function clienteDaEquipe(c, lojaId) {
   return {
     id: c.id,
     nome: c.nome,
@@ -131,15 +137,15 @@ function clienteDaEquipe(c) {
       cidade: e.cidade ?? null,
       estado: e.estado ?? null,
       principal: e.principal,
-      bairro: e.bairro,
+      bairro: bairroParaLoja(e.bairro, lojaId),
     })),
   };
 }
 
-const clienteJaExiste = (existente) =>
+const clienteJaExiste = (existente, lojaId) =>
   new ErroHttp(409, `Já existe cliente com este telefone: ${existente.nome}`, {
     codigo: 'CLIENTE_JA_EXISTE',
-    detalhes: { cliente: clienteDaEquipe(existente) },
+    detalhes: { cliente: clienteDaEquipe(existente, lojaId) },
   });
 
 const clienteNaoEncontrado = () => new ErroHttp(404, 'Cliente não encontrado', { codigo: 'NAO_ENCONTRADO' });
@@ -149,13 +155,13 @@ const clienteNaoEncontrado = () => new ErroHttp(404, 'Cliente não encontrado', 
  * coluna nomeBusca), ou por trecho do telefone (a partir de 3 dígitos).
  * @param {string} busca já com trim e pelo menos 2 caracteres
  */
-export async function buscarClientes(busca) {
+export async function buscarClientes(lojaId, busca) {
   const digitos = busca.replace(/\D/g, '');
   const clientes = await equipeRepo.buscarClientes(
     { termo: paraBusca(busca), digitos: digitos.length >= 3 ? digitos : null },
     BUSCA_LIMITE,
   );
-  return clientes.map(clienteDaEquipe);
+  return clientes.map((c) => clienteDaEquipe(c, lojaId));
 }
 
 /**
@@ -163,19 +169,17 @@ export async function buscarClientes(busca) {
  * Sem endereço: encomenda retirada no balcão. Telefone já cadastrado = 409
  * CLIENTE_JA_EXISTE com o cliente existente (o PDV seleciona ele).
  */
-export async function criarCliente({ nome, telefone, email = null, observacao = null, endereco = null }) {
+export async function criarCliente(lojaId, { nome, telefone, email = null, observacao = null, endereco = null }) {
   const existente = await equipeRepo.buscarClientePorTelefone(telefone);
-  if (existente) throw clienteJaExiste(existente);
+  if (existente) throw clienteJaExiste(existente, lojaId);
   const id = await prisma.$transaction(async (tx) => {
-    if (endereco) {
-      const bairro = await pedidoRepo.buscarBairro(endereco.bairroId, tx);
-      if (!bairro?.ativo) throw new ErroHttp(422, 'Não entregamos neste bairro', { codigo: 'BAIRRO_INVALIDO' });
-    }
+    // Cadastro único entre lojas: o endereço aponta para um bairro da cidade.
+    if (endereco) await enderecoService.garantirBairroAtivo(endereco.bairroId, tx);
     const cliente = await equipeRepo.criarCliente({ nome, telefone, email, observacao }, tx);
     if (endereco) await tx.endereco.create({ data: { ...endereco, clienteId: cliente.id, principal: true } });
     return cliente.id;
   });
-  return clienteDaEquipe(await equipeRepo.buscarClientePorId(id));
+  return clienteDaEquipe(await equipeRepo.buscarClientePorId(id), lojaId);
 }
 
 /**
@@ -183,7 +187,7 @@ export async function criarCliente({ nome, telefone, email = null, observacao = 
  * cliente e não mudam aqui; o telefone só é preenchido se estiver vazio; a
  * observação (anotação da equipe) muda sempre. Telefone de outro cliente = 409.
  */
-export async function atualizarCliente(id, { nome, telefone, email = null, observacao = null }) {
+export async function atualizarCliente(lojaId, id, { nome, telefone, email = null, observacao = null }) {
   const atual = await equipeRepo.buscarClientePorId(id);
   if (!atual) throw clienteNaoEncontrado();
   const dados = { observacao };
@@ -191,24 +195,24 @@ export async function atualizarCliente(id, { nome, telefone, email = null, obser
   else if (!atual.telefone) dados.telefone = telefone;
   if (dados.telefone && dados.telefone !== atual.telefone) {
     const outro = await equipeRepo.buscarClientePorTelefone(dados.telefone, undefined, id);
-    if (outro) throw clienteJaExiste(outro);
+    if (outro) throw clienteJaExiste(outro, lojaId);
   }
   await equipeRepo.atualizarCliente(id, dados);
-  return clienteDaEquipe(await equipeRepo.buscarClientePorId(id));
+  return clienteDaEquipe(await equipeRepo.buscarClientePorId(id), lojaId);
 }
 
 /** Endereço novo para cliente existente (vira o principal: é para onde vai agora). */
-export async function adicionarEndereco(clienteId, endereco) {
+export async function adicionarEndereco(lojaId, clienteId, endereco) {
   if (!(await equipeRepo.buscarClientePorId(clienteId))) throw clienteNaoEncontrado();
-  await enderecoService.criar(clienteId, { ...endereco, principal: true });
-  return clienteDaEquipe(await equipeRepo.buscarClientePorId(clienteId));
+  await enderecoService.criar(clienteId, { ...endereco, principal: true }, { lojaId });
+  return clienteDaEquipe(await equipeRepo.buscarClientePorId(clienteId), lojaId);
 }
 
 /** Corrige um endereço do cliente (de outro cliente = 404); vira o principal, como o novo. */
-export async function atualizarEndereco(clienteId, enderecoId, endereco) {
+export async function atualizarEndereco(lojaId, clienteId, enderecoId, endereco) {
   if (!(await equipeRepo.buscarClientePorId(clienteId))) throw clienteNaoEncontrado();
-  await enderecoService.atualizar(clienteId, enderecoId, { ...endereco, principal: true });
-  return clienteDaEquipe(await equipeRepo.buscarClientePorId(clienteId));
+  await enderecoService.atualizar(clienteId, enderecoId, { ...endereco, principal: true }, { lojaId });
+  return clienteDaEquipe(await equipeRepo.buscarClientePorId(clienteId), lojaId);
 }
 
 // ───────── Cardápio do PDV ─────────
@@ -221,8 +225,8 @@ export async function atualizarEndereco(clienteId, enderecoId, endereco) {
  * `freteGratis`: regra vigente (`{ minimoCentavos }` ou null), para a prévia do delivery.
  * @param {{ turnoId?: number }} filtro
  */
-export async function cardapioDaEquipe({ turnoId } = {}, agora = new Date()) {
-  const [turnos, config] = await Promise.all([turnoRepo.listarAtivosComHorarios(), configRepo.buscar()]);
+export async function cardapioDaEquipe(lojaId, { turnoId } = {}, agora = new Date()) {
+  const [turnos, config] = await Promise.all([turnoRepo.listarAtivosComHorarios(lojaId), lojaService.buscar(lojaId)]);
   const ativo = calcularTurnoAtivo(turnos, agora);
   let turno = null;
   if (turnoId) {
@@ -244,7 +248,7 @@ export async function cardapioDaEquipe({ turnoId } = {}, agora = new Date()) {
   if (!turno) return { ...base, categorias: [], porKg: [] };
 
   const categorias = [];
-  for (const p of await equipeRepo.listarProdutosDoTurno(turno.id)) {
+  for (const p of await equipeRepo.listarProdutosDoTurno(lojaId, turno.id)) {
     let cat = categorias.at(-1);
     if (cat?.id !== p.categoria.id) {
       cat = { id: p.categoria.id, nome: p.categoria.nome, produtos: [] };
@@ -261,6 +265,6 @@ export async function cardapioDaEquipe({ turnoId } = {}, agora = new Date()) {
     });
   }
   // "Prato por kg" do salão: botão próprio com teclado de gramas (a grade é só UNIDADE).
-  const porKg = await equipeRepo.listarPorKgDoTurno(turno.id);
+  const porKg = await equipeRepo.listarPorKgDoTurno(lojaId, turno.id);
   return { ...base, categorias, porKg };
 }

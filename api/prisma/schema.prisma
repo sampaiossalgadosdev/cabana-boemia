@@ -14,6 +14,7 @@ datasource db {
 // ───────────── Enums ─────────────
 
 enum Papel {
+  ADMIN // plataforma (Delivery Abatiá): acima do DONO, sem loja
   DONO
   ATENDENTE
 }
@@ -71,10 +72,72 @@ enum StatusTrabalhoImpressao {
   FALHOU
 }
 
+// ───────────── Loja ─────────────
+
+/// Loja da plataforma. A Cabana Boemia é a primeira (slug "cabana-boemia", criada pela
+/// migration `multi_loja` a partir da antiga Configuracao). Leva a configuração que era
+/// da linha única: nome, WhatsApp, tempo estimado, virada do dia e frete grátis.
+/// CHECKs (só na migration): slug, documento (11 ou 14 dígitos), cores #RRGGBB,
+/// horaViradaDia 0–12, frete grátis ligado exige mínimo > 0.
+model Loja {
+  id                        Int       @id @default(autoincrement())
+  slug                      String    @unique @db.VarChar(60) // minúsculas, números e hífen
+  nome                      String    @db.VarChar(100)
+  razaoSocial               String?   @db.VarChar(150)
+  documento                 String?   @db.VarChar(14) // CNPJ (14) ou CPF (11), só dígitos
+  endereco                  String?   @db.VarChar(200)
+  whatsapp                  String    @default("") // só dígitos com o 55 (wa.me); vazio = não configurado
+  logoUrl                   String?   @db.VarChar(500)
+  corPrimaria               String?   @db.VarChar(7) // "#RRGGBB"
+  corFundo                  String?   @db.VarChar(7)
+  corPrimariaPadrao         String?   @db.VarChar(7) // definida pelo ADMIN; "Voltar ao padrão" do dono
+  logoUrlPadrao             String?   @db.VarChar(500)
+  descricao                 String?   @db.VarChar(500)
+  ativa                     Boolean   @default(true)
+  ordem                     Int       @default(0)
+  tempoEstimadoPadraoMin    Int       @default(40)
+  tempoEstimadoManualMin    Int?
+  tempoManualDefinidoEm     DateTime?
+  horaViradaDia             Int       @default(4) // dia operacional vira às HH:00 local (0–12; CHECK)
+  freteGratisAtivo          Boolean   @default(false)
+  freteGratisMinimoCentavos Int? // frete grátis a partir deste subtotal (centavos); CHECK: ligado exige > 0
+  freteGratisWhatsapp       Boolean   @default(true) // frete grátis vale também no delivery lançado pelo PDV
+  criadoEm                  DateTime  @default(now())
+  atualizadoEm              DateTime  @updatedAt
+
+  usuarios   Usuario[]
+  categorias Categoria[]
+  produtos   Produto[]
+  insumos    Insumo[]
+  turnos     Turno[]
+  areas      AreaEntrega[]
+  pedidos    Pedido[]
+  contadores ContadorPedido[]
+  caixas     Caixa[]
+  impressoes TrabalhoImpressao[]
+  imagens    ImagemLoja[]
+}
+
+/// Imagem enviada pela retaguarda (logo da loja), servida em /api/publico/imagens/:id.
+/// CHECK: PNG/JPEG/WebP e até 500 KB (migration identidade_loja).
+model ImagemLoja {
+  id       Int      @id @default(autoincrement())
+  lojaId   Int
+  mime     String   @db.VarChar(20)
+  dados    Bytes
+  criadoEm DateTime @default(now())
+
+  loja Loja @relation(fields: [lojaId], references: [id], onDelete: Restrict)
+
+  @@index([lojaId])
+}
+
 // ───────────── Acesso ─────────────
 
+/// ADMIN não tem loja; DONO e ATENDENTE têm exatamente uma (CHECK na migration `multi_loja`).
 model Usuario {
   id           Int      @id @default(autoincrement())
+  lojaId       Int?
   nome         String
   email        String   @unique
   senhaHash    String
@@ -83,12 +146,16 @@ model Usuario {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
+  loja Loja? @relation(fields: [lojaId], references: [id], onDelete: Restrict)
+
   refreshTokens   RefreshToken[]
   pedidosCriados  Pedido[]
   movimentacoes   MovimentacaoEstoque[]
   caixasAbertos   Caixa[]               @relation("CaixaAbertoPor")
   caixasFechados  Caixa[]               @relation("CaixaFechadoPor")
   movimentosCaixa MovimentoCaixa[]
+
+  @@index([lojaId])
 }
 
 model RefreshToken {
@@ -147,29 +214,54 @@ model Endereco {
   @@index([clienteId])
 }
 
+/// Bairro da cidade (lista única, cadastrada pelo ADMIN). O endereço do cliente
+/// aponta para ele e vale para qualquer loja; onde cada loja entrega (e por quanto)
+/// fica em AreaEntrega. Desativado na cidade = nenhuma loja entrega lá.
 model Bairro {
-  id           Int     @id @default(autoincrement())
-  nome         String  @unique
+  id    Int     @id @default(autoincrement())
+  nome  String  @unique
+  ativo Boolean @default(true)
+
+  enderecos Endereco[]
+  areas     AreaEntrega[]
+}
+
+/// Área de entrega da loja: bairros onde ela entrega, com a taxa dela.
+/// Sem linha (ou inativa) = a loja não entrega no bairro (BAIRRO_FORA_DA_AREA).
+/// CHECK (migration bairros_da_cidade): taxaCentavos >= 0.
+model AreaEntrega {
+  lojaId       Int
+  bairroId     Int
   taxaCentavos Int
   ativo        Boolean @default(true)
 
-  enderecos Endereco[]
+  loja   Loja   @relation(fields: [lojaId], references: [id])
+  bairro Bairro @relation(fields: [bairroId], references: [id])
+
+  @@id([lojaId, bairroId])
+  @@index([bairroId])
 }
 
 // ───────────── Cardápio ─────────────
 
 model Categoria {
-  id    Int     @id @default(autoincrement())
-  nome  String  @unique
-  ordem Int     @default(0)
-  ativo Boolean @default(true)
+  id     Int     @id @default(autoincrement())
+  lojaId Int
+  nome   String
+  ordem  Int     @default(0)
+  ativo  Boolean @default(true)
 
+  loja     Loja      @relation(fields: [lojaId], references: [id])
   produtos Produto[]
+
+  @@unique([lojaId, nome])
 }
 
+/// Turnos, insumos e categoria do produto são da mesma loja (conferido no service).
 model Produto {
   id              Int       @id @default(autoincrement())
-  nome            String    @unique
+  lojaId          Int
+  nome            String
   descricao       String    @default("")
   categoriaId     Int
   tipoPreco       TipoPreco @default(UNIDADE)
@@ -186,22 +278,29 @@ model Produto {
   criadoEm        DateTime  @default(now())
   atualizadoEm    DateTime  @updatedAt
 
+  loja          Loja                  @relation(fields: [lojaId], references: [id])
   categoria     Categoria             @relation(fields: [categoriaId], references: [id])
   turnos        ProdutoTurno[]
   insumos       ProdutoInsumo[]
   itensPedido   ItemPedido[]
   movimentacoes MovimentacaoEstoque[]
 
+  @@unique([lojaId, nome])
   @@index([categoriaId])
 }
 
+/// Horários (HorarioTurno) e produtos (ProdutoTurno) herdam a loja do turno.
 model Turno {
-  id    Int     @id @default(autoincrement())
-  nome  String  @unique
-  ativo Boolean @default(true)
+  id     Int     @id @default(autoincrement())
+  lojaId Int
+  nome   String
+  ativo  Boolean @default(true)
 
+  loja     Loja           @relation(fields: [lojaId], references: [id])
   horarios HorarioTurno[]
   produtos ProdutoTurno[]
+
+  @@unique([lojaId, nome])
 }
 
 model HorarioTurno {
@@ -231,12 +330,16 @@ model ProdutoTurno {
 
 model Insumo {
   id            Int    @id @default(autoincrement())
-  nome          String @unique
+  lojaId        Int
+  nome          String
   estoque       Int    @default(0) // saldo oficial
   estoqueMinimo Int    @default(0)
 
+  loja          Loja                  @relation(fields: [lojaId], references: [id])
   produtos      ProdutoInsumo[]
   movimentacoes MovimentacaoEstoque[]
+
+  @@unique([lojaId, nome])
 }
 
 model ProdutoInsumo {
@@ -275,8 +378,10 @@ model MovimentacaoEstoque {
 
 // ───────────── Pedidos ─────────────
 
+/// Sempre de uma loja só (itens, caixa e impressões são da mesma loja).
 model Pedido {
   id                  Int             @id @default(autoincrement())
+  lojaId              Int
   numeroDia           Int
   dataRef             DateTime        @db.Date // dia local (America/Sao_Paulo) do pedido
   canal               CanalPedido
@@ -307,14 +412,18 @@ model Pedido {
   descontoCentavos    Int             @default(0) // só pedidos da equipe; total = subtotal + taxa − desconto
   observacao          String?         @db.VarChar(200) // observação do pedido inteiro
   pagoEm              DateTime? // "pago agora" no PDV: forma e caixaId gravados na criação
+  /// Chave de acesso da NFC-e emitida para a venda (prova de emissão), preenchida pela
+  /// equipe. 44 dígitos, modelo 65 e dígito verificador conferidos no service; CHECK só dígitos.
+  chaveNfce           String?         @unique @db.VarChar(44)
 
+  loja       Loja                @relation(fields: [lojaId], references: [id])
   cliente    Cliente?            @relation(fields: [clienteId], references: [id])
   caixa      Caixa?              @relation(fields: [caixaId], references: [id], onDelete: Restrict)
   criadoPor  Usuario?            @relation(fields: [criadoPorId], references: [id])
   itens      ItemPedido[]
   impressoes TrabalhoImpressao[]
 
-  @@unique([dataRef, numeroDia])
+  @@unique([lojaId, dataRef, numeroDia])
   @@index([status])
   @@index([clienteId, criadoEm])
   @@index([criadoEm])
@@ -342,11 +451,16 @@ model ItemPedido {
   @@index([produtoId])
 }
 
-/// Último numeroDia emitido em cada dia local. Incrementado por
+/// Último numeroDia emitido em cada dia operacional, por loja. Incrementado por
 /// INSERT ... ON CONFLICT DO UPDATE dentro da transação do pedido (sem corrida).
 model ContadorPedido {
-  dataRef DateTime @id @db.Date
+  lojaId  Int
+  dataRef DateTime @db.Date
   ultimo  Int
+
+  loja Loja @relation(fields: [lojaId], references: [id])
+
+  @@id([lojaId, dataRef])
 }
 
 // ───────────── Impressão ─────────────
@@ -355,6 +469,7 @@ model ContadorPedido {
 /// (RELATORIO_DIA, `dataRelatorio`); exatamente um (CHECK).
 model TrabalhoImpressao {
   id            Int                     @id @default(autoincrement())
+  lojaId        Int
   pedidoId      Int?
   caixaId       Int?
   dataRelatorio DateTime?               @db.Date // RELATORIO_DIA: dia operacional do resumo
@@ -364,23 +479,29 @@ model TrabalhoImpressao {
   ultimoErro    String?
   criadoEm      DateTime                @default(now())
   impressoEm    DateTime?
+  /// Reserva do agente de impressão (POST /equipe/impressoes/reservar): dois agentes da
+  /// mesma loja nunca imprimem o mesmo cupom. Vencida (reservadoAte < agora) = livre de novo.
+  reservadoPor  String?                 @db.VarChar(64)
+  reservadoAte  DateTime?
 
+  loja   Loja    @relation(fields: [lojaId], references: [id])
   pedido Pedido? @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
   caixa  Caixa?  @relation(fields: [caixaId], references: [id], onDelete: Restrict)
 
-  @@index([status, criadoEm])
+  @@index([lojaId, status, criadoEm])
   @@index([pedidoId])
   @@index([caixaId])
 }
 
 // ───────── Caixa ─────────
 
-/// Caixa do balcão (dinheiro de salão, delivery e site). Só um aberto por vez:
-/// índice único parcial "Caixa_um_aberto" (WHERE "fechadoEm" IS NULL), só na
-/// migration `caixa` (o Prisma não declara índice parcial). Esperado e diferença
+/// Caixa do balcão (dinheiro de salão, delivery e site). Só um aberto por LOJA:
+/// índice único parcial "Caixa_um_aberto" ("lojaId" WHERE "fechadoEm" IS NULL), só nas
+/// migrations `caixa`/`multi_loja` (o Prisma não declara índice parcial). Esperado e diferença
 /// são calculados e gravados no fechamento (cego para a equipe; só o DONO vê).
 model Caixa {
   id                   Int       @id @default(autoincrement())
+  lojaId               Int
   abertoPorId          Int
   abertoEm             DateTime  @default(now())
   valorInicialCentavos Int // fundo de troco
@@ -391,13 +512,14 @@ model Caixa {
   diferencaCentavos    Int? // contado − esperado
   observacao           String?
 
+  loja       Loja                @relation(fields: [lojaId], references: [id])
   abertoPor  Usuario             @relation("CaixaAbertoPor", fields: [abertoPorId], references: [id])
   fechadoPor Usuario?            @relation("CaixaFechadoPor", fields: [fechadoPorId], references: [id], onDelete: Restrict)
   movimentos MovimentoCaixa[]
   pedidos    Pedido[]
   impressoes TrabalhoImpressao[]
 
-  @@index([abertoEm])
+  @@index([lojaId, abertoEm])
 }
 
 model MovimentoCaixa {
@@ -465,20 +587,4 @@ model RegistroAcesso {
 
   @@index([criadoEm])
   @@index([clienteId])
-}
-
-// ───────────── Configuração (linha única) ─────────────
-
-model Configuracao {
-  id                        Int       @id @default(1)
-  nomeRestaurante           String    @default("Cabana Boemia")
-  whatsappNumero            String    @default("")
-  tempoEstimadoPadraoMin    Int       @default(40)
-  horaViradaDia             Int       @default(4) // dia operacional vira às HH:00 local (0–12; CHECK)
-  freteGratisAtivo          Boolean   @default(false)
-  freteGratisMinimoCentavos Int? // frete grátis a partir deste subtotal (centavos); CHECK: ligado exige > 0
-  freteGratisWhatsapp       Boolean   @default(true) // frete grátis vale também no delivery lançado pelo PDV
-  tempoEstimadoManualMin    Int?
-  tempoManualDefinidoEm     DateTime?
-  atualizadoEm              DateTime  @updatedAt
 }

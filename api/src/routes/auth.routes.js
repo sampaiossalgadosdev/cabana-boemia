@@ -10,6 +10,6 @@ export function criarAuthRoutes({ limiteLogin } = {}) {
   r.post('/login', criarLimitadorLogin({ limite: limiteLogin }), assincrono(auth.login));
   r.post('/refresh', assincrono(auth.refresh));
   r.post('/logout', assincrono(auth.logout));
-  r.get('/me', autenticar, auth.me);
+  r.get('/me', autenticar, assincrono(auth.me));
   return r;
 }

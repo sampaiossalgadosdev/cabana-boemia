@@ -8,18 +8,19 @@ import {
   formatarPreco,
   formatarTelefone,
 } from '../../lib/formatar.js';
-import { STATUS, STATUS_ANDAMENTO, estaAberto, tituloDoPedido } from '../../lib/painel.js';
+import { STATUS, STATUS_ANDAMENTO, estaAberto, formatarChaveNfce, problemaNaChaveNfce, tituloDoPedido } from '../../lib/painel.js';
 import { avaliarAgendamento, dataHoraLocal } from '../../lib/novoPedido.js';
 import { diaOperacional } from '../../lib/caixa.js';
 
 /**
  * Opções do pedido (diálogo): andamento (Em aberto / Em preparo / Saiu para
  * entrega), horário da encomenda, finalizar (forma de pagamento), reimprimir
- * e cancelar. Mostra os itens e os valores do pedido.
+ * e cancelar; registrar a chave da NFC-e emitida. Mostra os itens e os valores do pedido.
  */
 export function DetalhePedido({ pedido, aoFechar, aoAtualizado }) {
   const dialogo = useRef(null);
-  const [acao, setAcao] = useState(null); // null | 'finalizar' | 'cancelar' | 'horario'
+  const [acao, setAcao] = useState(null); // null | 'finalizar' | 'cancelar' | 'horario' | 'nfce'
+  const [chave, setChave] = useState(() => formatarChaveNfce(pedido.chaveNfce ?? ''));
   const [forma, setForma] = useState(pedido.formaPagamento ?? '');
   const [horario, setHorario] = useState(() => (pedido.agendadoPara ? dataHoraLocal(pedido.agendadoPara) : { data: '', hora: '' }));
   const [enviando, setEnviando] = useState(false);
@@ -65,6 +66,16 @@ export function DetalhePedido({ pedido, aoFechar, aoAtualizado }) {
       return;
     }
     executar(pdv.pedidos.finalizar(pedido.id, forma), { fechar: true });
+  }
+
+  function salvarNfce(apagar = false) {
+    const problema = apagar ? null : problemaNaChaveNfce(chave);
+    if (problema) {
+      setErro(problema);
+      return;
+    }
+    executar(pdv.pedidos.nfce(pedido.id, apagar ? null : chave), { mensagem: apagar ? 'Chave da NFC-e apagada.' : 'Chave da NFC-e registrada.' });
+    if (apagar) setChave('');
   }
 
   const troco =
@@ -137,6 +148,12 @@ export function DetalhePedido({ pedido, aoFechar, aoAtualizado }) {
             {pedido.pagoEm ? ' · já pago' : ' · na entrega'}
             {troco != null && ` · troco p/ ${formatarPreco(pedido.trocoParaCentavos)} (levar ${formatarPreco(troco)})`}
           </dd>
+          {pedido.chaveNfce && (
+            <>
+              <dt>NFC-e</dt>
+              <dd className="detalhe-pedido__nfce">{formatarChaveNfce(pedido.chaveNfce)}</dd>
+            </>
+          )}
         </dl>
 
         {aberto && (
@@ -200,6 +217,32 @@ export function DetalhePedido({ pedido, aoFechar, aoAtualizado }) {
           </div>
         )}
 
+        {acao === 'nfce' && (
+          <div className="detalhe-pedido__acao">
+            <label className="campo">
+              <span>Chave da NFC-e (44 números)</span>
+              <input
+                className="detalhe-pedido__nfce"
+                inputMode="numeric"
+                autoFocus
+                value={chave}
+                placeholder="Digite ou leia o código de barras da nota"
+                onChange={(e) => setChave(formatarChaveNfce(e.target.value))}
+                onKeyDown={(e) => e.key === 'Enter' && salvarNfce()}
+              />
+            </label>
+            <div className="finalizar__acoes">
+              <button type="button" className="botao botao--contorno" onClick={() => setAcao(null)} disabled={enviando}>Voltar</button>
+              {pedido.chaveNfce && (
+                <button type="button" className="botao botao--contorno" onClick={() => salvarNfce(true)} disabled={enviando}>Apagar chave</button>
+              )}
+              <button type="button" className="botao" onClick={() => salvarNfce()} disabled={enviando}>
+                {enviando ? 'Salvando…' : 'Salvar chave'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {acao === 'cancelar' && (
           <div className="detalhe-pedido__acao cancelar">
             <p className="cancelar__pergunta">
@@ -225,6 +268,11 @@ export function DetalhePedido({ pedido, aoFechar, aoAtualizado }) {
               onClick={() => executar(pdv.pedidos.reimprimir(pedido.id), { mensagem: 'Enviado para a impressora.' })}>
               Imprimir
             </button>
+            {pedido.status !== 'CANCELADO' && (
+              <button type="button" className="botao botao--contorno" onClick={() => { setErro(''); setAcao('nfce'); }}>
+                {pedido.chaveNfce ? 'NFC-e registrada' : 'Registrar NFC-e'}
+              </button>
+            )}
             {aberto && pedido.encomenda && (
               <button type="button" className="botao botao--contorno" onClick={() => setAcao('horario')}>Alterar horário</button>
             )}

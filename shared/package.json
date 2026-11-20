@@ -8,7 +8,8 @@
     "./cupom": "./src/cupom.js",
     "./itens": "./src/itens.js",
     "./frete": "./src/frete.js",
-    "./horarios": "./src/horarios.js"
+    "./horarios": "./src/horarios.js",
+    "./cores": "./src/cores.js"
   },
   "scripts": {
     "dev": "echo \"[shared] dev ainda nao configurado\"",

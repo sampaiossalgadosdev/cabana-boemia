@@ -1,10 +1,10 @@
 {
   "name": "@restaurante/pdv",
-  "productName": "Cabana Boemia PDV",
-  "version": "0.1.0",
+  "productName": "PDV do Abatiá",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "PDV do balcão do Cabana Boemia",
+  "description": "PDV do balcão das lojas do Delivery Abatiá",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -29,5 +29,5 @@
     "koffi": "3.3.8",
     "socket.io-client": "4.8.4"
   },
-  "author": "Cabana Boemia"
+  "author": "Delivery Abatiá"
 }

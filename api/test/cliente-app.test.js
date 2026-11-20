@@ -2,7 +2,7 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import jwt from 'jsonwebtoken';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 import { audiencesGoogle, criarVerificadorGoogle } from '../src/lib/google.js';
 import {
   audiencesApple,
@@ -278,6 +278,7 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
   let centro;
   let produto;
   let tokenDono;
+  let tokenAdmin;
   const revogacoes = [];
 
   async function req(metodo, rota, { corpo, token, url, form } = {}) {
@@ -313,6 +314,7 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
     seq += 1;
     return prisma.pedido.create({
       data: {
+        lojaId: 1,
         numeroDia: seq,
         dataRef: new Date('2026-11-19T00:00:00Z'),
         canal: 'SITE',
@@ -342,9 +344,9 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
     const { criarApp } = await import('../src/app.js');
     const { criarDono } = await import('../src/services/usuario.service.js');
     await criarDono({ nome: 'Dono', email: 'dono@teste.com', senha: 'senha-do-dono' });
-    centro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
-    const cat = await prisma.categoria.create({ data: { nome: 'Lanches' } });
-    produto = await prisma.produto.create({ data: { nome: 'X-Bacon', categoriaId: cat.id, precoCentavos: 1600 } });
+    centro = await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
+    const cat = await prisma.categoria.create({ data: { lojaId: 1, nome: 'Lanches' } });
+    produto = await prisma.produto.create({ data: { lojaId: 1, nome: 'X-Bacon', categoriaId: cat.id, precoCentavos: 1600 } });
 
     servidor = await ouvir(
       criarApp({
@@ -363,6 +365,10 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
     raiz = `http://127.0.0.1:${servidor.address().port}`;
     base = `${raiz}/api`;
     tokenDono = (await req('POST', '/auth/login', { corpo: { email: 'dono@teste.com', senha: 'senha-do-dono' } })).corpo.accessToken;
+    const usuarios = await import('../src/services/usuario.service.js');
+    await usuarios.criarDono({ nome: 'Plataforma', email: 'admin@teste.com', senha: 'senha-do-admin' });
+    await usuarios.promoverAAdmin('admin@teste.com');
+    tokenAdmin = (await req('POST', '/auth/login', { corpo: { email: 'admin@teste.com', senha: 'senha-do-admin' } })).corpo.accessToken;
   });
 
   after(async () => {
@@ -684,16 +690,19 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
     assert.equal(r.status, 429, 'quarto envio do mesmo IP nesta hora (limite 3 no teste)');
   });
 
-  test('retaguarda: dono lista as solicitações e marca como atendida; atendente/anônimo não', async () => {
-    const lista = await req('GET', '/retaguarda/solicitacoes-exclusao', { token: tokenDono });
+  test('solicitações de exclusão: só o ADMIN lista e marca como atendida; dono = 403, anônimo = 401', async () => {
+    assert.equal((await req('GET', '/plataforma/solicitacoes-exclusao', { token: tokenDono })).status, 403);
+    assert.equal((await req('GET', '/retaguarda/solicitacoes-exclusao', { token: tokenDono })).status, 404, 'saiu da retaguarda');
+    const lista = await req('GET', '/plataforma/solicitacoes-exclusao', { token: tokenAdmin });
     assert.equal(lista.status, 200);
     assert.equal(lista.corpo.pendentes.length, 1);
     const id = lista.corpo.pendentes[0].id;
-    assert.equal((await req('PATCH', `/retaguarda/solicitacoes-exclusao/${id}/atendida`, { token: tokenDono })).status, 204);
-    assert.equal((await req('PATCH', `/retaguarda/solicitacoes-exclusao/${id}/atendida`, { token: tokenDono })).status, 404);
-    const depois = (await req('GET', '/retaguarda/solicitacoes-exclusao', { token: tokenDono })).corpo;
+    assert.equal((await req('PATCH', `/plataforma/solicitacoes-exclusao/${id}/atendida`, { token: tokenDono })).status, 403);
+    assert.equal((await req('PATCH', `/plataforma/solicitacoes-exclusao/${id}/atendida`, { token: tokenAdmin })).status, 204);
+    assert.equal((await req('PATCH', `/plataforma/solicitacoes-exclusao/${id}/atendida`, { token: tokenAdmin })).status, 404);
+    const depois = (await req('GET', '/plataforma/solicitacoes-exclusao', { token: tokenAdmin })).corpo;
     assert.equal(depois.pendentes.length, 0);
     assert.equal(depois.atendidas.length, 1);
-    assert.equal((await req('GET', '/retaguarda/solicitacoes-exclusao')).status, 401);
+    assert.equal((await req('GET', '/plataforma/solicitacoes-exclusao')).status, 401);
   });
 });

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { paraBusca } from '../src/lib/texto.js';
-import { semBancoDeTeste, resetarBancoDeTeste, raizApi } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, raizApi, criarBairro } from './helpers/banco.js';
 
 const NOMES = [
   'João da Silva',
@@ -52,7 +52,7 @@ describe('Cliente.nomeBusca: preenchido em toda gravação e usado na busca do P
     const { criarApp } = await import('../src/app.js');
     const { criarAtendente } = await import('../src/services/usuario.service.js');
     await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
-    centro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
+    centro = await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
 
     servidor = http.createServer(criarApp({ log: false }));
     await new Promise((resolve) => servidor.listen(0, resolve));

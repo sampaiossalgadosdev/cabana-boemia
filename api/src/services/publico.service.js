@@ -1,28 +1,16 @@
-/** Dados públicos do site (sem login): cardápio do turno ativo, bairros, config. */
+/** Dados públicos do site (sem login) de uma loja: cardápio do turno ativo, bairros, config. */
 import { freteGratisDaConfig } from '@restaurante/shared/frete';
 import { diaOperacional } from '../lib/fuso.js';
 import { horaViradaDe } from './diaOperacional.service.js';
 import * as publicoRepo from '../repositories/publico.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
+import * as lojaService from './loja.service.js';
+import { identidade } from './identidade.service.js';
+import * as bairroService from './bairro.service.js';
 import { calcularTurnoAtivo, calcularProximaAbertura } from './turno.service.js';
 
 /** Máximo por linha de pedido (itemPedidoSchema) e na sacola do site. */
 export const MAX_POR_ITEM = 20;
-
-// Mesmos defaults do schema, caso a linha única ainda não exista (seed não rodou).
-const CONFIG_PADRAO = {
-  nomeRestaurante: 'Cabana Boemia',
-  whatsappNumero: '',
-  tempoEstimadoPadraoMin: 40,
-  tempoEstimadoManualMin: null,
-  tempoManualDefinidoEm: null,
-  freteGratisAtivo: false,
-  freteGratisMinimoCentavos: null,
-};
-
-async function configuracao() {
-  return (await publicoRepo.buscarConfiguracao()) ?? CONFIG_PADRAO;
-}
 
 /**
  * Manual vale só no dia OPERACIONAL em que foi definido (o tempo digitado às
@@ -64,8 +52,8 @@ export function temSaldo(produto) {
  * SEM filtrar disponivelHoje nem saldo, que valem só para o dia corrente.
  * O site mostra a prévia com os botões desabilitados.
  */
-export async function cardapio(agora = new Date()) {
-  const [turnos, config] = await Promise.all([turnoRepo.listarAtivosComHorarios(), configuracao()]);
+export async function cardapio(lojaId, agora = new Date()) {
+  const [turnos, config] = await Promise.all([turnoRepo.listarAtivosComHorarios(lojaId), lojaService.buscar(lojaId)]);
   const turno = calcularTurnoAtivo(turnos, agora);
   const proximaAbertura = turno ? null : calcularProximaAbertura(turnos, agora);
   const base = {
@@ -81,7 +69,7 @@ export async function cardapio(agora = new Date()) {
   const turnoDoCardapio = turno ?? proximaAbertura?.turno;
   if (!turnoDoCardapio) return { ...base, categorias: [] };
 
-  const produtos = await publicoRepo.listarProdutosDoSite(turnoDoCardapio.id, {
+  const produtos = await publicoRepo.listarProdutosDoSite(lojaId, turnoDoCardapio.id, {
     somenteDisponiveisHoje: Boolean(turno),
   });
 
@@ -110,15 +98,31 @@ export async function cardapio(agora = new Date()) {
   return { ...base, categorias };
 }
 
-export function bairros() {
-  return publicoRepo.listarBairrosAtivos();
+/** Onde a loja entrega agora (área ativa, bairro ativo na cidade): `{ id, nome, taxaCentavos }`. */
+export function bairros(lojaId) {
+  return bairroService.listarOndeEntrega(lojaId);
 }
 
-export async function config() {
-  const c = await configuracao();
+/** Bairros ativos da cidade (`{ id, nome }`): endereço do cliente vale para qualquer loja. */
+export async function bairrosDaCidade() {
+  return (await bairroService.listarCidade()).filter((b) => b.ativo).map((b) => ({ id: b.id, nome: b.nome }));
+}
+
+export async function config(lojaId) {
+  const c = await lojaService.buscar(lojaId);
   return {
-    nome: c.nomeRestaurante,
-    whatsapp: c.whatsappNumero,
+    nome: c.nome,
+    // Identidade da loja (app multi-loja; o site atual ignora).
+    slug: c.slug,
+    logoUrl: c.logoUrl ?? null,
+    corPrimaria: identidade(c).corPrimaria,
+    corTexto: identidade(c).corTexto,
+    corFundo: c.corFundo ?? null,
+    // Identificação do fornecedor (Decreto 7.962/2013, art. 2º): o app mostra na página da loja.
+    razaoSocial: c.razaoSocial ?? null,
+    documento: c.documento ?? null,
+    endereco: c.endereco ?? null,
+    whatsapp: c.whatsapp,
     // null = desligado; { minimoCentavos } = frete grátis com subtotal >= mínimo.
     freteGratis: freteGratisDaConfig(c),
     // O Client ID OAuth é público: o site precisa dele para desenhar o botão do Google.

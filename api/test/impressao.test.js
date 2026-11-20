@@ -2,7 +2,7 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { io as conectarSocket } from 'socket.io-client';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 
 const local = (iso) => new Date(`${iso}-03:00`);
 const SABADO_20H = local('2026-11-14T20:00'); // turno Lanches aberto
@@ -32,6 +32,7 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
 
   const zap = (nome, quando = SABADO_20H) =>
     criarPedido({
+      lojaId: 1,
       canal: 'WHATSAPP',
       itens: [{ produtoId: coca.id, quantidade: 1, observacao: 'bem gelada' }],
       cliente: { nome, telefone: '43988887777' },
@@ -40,7 +41,7 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
       agora: quando,
     });
 
-  const pendentes = async () => (await api('GET', '/equipe/impressoes/pendentes')).corpo;
+  const pendentes = async () => (await api('POST', '/equipe/impressoes/reservar', { corpo: { agente: 'teste' } })).corpo;
 
   before(async () => {
     resetarBancoDeTeste();
@@ -52,9 +53,9 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
     const { criarTempoReal } = await import('../src/lib/tempoReal.js');
     const { criarAtendente } = await import('../src/services/usuario.service.js');
 
-    coca = await prisma.produto.findUnique({ where: { nome: 'Coca-Cola 1L' } });
+    coca = await prisma.produto.findUnique({ where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 1L' } } });
     await prisma.produto.update({ where: { id: coca.id }, data: { ativo: true, estoque: 50 } });
-    centro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
+    centro = await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
     await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
 
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
@@ -71,8 +72,8 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
   });
 
   test('exige login da equipe e não guarda em cache', async () => {
-    assert.equal((await api('GET', '/equipe/impressoes/pendentes', { semToken: true })).status, 401);
-    const r = await api('GET', '/equipe/impressoes/pendentes');
+    assert.equal((await api('POST', '/equipe/impressoes/reservar', { corpo: { agente: 'teste' }, semToken: true })).status, 401);
+    const r = await api('POST', '/equipe/impressoes/reservar', { corpo: { agente: 'teste' } });
     assert.equal(r.status, 200);
     assert.equal(r.headers.get('cache-control'), 'no-store');
   });
@@ -98,14 +99,14 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
     const { pedido } = await zap('Duplo');
     const trabalho = (await pendentes()).trabalhos.find((t) => t.pedidoId === pedido.id);
 
-    const r1 = await api('POST', `/equipe/impressoes/${trabalho.id}/confirmar`);
+    const r1 = await api('POST', `/equipe/impressoes/${trabalho.id}/confirmar`, { corpo: { agente: 'teste' } });
     assert.equal(r1.status, 200);
     assert.equal(r1.corpo.jaConfirmado, false);
     assert.equal(r1.corpo.trabalho.status, 'IMPRESSO');
     const impressoEm = r1.corpo.trabalho.impressoEm;
 
     agora = new Date(SABADO_20H.getTime() + 60_000);
-    const r2 = await api('POST', `/equipe/impressoes/${trabalho.id}/confirmar`);
+    const r2 = await api('POST', `/equipe/impressoes/${trabalho.id}/confirmar`, { corpo: { agente: 'teste' } });
     agora = SABADO_20H;
     assert.equal(r2.status, 200);
     assert.equal(r2.corpo.jaConfirmado, true);
@@ -120,7 +121,7 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
     const { pedido } = await zap('Corrida');
     const trabalho = (await pendentes()).trabalhos.find((t) => t.pedidoId === pedido.id);
     const rs = await Promise.all(
-      Array.from({ length: 5 }, () => api('POST', `/equipe/impressoes/${trabalho.id}/confirmar`)),
+      Array.from({ length: 5 }, () => api('POST', `/equipe/impressoes/${trabalho.id}/confirmar`, { corpo: { agente: 'teste' } })),
     );
     assert.ok(rs.every((r) => r.status === 200));
     assert.equal(rs.filter((r) => r.corpo.jaConfirmado === false).length, 1);
@@ -130,11 +131,11 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
     const { pedido } = await zap('Sem papel');
     const trabalho = (await pendentes()).trabalhos.find((t) => t.pedidoId === pedido.id);
 
-    const r1 = await api('POST', `/equipe/impressoes/${trabalho.id}/falha`, { corpo: { erro: 'Sem papel' } });
+    const r1 = await api('POST', `/equipe/impressoes/${trabalho.id}/falha`, { corpo: { erro: 'Sem papel', agente: 'teste' } });
     assert.equal(r1.status, 200);
     assert.equal(r1.corpo.trabalho.tentativas, 1);
     assert.equal(r1.corpo.trabalho.ultimoErro, 'Sem papel');
-    const r2 = await api('POST', `/equipe/impressoes/${trabalho.id}/falha`, { corpo: {} });
+    const r2 = await api('POST', `/equipe/impressoes/${trabalho.id}/falha`, { corpo: { agente: 'teste' } });
     assert.equal(r2.corpo.trabalho.tentativas, 2);
     assert.equal(r2.corpo.trabalho.ultimoErro, 'Falha na impressão');
 
@@ -143,8 +144,8 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
     assert.equal(ainda.tentativas, 2);
 
     // Confirmado depois: falha não reabre.
-    await api('POST', `/equipe/impressoes/${trabalho.id}/confirmar`);
-    const r3 = await api('POST', `/equipe/impressoes/${trabalho.id}/falha`, { corpo: { erro: 'tarde' } });
+    await api('POST', `/equipe/impressoes/${trabalho.id}/confirmar`, { corpo: { agente: 'teste' } });
+    const r3 = await api('POST', `/equipe/impressoes/${trabalho.id}/falha`, { corpo: { erro: 'tarde', agente: 'teste' } });
     assert.equal(r3.status, 409);
     assert.equal(r3.corpo.erro.codigo, 'TRABALHO_IMPRESSO');
     const final = await prisma.trabalhoImpressao.findUnique({ where: { id: trabalho.id } });
@@ -153,9 +154,9 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
   });
 
   test('id inexistente = 404; id inválido = 400', async () => {
-    assert.equal((await api('POST', '/equipe/impressoes/999999/confirmar')).status, 404);
-    assert.equal((await api('POST', '/equipe/impressoes/999999/falha', { corpo: {} })).status, 404);
-    assert.equal((await api('POST', '/equipe/impressoes/abc/confirmar')).status, 400);
+    assert.equal((await api('POST', '/equipe/impressoes/999999/confirmar', { corpo: { agente: 'teste' } })).status, 404);
+    assert.equal((await api('POST', '/equipe/impressoes/999999/falha', { corpo: { agente: 'teste' } })).status, 404);
+    assert.equal((await api('POST', '/equipe/impressoes/abc/confirmar', { corpo: { agente: 'teste' } })).status, 400);
   });
 
   test('pendente de dias atrás não volta (janela: dia local + 2 h antes)', async () => {
@@ -187,7 +188,7 @@ describe('fila de impressão (/equipe/impressoes)', { skip: semBancoDeTeste }, (
   test('reimprimir cria um trabalho NOVO e avisa a equipe pelo socket', async () => {
     const { pedido } = await zap('Reimprime');
     const original = (await pendentes()).trabalhos.find((t) => t.pedidoId === pedido.id);
-    await api('POST', `/equipe/impressoes/${original.id}/confirmar`);
+    await api('POST', `/equipe/impressoes/${original.id}/confirmar`, { corpo: { agente: 'teste' } });
 
     const socket = conectarSocket(new URL(base).origin, { path: '/api/socket.io', auth: { token }, transports: ['websocket'], forceNew: true, reconnection: false });
     await new Promise((resolve, reject) => {

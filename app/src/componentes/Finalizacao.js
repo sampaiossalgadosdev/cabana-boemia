@@ -9,7 +9,8 @@ import { useUltimoPedido } from '../estado/UltimoPedido.js';
 import * as api from '../lib/api.js';
 import { formatarPreco } from '../logica/dinheiro.js';
 import { FORMAS_PAGAMENTO, corpoDoPedido, novaChavePedido, resumoDoPedido, textoTaxa } from '../logica/pedido.js';
-import { ERRO_GENERICO, enderecoInicial, interpretarErroDoEnvio, textoEndereco, trocoDoCheckout } from '../logica/checkout.js';
+import { ERRO_GENERICO, interpretarErroDoEnvio, textoEndereco, trocoDoCheckout } from '../logica/checkout.js';
+import { enderecoInicialNaLoja, taxaNaLoja } from '../logica/lojas.js';
 import { useEstilos, useTema } from '../tema/tema.js';
 import { Botao } from './basicos.js';
 import { Campo, Opcao, TextoErro, Titulo } from './formulario.js';
@@ -19,13 +20,18 @@ import { FormEndereco } from './FormEndereco.js';
  * Depois do login e do telefone (como Finalizacao.jsx do site): endereço
  * (lista ou novo), confirmar dados (um toque), pagamento na entrega, resumo e
  * envio com chave de idempotência. O total aqui é prévia; vale o da API.
+ * Multi-loja: a taxa é a da ÁREA DE ENTREGA DA LOJA da sacola
+ * (/publico/lojas/:slug/bairros); endereço em bairro onde ela não entrega
+ * aparece desabilitado com o motivo, e o 422 BAIRRO_FORA_DA_AREA da API
+ * mostra a mensagem e leva à troca de endereço.
  */
 export function Finalizacao({ onEditarTelefone }) {
   const s = useEstilos(criarEstilos);
   const tema = useTema();
   const { cliente, chamar, sair } = useCliente();
   const { itens, substituir } = useCarrinho();
-  const { dados: cardapio, podePedir, recarregar: recarregarCardapio } = useCardapio();
+  const { dados: cardapio, podePedir, recarregar: recarregarCardapio, slug, loja } = useCardapio();
+  const nomeLoja = loja?.nome || 'A loja';
   const { recarregar: recarregarUltimo, setPedidoEnviado } = useUltimoPedido();
 
   const [enderecos, setEnderecos] = useState(null);
@@ -37,6 +43,8 @@ export function Finalizacao({ onEditarTelefone }) {
   const [precisaTroco, setPrecisaTroco] = useState(false);
   const [trocoTexto, setTrocoTexto] = useState('');
   const [erro, setErro] = useState('');
+  // Aviso por cima da lista de endereços (ex.: a loja não entrega no bairro).
+  const [avisoEndereco, setAvisoEndereco] = useState('');
   const [enviando, setEnviando] = useState(false);
   // Frete grátis vigente mandado pela API num 409 PRECO_ALTERADO (antes da recarga do cardápio).
   const [freteDaApi, setFreteDaApi] = useState(null);
@@ -46,27 +54,30 @@ export function Finalizacao({ onEditarTelefone }) {
   useEffect(() => {
     let vivo = true;
     setErro('');
-    Promise.all([chamar((token) => api.listarEnderecos(token)), api.buscarBairros()])
+    Promise.all([chamar((token) => api.listarEnderecos(token)), api.buscarBairrosDaLoja(slug)])
       .then(([{ enderecos: lista }, { bairros: b }]) => {
         if (!vivo) return;
         setEnderecos(lista);
         setBairros(b);
-        const inicial = enderecoInicial(lista);
+        const inicial = enderecoInicialNaLoja(lista, b);
         setEnderecoId(inicial?.id ?? null);
-        if (!inicial) setModoEndereco('novo');
+        // Sem endereço nenhum: cadastra. Com endereços, mas nenhum onde a loja entrega: a lista com o motivo.
+        if (!lista.length) setModoEndereco('novo');
+        else if (!inicial) {
+          setAvisoEndereco(`${nomeLoja} não entrega nos seus endereços salvos. Cadastre um endereço num bairro atendido.`);
+          setModoEndereco('escolher');
+        }
       })
       .catch((e) => vivo && e?.status !== 401 && setErro(ERRO_GENERICO));
     return () => {
       vivo = false;
     };
-  }, [chamar, tentativa]);
+  }, [chamar, tentativa, slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const freteGratis = freteDaApi ? freteDaApi.valor : (cardapio?.freteGratis ?? null);
   const endereco = enderecos?.find((e) => e.id === enderecoId) ?? null;
-  const resumo = useMemo(
-    () => resumoDoPedido(itens, endereco?.bairro.taxaCentavos ?? 0, freteGratis),
-    [itens, endereco, freteGratis],
-  );
+  const taxaBairro = taxaNaLoja(endereco, bairros) ?? 0;
+  const resumo = useMemo(() => resumoDoPedido(itens, taxaBairro, freteGratis), [itens, taxaBairro, freteGratis]);
   const troco = trocoDoCheckout({ forma, precisaTroco, texto: trocoTexto, totalCentavos: resumo.totalCentavos });
 
   if (!enderecos) {
@@ -87,10 +98,12 @@ export function Finalizacao({ onEditarTelefone }) {
     return (
       <FormEndereco
         bairros={bairros}
-        onCancelar={enderecos.some((e) => e.bairro.ativo) ? () => setModoEndereco(null) : null}
+        titulo={`Endereço de entrega (${nomeLoja} entrega nestes bairros)`}
+        onCancelar={enderecos.length ? () => setModoEndereco(enderecoInicialNaLoja(enderecos, bairros) ? null : 'escolher') : null}
         onSalvo={(novo) => {
           setEnderecos((lista) => [novo, ...lista.map((e) => (novo.principal ? { ...e, principal: false } : e))]);
           setEnderecoId(novo.id);
+          setAvisoEndereco('');
           setModoEndereco(null);
         }}
       />
@@ -101,19 +114,25 @@ export function Finalizacao({ onEditarTelefone }) {
     return (
       <View>
         <Titulo>Entregar em</Titulo>
-        {enderecos.map((e) => (
-          <Opcao
-            key={e.id}
-            titulo={textoEndereco(e)}
-            detalhe={`${e.bairro.nome}${e.bairro.ativo ? ` · entrega ${formatarPreco(e.bairro.taxaCentavos)}` : ' · não entregamos mais aqui'}`}
-            marcada={e.id === enderecoId}
-            desabilitada={!e.bairro.ativo}
-            onPress={() => {
-              setEnderecoId(e.id);
-              setModoEndereco(null);
-            }}
-          />
-        ))}
+        {avisoEndereco ? <TextoErro>{avisoEndereco}</TextoErro> : null}
+        {enderecos.map((e) => {
+          const taxa = taxaNaLoja(e, bairros);
+          return (
+            <Opcao
+              key={e.id}
+              titulo={textoEndereco(e)}
+              detalhe={`${e.bairro.nome}${taxa != null ? ` · entrega ${formatarPreco(taxa)}` : ` · ${nomeLoja} não entrega neste bairro`}`}
+              marcada={e.id === enderecoId}
+              desabilitada={taxa == null}
+              onPress={() => {
+                setEnderecoId(e.id);
+                setAvisoEndereco('');
+                setErro('');
+                setModoEndereco(null);
+              }}
+            />
+          );
+        })}
         {enderecos.length < 10 && <Botao titulo="+ Novo endereço" variante="texto" onPress={() => setModoEndereco('novo')} estilo={{ marginTop: 8 }} />}
       </View>
     );
@@ -167,6 +186,7 @@ export function Finalizacao({ onEditarTelefone }) {
         trocoParaCentavos: troco.trocoParaCentavos,
         chaveIdempotencia: chave.current,
         totalEsperadoCentavos: resumo.totalCentavos,
+        lojaSlug: slug,
       });
       const { pedido } = await chamar((token) => api.enviarPedido(token, corpo));
       criado = true;
@@ -177,17 +197,24 @@ export function Finalizacao({ onEditarTelefone }) {
     } catch (e) {
       const r = interpretarErroDoEnvio(e, {
         itens,
-        taxaBairroCentavos: endereco.bairro.taxaCentavos,
+        taxaBairroCentavos: taxaBairro,
         taxaEntregaCentavos: resumo.taxaEntregaCentavos,
       });
       if (r.acao === 'sair') return; // a sessão já foi encerrada: a tela volta para o login
+      if (r.acao === 'endereco') {
+        // A loja não entrega no bairro (a área mudou no meio): mensagem clara e a lista para trocar.
+        setBairros((b) => b.filter((x) => x.id !== endereco.bairro.id));
+        setAvisoEndereco(r.mensagem);
+        setEnderecoId(null);
+        setEtapa('confirmar');
+        setModoEndereco('escolher');
+        return;
+      }
       if (r.acao === 'preco') {
         // Nada foi criado nem baixado: atualiza a sacola, a taxa e a regra de frete; a mesma chave vale.
         if (r.itens) substituir(r.itens);
         if (r.taxaBairroCentavos != null) {
-          setEnderecos((lista) =>
-            lista.map((x) => (x.id === enderecoId ? { ...x, bairro: { ...x.bairro, taxaCentavos: r.taxaBairroCentavos } } : x)),
-          );
+          setBairros((b) => b.map((x) => (x.id === endereco.bairro.id ? { ...x, taxaCentavos: r.taxaBairroCentavos } : x)));
         }
         if (r.freteGratis) setFreteDaApi(r.freteGratis);
         recarregarCardapio();

@@ -20,7 +20,7 @@ export function AvisoFechado({ proximaAbertura }) {
 }
 
 /** Sem internet (ou a API não respondeu): o cardápio mostrado é o último que chegou. */
-export function FaixaSemConexao({ salvoEm, podePedir }) {
+export function FaixaSemConexao({ salvoEm, podePedir, textoSalvo = textoCardapioSalvo }) {
   const s = useEstilos(criarEstilos);
   const tema = useTema();
   return (
@@ -30,7 +30,7 @@ export function FaixaSemConexao({ salvoEm, podePedir }) {
         <Text style={s.titulo}> Sem conexão.</Text>
       </View>
       <Text style={s.texto}>
-        {salvoEm ? `${textoCardapioSalvo(salvoEm)} ` : ''}
+        {salvoEm ? `${textoSalvo(salvoEm)} ` : ''}
         {podePedir || !salvoEm ? 'Tentando de novo…' : 'Conecte-se à internet para pedir.'}
       </Text>
     </View>

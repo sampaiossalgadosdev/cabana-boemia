@@ -30,8 +30,11 @@ const insumoPublico = (i) => ({
 });
 
 /** Bebidas e insumos com saldo, mínimo e destaque. */
-export async function visaoGeral() {
-  const [produtos, insumos] = await Promise.all([estoqueRepo.listarProdutosComEstoque(), estoqueRepo.listarInsumos()]);
+export async function visaoGeral(lojaId) {
+  const [produtos, insumos] = await Promise.all([
+    estoqueRepo.listarProdutosComEstoque(lojaId),
+    estoqueRepo.listarInsumos(lojaId),
+  ]);
   return {
     produtos: produtos.map((p) => ({
       ...p,
@@ -44,10 +47,10 @@ export async function visaoGeral() {
 
 // ───────── Insumos (cadastro) ─────────
 
-async function gravarInsumo(fn) {
+async function gravarInsumo(lojaId, fn) {
   try {
     const insumo = await fn();
-    avisarCardapioAtualizado('estoque');
+    avisarCardapioAtualizado(lojaId, 'estoque');
     return insumoPublico(insumo);
   } catch (err) {
     if (ehDuplicado(err)) throw new ErroHttp(409, 'Já existe um insumo com este nome', { codigo: 'NOME_EM_USO' });
@@ -57,11 +60,11 @@ async function gravarInsumo(fn) {
 }
 
 /** Insumo novo começa com saldo 0 (o saldo entra por Entrada). */
-export const criarInsumo = ({ nome, estoqueMinimo }) =>
-  gravarInsumo(() => estoqueRepo.criarInsumo({ nome, estoqueMinimo, estoque: 0 }));
+export const criarInsumo = (lojaId, { nome, estoqueMinimo }) =>
+  gravarInsumo(lojaId, () => estoqueRepo.criarInsumo(lojaId, { nome, estoqueMinimo, estoque: 0 }));
 
-export const atualizarInsumo = (id, { nome, estoqueMinimo }) =>
-  gravarInsumo(() => estoqueRepo.atualizarInsumo(id, { nome, estoqueMinimo }));
+export const atualizarInsumo = (lojaId, id, { nome, estoqueMinimo }) =>
+  gravarInsumo(lojaId, () => estoqueRepo.atualizarInsumo(lojaId, id, { nome, estoqueMinimo }));
 
 // ───────── Entrada e ajuste ─────────
 
@@ -73,8 +76,10 @@ const semControle = () =>
     codigo: 'SEM_CONTROLE_DE_ESTOQUE',
   });
 
-async function saldoDepois(alvo, movimentacao) {
-  const item = alvo.produtoId ? await estoqueRepo.saldoProduto(alvo.produtoId) : await estoqueRepo.saldoInsumo(alvo.insumoId);
+async function saldoDepois(lojaId, alvo, movimentacao) {
+  const item = alvo.produtoId
+    ? await estoqueRepo.saldoProduto(lojaId, alvo.produtoId)
+    : await estoqueRepo.saldoInsumo(lojaId, alvo.insumoId);
   return {
     item: { ...item, abaixoDoMinimo: abaixoDoMinimo(item.estoque, item.estoqueMinimo) },
     movimentacao,
@@ -85,31 +90,31 @@ async function saldoDepois(alvo, movimentacao) {
  * Soma `quantidade` ao saldo (incremento atômico) e grava ENTRADA.
  * @param {{ produtoId?: number, insumoId?: number }} alvo exatamente um dos dois
  */
-export async function registrarEntrada(alvo, { quantidade, motivo = null }, { usuarioId }) {
+export async function registrarEntrada(lojaId, alvo, { quantidade, motivo = null }, { usuarioId }) {
   const movimentacao = await prisma.$transaction(async (tx) => {
     if (alvo.produtoId) {
-      if ((await estoqueRepo.somarProduto(alvo.produtoId, quantidade, tx)) === 0) {
-        const p = await estoqueRepo.saldoProduto(alvo.produtoId, tx);
+      if ((await estoqueRepo.somarProduto(lojaId, alvo.produtoId, quantidade, tx)) === 0) {
+        const p = await estoqueRepo.saldoProduto(lojaId, alvo.produtoId, tx);
         throw p ? semControle() : naoEncontrado(alvo);
       }
-    } else if ((await estoqueRepo.somarInsumo(alvo.insumoId, quantidade, tx)) === 0) {
+    } else if ((await estoqueRepo.somarInsumo(lojaId, alvo.insumoId, quantidade, tx)) === 0) {
       throw naoEncontrado(alvo);
     }
     return estoqueRepo.criarMovimentacao({ tipo: 'ENTRADA', ...alvo, quantidade, motivo, usuarioId }, tx);
   }, OPCOES_TRANSACAO);
-  avisarCardapioAtualizado('estoque');
-  return saldoDepois(alvo, movimentacao);
+  avisarCardapioAtualizado(lojaId, 'estoque');
+  return saldoDepois(lojaId, alvo, movimentacao);
 }
 
 /**
  * Ajuste por contagem: o saldo passa a ser `saldoContado` e o AJUSTE grava o
  * delta (pode ser negativo). Sem diferença: nada é gravado (movimentacao null).
  */
-export async function registrarAjuste(alvo, { saldoContado, motivo }, { usuarioId }) {
+export async function registrarAjuste(lojaId, alvo, { saldoContado, motivo }, { usuarioId }) {
   const movimentacao = await prisma.$transaction(async (tx) => {
     const atual = alvo.produtoId
-      ? await estoqueRepo.travarProduto(alvo.produtoId, tx)
-      : await estoqueRepo.travarInsumo(alvo.insumoId, tx);
+      ? await estoqueRepo.travarProduto(lojaId, alvo.produtoId, tx)
+      : await estoqueRepo.travarInsumo(lojaId, alvo.insumoId, tx);
     if (!atual) throw naoEncontrado(alvo);
     if (!atual.controlaEstoque) throw semControle();
     const delta = saldoContado - (atual.estoque ?? 0);
@@ -118,8 +123,8 @@ export async function registrarAjuste(alvo, { saldoContado, motivo }, { usuarioI
     else await estoqueRepo.definirSaldoInsumo(alvo.insumoId, saldoContado, tx);
     return estoqueRepo.criarMovimentacao({ tipo: 'AJUSTE', ...alvo, quantidade: delta, motivo, usuarioId }, tx);
   }, OPCOES_TRANSACAO);
-  if (movimentacao) avisarCardapioAtualizado('estoque');
-  return saldoDepois(alvo, movimentacao);
+  if (movimentacao) avisarCardapioAtualizado(lojaId, 'estoque');
+  return saldoDepois(lojaId, alvo, movimentacao);
 }
 
 // ───────── Histórico ─────────
@@ -130,8 +135,9 @@ const movimentacaoPublica = ({ itemPedido, ...m }) => ({ ...m, pedido: itemPedid
  * Histórico, mais recente primeiro. `proximo` = id para pedir a página
  * seguinte (`antesDeId`), ou null no fim.
  */
-export async function movimentacoes({ produtoId, insumoId, tipo, antesDeId }) {
+export async function movimentacoes(lojaId, { produtoId, insumoId, tipo, antesDeId }) {
   const lista = await estoqueRepo.listarMovimentacoes({
+    lojaId,
     produtoId,
     insumoId,
     tipo,

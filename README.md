@@ -24,12 +24,37 @@ npm run dev:pdv
 npm run dev:app          # app Delivery Abatiá (Expo; abrir no Expo Go pelo QR)
 npm test                 # todos os workspaces
 npm run seed:demo        # dados de demonstração do dia (roteiro em DEMO.md)
-npm run dist -w pdv      # instalador do PDV → pdv/dist/Cabana Boemia PDV Setup <versão>.exe
+npm run dist -w pdv      # instalador do PDV → pdv/dist/PDV-do-Abatia-Setup-<versão>.exe
 ```
 
-### PDV (balcão)
+### PDV do Abatiá (balcão)
 
-O instalador (`npm run dist -w pdv`, no Windows) instala só para o usuário, sem pedir administrador, cria atalho na área de trabalho e abre o PDV ao terminar; a partir daí ele abre sozinho com o Windows. Na primeira abertura pede o servidor (já vem preenchido com `https://cabana.managerpix.com.br`; editável, sem `/api`) e a impressora térmica (lista do Windows e largura do papel 80/58 mm). O log da impressão fica em `%APPDATA%\Cabana Boemia PDV\logs\impressao.log`. O instalador não é assinado: na primeira vez o Windows SmartScreen avisa "editor desconhecido" (Mais informações › Executar assim mesmo).
+Um PDV só para **todas as lojas**: o programa se chama **PDV do Abatiá** (antes, "Cabana Boemia PDV"). A loja vem do login: dono e atendente entram na loja deles; o administrador da plataforma escolhe a loja ("Em qual loja?") e o computador lembra a escolha.
+
+O instalador (`npm run dist -w pdv`, no Windows → `pdv/dist/PDV-do-Abatia-Setup-<versão>.exe`) instala só para o usuário do Windows, sem pedir administrador, cria atalho "PDV do Abatiá" na área de trabalho e no menu Iniciar e abre o PDV ao terminar; a partir daí ele abre sozinho com o Windows. O instalador não é assinado: na primeira vez o Windows SmartScreen avisa "editor desconhecido" (Mais informações › Executar assim mesmo). O log da impressão fica em `%APPDATA%\PDV do Abatiá\logs\impressao.log`.
+
+#### Instalar numa loja nova
+
+1. Antes, na retaguarda (`/admin`), o administrador cria a loja em **Lojas** e o **dono** dela ("Criar dono"). O dono cadastra os produtos, os turnos e horários e a área de entrega, e cria os atendentes em **Equipe**.
+2. No computador do balcão da loja: copie `PDV-do-Abatia-Setup-<versão>.exe` (pen drive ou link) e execute.
+3. Primeira abertura: o servidor já vem preenchido com `https://cabana.managerpix.com.br` (confira e salve); depois a impressora térmica (lista do Windows, largura 80/58 mm, "Imprimir teste") ou "Configurar depois".
+4. Entre com o e-mail e a senha do dono ou de um atendente **daquela loja**: a barra mostra a logo e o nome dela, e só os pedidos, o caixa e os cupons dela aparecem.
+5. Confira: um pedido de teste (Delivery › Novo pedido) cai no painel e o cupom sai com o nome da loja.
+6. Mais de um computador na mesma loja pode ficar com a impressora ligada: a API reserva cada cupom para um computador, sem imprimir duas vezes.
+
+#### Migrar o computador da Cabana (do "Cabana Boemia PDV")
+
+A API multi-loja **não atende mais o programa antigo** (ele para de receber pedidos na hora e de imprimir). Por isso a troca é **junto com o deploy**, de preferência com a loja fechada:
+
+1. **Backup do banco** de produção (ver `api/prisma/REVERTER_MULTI_LOJA.md`).
+2. Merge da branch `feat/multi-loja` na `main` e push: o Railway faz o deploy e roda as migrations.
+3. No Railway (`railway ssh`): `npm run seed -w api` (a Cabana ganha a logo e a cor padrão; nada do que o dono editou muda).
+4. No computador da Cabana: **feche o PDV antigo** (Sair e fechar a janela; se precisar, feche pelo Gerenciador de Tarefas) e execute `PDV-do-Abatia-Setup-<versão>.exe`.
+   - É outro programa (instala ao lado do antigo). Na **primeira abertura** ele importa do antigo, sozinho: o **endereço do servidor**, a **impressora** (modo, largura, tabela, guilhotina), o **login salvo** (abre já logado, no mesmo usuário do Windows) e o identificador do computador para a fila de impressão. O antigo **deixa de abrir com o Windows** (o instalador e o PDV novo apagam a entrada dele) e o novo passa a abrir.
+   - Se o login não vier (ex.: o antigo já tinha saído da conta), é só entrar com o usuário da Cabana.
+5. Confira no PDV novo: a barra mostra a logo e o nome "Cabana Boemia"; um pedido de teste chega no painel; o cupom sai na impressora; o "Caixa" abre normal; em Impressora, a térmica certa está escolhida.
+6. **Desinstale o programa antigo**: Configurações do Windows › Aplicativos › Aplicativos instalados › **Cabana Boemia PDV** › Desinstalar (ou Painel de Controle › Programas). Não abra o antigo antes de desinstalar: ele usaria o mesmo login já girado pelo novo, e a API, por segurança, encerraria as sessões desse usuário (aí é só entrar de novo no PDV novo).
+7. A pasta de dados antiga (`%APPDATA%\Cabana Boemia PDV`) fica no computador; pode ser apagada depois que o PDV novo estiver funcionando.
 
 Build de produção local (o mesmo que o Railway roda):
 

@@ -54,6 +54,7 @@ describe('caixa: abrir, movimentos, fechamento cego e retaguarda', { skip: semBa
     numero += 1;
     return prisma.pedido.create({
       data: {
+        lojaId: 1,
         numeroDia: 1000 + numero,
         dataRef: new Date(`${DIA}T00:00:00Z`),
         canal: 'WHATSAPP',
@@ -82,7 +83,7 @@ describe('caixa: abrir, movimentos, fechamento cego e retaguarda', { skip: semBa
     const { criarTempoReal } = await import('../src/lib/tempoReal.js');
     const { criarAtendente, criarDono } = await import('../src/services/usuario.service.js');
 
-    await prisma.produto.update({ where: { nome: 'Prato por kg' }, data: { precoCentavos: 5990, ativo: true } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Prato por kg' } }, data: { precoCentavos: 5990, ativo: true } });
     for (const prod of await prisma.produto.findMany()) p[prod.nome] = prod;
     atendente = await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
     await criarDono({ nome: 'Dono', email: 'dono@teste.com', senha: 'senha-do-dono' });
@@ -143,7 +144,7 @@ describe('caixa: abrir, movimentos, fechamento cego e retaguarda', { skip: semBa
 
     // Mesmo por fora do service, o índice parcial recusa o segundo aberto.
     await assert.rejects(
-      prisma.caixa.create({ data: { abertoPorId: atendente.id, valorInicialCentavos: 0 } }),
+      prisma.caixa.create({ data: { lojaId: 1, abertoPorId: atendente.id, valorInicialCentavos: 0 } }),
       (err) => err.code === 'P2002',
     );
     // CHECK: fechado pela metade é recusado.
@@ -268,7 +269,7 @@ describe('caixa: abrir, movimentos, fechamento cego e retaguarda', { skip: semBa
       respostas.push(await movimento('SANGRIA', 100));
       respostas.push(await api('GET', '/equipe/caixa/atual'));
       respostas.push(await fecharCaixa({ valorContadoCentavos: 1, esperadoCentavos: 999 }));
-      respostas.push(await api('GET', '/equipe/impressoes/pendentes'));
+      respostas.push(await api('POST', '/equipe/impressoes/reservar', { corpo: { agente: 'teste' } }));
       respostas.push(await api('GET', '/equipe/caixa/atual', { tk: tkDono }));
       await new Promise((r) => setTimeout(r, 100));
 
@@ -301,7 +302,7 @@ describe('caixa: abrir, movimentos, fechamento cego e retaguarda', { skip: semBa
     assert.equal(trabalho.status, 'PENDENTE');
     assert.equal(trabalho.pedidoId, null);
 
-    const pend = await api('GET', '/equipe/impressoes/pendentes');
+    const pend = await api('POST', '/equipe/impressoes/reservar', { corpo: { agente: 'teste' } });
     const t = pend.corpo.trabalhos.find((x) => x.id === trabalho.id);
     assert.equal(t.pedido, undefined);
     assert.equal(t.caixa.valorInicialCentavos, 3000);
@@ -310,7 +311,7 @@ describe('caixa: abrir, movimentos, fechamento cego e retaguarda', { skip: semBa
     assert.deepEqual(t.caixa.movimentos.map((m) => m.motivo), ['moedas']);
 
     // CHECK: trabalho sem dono (nem pedido nem caixa) é recusado pelo banco.
-    await assert.rejects(prisma.trabalhoImpressao.create({ data: { tipo: 'FECHAMENTO' } }));
+    await assert.rejects(prisma.trabalhoImpressao.create({ data: { lojaId: 1, tipo: 'FECHAMENTO' } }));
   });
 
   test('fechar com comanda aberta = 409 PEDIDOS_ABERTOS listando a comanda (e o delivery confirmado)', async () => {

@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { BackHandler, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useUltimoPedido } from '../../estado/UltimoPedido.js';
-import { obterConfig } from '../../lib/config.js';
+import { useCardapio } from '../../estado/Cardapio.js';
 import { formatarPreco } from '../../logica/dinheiro.js';
 import { linkCancelamento, rotuloPagamento, textoTaxa } from '../../logica/pedido.js';
 import { Botao } from '../../componentes/basicos.js';
@@ -16,7 +16,9 @@ export default function TelaPedidoEnviado() {
   const tema = useTema();
   const { bottom } = useSafeAreaInsets();
   const { pedidoEnviado: pedido } = useUltimoPedido();
-  const [whatsapp, setWhatsapp] = useState(null);
+  // Cancelamento pelo WhatsApp DA LOJA do pedido (a configuração dela veio com o cardápio).
+  const { loja } = useCardapio();
+  const whatsapp = loja?.whatsapp ?? '';
 
   const navegacao = useNavigation();
   // Fecha o modal da sacola inteiro (o stack de cima é o da raiz).
@@ -25,16 +27,6 @@ export default function TelaPedidoEnviado() {
     if (raiz?.canGoBack()) raiz.goBack();
     else router.replace('/');
   };
-
-  useEffect(() => {
-    let vivo = true;
-    obterConfig()
-      .then((c) => vivo && setWhatsapp(c.whatsapp ?? ''))
-      .catch(() => vivo && setWhatsapp(''));
-    return () => {
-      vivo = false;
-    };
-  }, []);
 
   // Voltar (Android) não leva de novo à sacola/checkout: vai ao cardápio.
   useEffect(() => {

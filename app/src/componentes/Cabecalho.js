@@ -1,18 +1,31 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEstilos, useTema } from '../tema/tema.js';
 
-/** Topo vermelho: logo e nome da loja, turno ativo e o tempo de entrega (ou "Fechado"). */
-export function Cabecalho({ cardapio }) {
+/**
+ * Topo na cor da loja: voltar (para a lista de lojas), logo e nome da loja,
+ * turno ativo e o tempo de entrega (ou "Fechado").
+ */
+export function Cabecalho({ cardapio, onVoltar }) {
   const s = useEstilos(criarEstilos);
   const tema = useTema();
   const { top } = useSafeAreaInsets();
   const aberto = cardapio?.aberto;
   return (
     <View style={[s.topo, { paddingTop: top + 8 }]}>
+      {onVoltar && (
+        <Pressable onPress={onVoltar} accessibilityRole="button" accessibilityLabel="Voltar para as lojas" hitSlop={10}>
+          <Ionicons name="chevron-back" size={26} color={tema.cores.textoInverso} />
+        </Pressable>
+      )}
       <View style={s.logoFundo}>
-        <Image source={tema.logo} style={s.logo} contentFit="contain" accessibilityLabel={tema.nome} />
+        {tema.logo ? (
+          <Image source={tema.logo} style={s.logo} contentFit="contain" cachePolicy="memory-disk" accessibilityLabel={tema.nome} />
+        ) : (
+          <Text style={s.inicial}>{tema.nome.trim()[0]?.toUpperCase()}</Text>
+        )}
       </View>
       <View style={s.textos}>
         <Text style={s.nome} numberOfLines={1} accessibilityRole="header">
@@ -51,6 +64,7 @@ const criarEstilos = (t) =>
       overflow: 'hidden',
     },
     logo: { width: 50, height: 34 },
+    inicial: { fontSize: 24, fontWeight: t.fontes.peso.pesado, color: t.cores.acao },
     textos: { flex: 1 },
     nome: {
       color: t.cores.textoInverso,
@@ -60,6 +74,7 @@ const criarEstilos = (t) =>
     },
     sub: { color: t.cores.textoInverso, fontSize: t.fontes.tamanho.pequeno, opacity: 0.92, marginTop: 2 },
     bolinha: { width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: t.cores.textoInverso },
-    aberto: { backgroundColor: t.cores.sucesso },
-    fechado: { backgroundColor: t.cores.desabilitado },
+    // Cheia (na cor do texto do topo) = aberta; vazada = fechada: vale para qualquer cor de loja.
+    aberto: { backgroundColor: t.cores.textoInverso },
+    fechado: { backgroundColor: 'transparent' },
   });

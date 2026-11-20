@@ -44,7 +44,7 @@ describe('seed:demo (dados de demonstração)', { skip: semBancoDeTeste }, () =>
 
   test('cria 5 clientes, 8 pedidos do dia, 2 comandas abertas, pão acabando e nada para imprimir', async () => {
     await prisma.usuario.create({
-      data: { nome: 'Dono', email: 'dono@demo.test', senhaHash: await bcrypt.hash('x', 4), papel: 'DONO' },
+      data: { lojaId: 1, nome: 'Dono', email: 'dono@demo.test', senhaHash: await bcrypt.hash('x', 4), papel: 'DONO' },
     });
     const r = rodarDemo();
     assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
@@ -72,11 +72,12 @@ describe('seed:demo (dados de demonstração)', { skip: semBancoDeTeste }, () =>
     const paes = Object.fromEntries((await prisma.insumo.findMany()).map((i) => [i.nome, i.estoque]));
     assert.equal(paes['Pão de lanche'], 5);
     assert.equal(paes['Pão de cachorro-quente'], 10);
-    const lata = await prisma.produto.findUnique({ where: { nome: 'Refrigerante Lata' } });
+    const lata = await prisma.produto.findUnique({ where: { lojaId_nome: { lojaId: 1, nome: 'Refrigerante Lata' } } });
     assert.equal(lata.estoque, 24 - 2 - 1 - 2, 'baixa no lançamento: 2 (site) + 1 (Roberto) + 2 (Seu Zé)');
 
     assert.equal(await prisma.trabalhoImpressao.count({ where: { status: 'PENDENTE' } }), 0, 'nada sai na impressora');
-    assert.equal(await prisma.bairro.count({ where: { ativo: true } }), 2, 'bairros criados (não havia nenhum)');
+    assert.equal(await prisma.bairro.count({ where: { ativo: true } }), 2, 'bairros da cidade criados (não havia nenhum)');
+    assert.equal(await prisma.areaEntrega.count({ where: { lojaId: 1, ativo: true } }), 2, 'na área de entrega da Cabana');
   });
 
   test('rodar de novo no mesmo dia é recusado (não duplica)', async () => {

@@ -2,10 +2,13 @@ import { Router } from 'express';
 import { assincrono } from '../lib/assincrono.js';
 import { autenticar } from '../middlewares/autenticar.js';
 import { exigirPapel } from '../middlewares/exigirPapel.js';
+import { lojaDaEquipe } from '../middlewares/loja.js';
 import { criarRetaguardaController } from '../controllers/retaguarda.controller.js';
+import { corpoImagem } from './plataforma.routes.js';
 
 /**
- * Rotas da retaguarda (só DONO), nunca em cache. Catálogo, estoque, turnos,
+ * Rotas da retaguarda (só DONO; ADMIN passa como DONO), na loja do usuário
+ * (`req.lojaId`), nunca em cache. Catálogo, estoque, turnos,
  * bairros e configuração emitem `cardapio:atualizado` para o PDV recarregar.
  * @param {{ relogio?: () => Date }} [opcoes]
  */
@@ -16,11 +19,8 @@ export function criarRetaguardaRoutes({ relogio } = {}) {
     res.set('Cache-Control', 'no-store');
     next();
   });
-  r.use(autenticar, exigirPapel('DONO'));
+  r.use(autenticar, exigirPapel('DONO'), lojaDaEquipe);
   r.get('/caixas', assincrono(c.caixas));
-  // Pedidos de exclusão de conta feitos pela página /excluir-conta (tela na retaguarda: pendente).
-  r.get('/solicitacoes-exclusao', assincrono(c.listarSolicitacoesExclusao));
-  r.patch('/solicitacoes-exclusao/:id/atendida', assincrono(c.marcarSolicitacaoAtendida));
   r.get('/relatorios/dia', assincrono(c.relatorioDia));
   r.post('/relatorios/dia/imprimir', assincrono(c.imprimirRelatorioDia));
 
@@ -39,9 +39,13 @@ export function criarRetaguardaRoutes({ relogio } = {}) {
   r.post('/cardapio-do-dia/liberar-tudo', assincrono(c.liberarTudo));
 
   r.get('/turnos', assincrono(c.listarTurnos));
+  r.post('/turnos', assincrono(c.criarTurno));
+  r.patch('/turnos/:id', assincrono(c.alterarTurno));
   r.put('/turnos/:id/horarios', assincrono(c.definirHorarios));
 
+  // Área de entrega da loja (bairros da lista da cidade + taxa); `:id` = id do bairro.
   r.get('/bairros', assincrono(c.listarBairros));
+  r.get('/bairros/cidade', assincrono(c.bairrosDaCidade));
   r.post('/bairros', assincrono(c.criarBairro));
   r.patch('/bairros/:id', assincrono(c.alterarBairro));
 
@@ -51,6 +55,12 @@ export function criarRetaguardaRoutes({ relogio } = {}) {
   r.get('/estoque/movimentacoes', assincrono(c.movimentacoes));
   r.post('/insumos', assincrono(c.criarInsumo));
   r.put('/insumos/:id', assincrono(c.alterarInsumo));
+
+  // Perfil da loja: cor primária e logo (o ADMIN define o padrão).
+  r.get('/perfil', assincrono(c.obterPerfil));
+  r.put('/perfil/cor', assincrono(c.definirCor));
+  r.put('/perfil/logo', corpoImagem(), assincrono(c.definirLogo));
+  r.post('/perfil/padrao', assincrono(c.voltarAoPadrao));
 
   r.get('/config', assincrono(c.obterConfig));
   r.put('/config', assincrono(c.definirConfig));

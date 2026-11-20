@@ -52,6 +52,7 @@ export function trocoDoCheckout({ forma, precisaTroco, texto, totalCentavos }) {
  * - 'preco' (409 PRECO_ALTERADO): nada foi criado; aplicar preços/taxa/frete
  *   novos e pedir para tocar em "Enviar pedido" de novo (mesma chave).
  * - 'cardapio': estoque, produto ou loja mudou; recarregar o cardápio.
+ * - 'endereco' (422 BAIRRO_FORA_DA_AREA): a loja não entrega no endereço; mostrar a mensagem e trocar o endereço.
  * - 'mensagem': a API recusou (mostra o texto dela) ou rede (genérico; a
  *   mesma chave de idempotência garante que reenviar não duplica).
  * @param {{ itens: any[], taxaBairroCentavos: number, taxaEntregaCentavos: number }} ctx
@@ -76,5 +77,7 @@ export function interpretarErroDoEnvio(erro, { itens, taxaBairroCentavos, taxaEn
     };
   }
   if (erro?.status && CARDAPIO_MUDOU.has(erro.codigo)) return { acao: 'cardapio', mensagem: erro.message };
+  // A loja não entrega no bairro do endereço (a API manda "<Loja> não entrega no bairro X..."): trocar o endereço.
+  if (erro?.codigo === 'BAIRRO_FORA_DA_AREA') return { acao: 'endereco', mensagem: erro.message };
   return { acao: 'mensagem', mensagem: erro?.status ? erro.message : ERRO_GENERICO_ENVIO };
 }

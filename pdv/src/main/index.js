@@ -15,11 +15,30 @@ import { criarPing } from './agente-impressao/conexao.js';
 import { criarImpressoraArquivo, criarImpressoraWindows } from './agente-impressao/impressoras.js';
 import { carregarSpooler } from './agente-impressao/winspool.js';
 import { criarRegistro } from './registro.js';
+import { criarEstadoLoja } from './loja.js';
+import { PASTA_DO_PDV_ANTIGO, importarDoPdvAntigo } from './migracao.js';
 
 const DEV = !app.isPackaged;
 /** Servidor de produção: já vem preenchido (editável) na primeira execução do app instalado. */
 const SERVIDOR_PRODUCAO = 'https://cabana.managerpix.com.br';
 const URL_DEV_RENDERER = process.env.ELECTRON_RENDERER_URL;
+
+/** Nome da entrada "abrir com o Windows" (HKCU\...\Run); o desinstalador apaga por ele. */
+const NOME_INICIO = 'PDVdoAbatia';
+/** A do programa antigo "Cabana Boemia PDV": apagada para não abrirem os dois. */
+const NOME_INICIO_ANTIGO = 'CabanaBoemiaPDV';
+
+// Primeiro uso no computador do PDV antigo: importa servidor, impressora e login
+// ANTES de o Chromium iniciar (a chave da sessão cifrada mora no "Local State").
+// PDV_PASTA_ANTIGA só para testes (aponta outra pasta como "a do programa antigo").
+// Em desenvolvimento só com PDV_PASTA_ANTIGA (a pasta real do antigo aponta para produção).
+const importacao =
+  app.isPackaged || process.env.PDV_PASTA_ANTIGA
+    ? importarDoPdvAntigo({
+        dadosNovos: app.getPath('userData'),
+        dadosAntigos: process.env.PDV_PASTA_ANTIGA || path.join(app.getPath('appData'), PASTA_DO_PDV_ANTIGO),
+      })
+    : { importou: false, motivo: 'desenvolvimento' };
 
 // Uma instância só: o atalho/inicialização abre a janela que já existe.
 if (!app.requestSingleInstanceLock()) {
@@ -54,8 +73,12 @@ function iniciar() {
 
     let tempoReal;
     let agente;
+    let handlers;
+    // Loja deste PDV: a do login (DONO/ATENDENTE) ou a escolhida pelo ADMIN (X-Loja).
+    const loja = criarEstadoLoja({ servidor: config.servidor });
     const api = criarClienteApi({
       apiUrl: config.apiUrl,
+      lojaInformada: loja.informada,
       armazem: criarArmazemRefresh({ caminho: path.join(dados, 'sessao.bin'), safeStorage }),
       aoSessaoExpirar: (erro) => {
         tempoReal?.desligar();
@@ -67,12 +90,15 @@ function iniciar() {
     // Log do agente de impressão em userData/logs (impressao.log + 5 antigos de 1 MB).
     const logImpressao = criarRegistro({ pasta: path.join(dados, 'logs'), nome: 'impressao', espelho: DEV ? console : null });
     logImpressao.info(`[pdv] versão ${app.getVersion()} iniciada`);
+    if (importacao.importou) logImpressao.info(`[pdv] configuração importada do programa antigo: ${importacao.arquivos.join(', ')}`);
+    else if (importacao.motivo === 'erro') logImpressao.warn(`[pdv] não deu para importar do programa antigo: ${importacao.erro}`);
 
     // Agente de impressão: só imprime neste computador se a impressora (ou o
     // modo teste) estiver configurada na tela "Impressora".
     agente = criarAgente({
       log: logImpressao,
       api,
+      idAgente: config.idAgente,
       ping: criarPing({ apiUrl: config.apiUrl }),
       configuracao: config.impressao,
       criarSaida: async (cfg) =>
@@ -87,6 +113,7 @@ function iniciar() {
       apiUrl: config.apiUrl,
       accessToken: api.accessToken,
       renovar: api.renovar,
+      lojaInformada: loja.informada,
       aoStatus: (status) => {
         enviar('socket:status', status);
         // Eventos emitidos durante a queda não voltam: busca tudo o que está pendente.
@@ -95,6 +122,12 @@ function iniciar() {
       aoEvento: (nome, dados) => {
         if (nome === 'impressao:nova') agente.aoImpressaoNova();
         else enviar(nome, dados);
+        // A retaguarda trocou o nome, a logo ou a cor da loja: tema novo na hora.
+        if (nome === 'cardapio:atualizado' && dados?.origem === 'loja') {
+          handlers['loja:atual']()
+            .then((identidade) => identidade && enviar('loja:atualizada', identidade))
+            .catch(() => {});
+        }
       },
     });
 
@@ -104,7 +137,7 @@ function iniciar() {
       return lista.map((p) => p.name).sort((a, b) => a.localeCompare(b));
     };
 
-    const handlers = criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao: app.getVersion() });
+    handlers = criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao: app.getVersion(), loja });
     for (const [canal, handler] of Object.entries(handlers)) {
       ipcMain.handle(canal, (evento, ...args) => {
         // Só a nossa janela, com a nossa página, fala com o main.
@@ -120,7 +153,11 @@ function iniciar() {
 
     // Abre com o Windows (só no app instalado: em dev registraria o electron.exe).
     // Nome fixo da entrada em HKCU\...\Run: o desinstalador apaga por ele (recursos/installer.nsh).
-    if (!DEV) app.setLoginItemSettings({ openAtLogin: true, name: 'CabanaBoemiaPDV' });
+    if (!DEV) {
+      app.setLoginItemSettings({ openAtLogin: true, name: NOME_INICIO });
+      // O programa antigo não abre mais com o Windows (senão abririam os dois PDVs).
+      app.setLoginItemSettings({ openAtLogin: false, name: NOME_INICIO_ANTIGO });
+    }
 
     Menu.setApplicationMenu(null);
     janela = criarJanela();
@@ -144,7 +181,7 @@ function criarJanela() {
     minWidth: 1024,
     minHeight: 640,
     show: false,
-    title: 'Cabana Boemia PDV',
+    title: 'PDV do Abatiá',
     backgroundColor: '#FBF3E8',
     autoHideMenuBar: true,
     webPreferences: {

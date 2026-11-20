@@ -7,7 +7,7 @@ import { usuarioPublico } from '../services/auth.service.js';
 /**
  * Exige `Authorization: Bearer <accessToken>`. Busca o usuário no banco a cada
  * requisição: desativar um atendente corta o acesso na hora, e o papel vem do
- * banco, não do token. Preenche `req.usuario`.
+ * banco, não do token. Preenche `req.usuario` e `req.lojaDoUsuario`.
  */
 export async function autenticar(req, res, next) {
   try {
@@ -32,6 +32,8 @@ export async function autenticar(req, res, next) {
     }
 
     req.usuario = usuarioPublico(usuario);
+    // Loja do cadastro (null = ADMIN); `lojaDaEquipe` resolve `req.lojaId` a partir dela.
+    req.lojaDoUsuario = usuario.lojaId ?? null;
     next();
   } catch (err) {
     next(err);

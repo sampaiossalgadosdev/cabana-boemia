@@ -166,6 +166,21 @@ export function fechamentoCaixaParaApi(d) {
   };
 }
 
+/** Slug de loja (o mesmo formato da API). */
+function slugValido(valor) {
+  if (typeof valor !== 'string' || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(valor) || valor.length > 60) throw new ErroEntrada('Loja inválida');
+  return valor;
+}
+
+/** Chave da NFC-e: 44 números (espaços e pontos são tirados); vazio = apagar. A API confere o dígito. */
+export function chaveNfceParaApi(valor) {
+  if (valor == null) return { chaveNfce: null };
+  const digitos = String(valor).replace(/[\s.]/g, '');
+  if (!digitos) return { chaveNfce: null };
+  if (!/^\d{44}$/.test(digitos)) throw new ErroEntrada('A chave da NFC-e tem 44 números');
+  return { chaveNfce: digitos };
+}
+
 export function validarMinutos(valor) {
   if (valor === null || valor === undefined || valor === '') return null;
   if (!Number.isInteger(valor) || valor < TEMPO_MIN || valor > TEMPO_MAX) {
@@ -182,16 +197,50 @@ export function validarMinutos(valor) {
  *   agente: ReturnType<typeof import('./agente-impressao/agente.js').criarAgente>,
  *   listarImpressoras: () => Promise<string[]>,
  *   versao: string,
+ *   loja: ReturnType<typeof import('./loja.js').criarEstadoLoja>,
  * }} deps
  * @returns {Record<string, (...args: any[]) => Promise<unknown>>}
  */
-export function criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao, consultarCep = criarConsultaCep() }) {
+export function criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao, loja, consultarCep = criarConsultaCep() }) {
+  function parar() {
+    tempoReal.desligar();
+    agente.desligar();
+  }
+
+  /** Busca a identidade da loja (nome, logo, cor) e liga o tempo real e a impressão nela. */
+  async function entrarNaLoja() {
+    const { loja: identidade } = await api.requisitar('GET', '/equipe/loja');
+    const comLogo = await loja.definirIdentidade(identidade);
+    tempoReal.ligar();
+    agente.ligar();
+    return comLogo;
+  }
+
+  /**
+   * Depois do login/restauração: DONO e ATENDENTE entram na loja deles; o
+   * ADMIN, na loja que escolheu da última vez (se ainda existir), senão
+   * `loja: null` e o renderer mostra a escolha.
+   */
   async function aposLogin(usuario) {
-    if (usuario) {
-      tempoReal.ligar();
-      agente.ligar();
+    if (!usuario) return usuario;
+    parar();
+    loja.iniciar(usuario, usuario.papel === 'ADMIN' ? config.lojaAdmin() : null);
+    if (loja.precisaEscolher()) return { ...usuario, loja: null };
+    try {
+      return { ...usuario, loja: await entrarNaLoja() };
+    } catch (err) {
+      // Loja lembrada do ADMIN que sumiu ou ficou proibida: escolhe de novo.
+      if (loja.ehAdmin() && [400, 403, 404].includes(err?.status)) {
+        loja.escolher(null);
+        config.definirLojaAdmin(null);
+        return { ...usuario, loja: null };
+      }
+      throw err;
     }
-    return usuario;
+  }
+
+  function exigirAdmin() {
+    if (!loja.ehAdmin()) throw Object.assign(new ErroEntrada('Só o administrador escolhe a loja'), { status: 403, codigo: 'SEM_PERMISSAO' });
   }
 
   return {
@@ -213,10 +262,44 @@ export function criarHandlers({ config, api, tempoReal, agente, listarImpressora
       aposLogin(await api.entrar(texto(email, 'o email').trim(), texto(senha, 'a senha', 72))),
 
     'sessao:sair': async () => {
-      tempoReal.desligar();
-      agente.desligar();
+      parar();
+      loja.limpar();
       await api.sair();
       return null;
+    },
+
+    /** ADMIN: lojas para escolher (as inativas também: a equipe pode estar montando). */
+    'lojas:listar': async () => {
+      exigirAdmin();
+      const { lojas } = await api.requisitar('GET', '/plataforma/lojas');
+      return lojas.map((l) => ({ slug: l.slug, nome: l.nome, ativa: l.ativa, corPrimaria: l.corPrimaria ?? null }));
+    },
+
+    /** ADMIN: trabalha nesta loja (null = volta para a escolha). */
+    'loja:escolher': async (slug) => {
+      exigirAdmin();
+      parar();
+      if (slug == null) {
+        loja.escolher(null);
+        await loja.definirIdentidade(null);
+        return null;
+      }
+      loja.escolher(slugValido(slug));
+      try {
+        const identidade = await entrarNaLoja();
+        config.definirLojaAdmin(slug);
+        return identidade;
+      } catch (err) {
+        loja.escolher(null);
+        throw err;
+      }
+    },
+
+    /** Identidade atual (relida da API: a retaguarda pode ter trocado logo ou cor). */
+    'loja:atual': async () => {
+      if (!loja.identidade()) return null;
+      const { loja: identidade } = await api.requisitar('GET', '/equipe/loja');
+      return loja.definirIdentidade(identidade);
     },
 
     'tempoReal:status': async () => tempoReal.status(),
@@ -251,6 +334,10 @@ export function criarHandlers({ config, api, tempoReal, agente, listarImpressora
 
     'pedidos:reimprimir': async (id) => api.requisitar('POST', `/equipe/pedidos/${idValido(id, 'pedido')}/reimprimir`),
 
+    /** Chave da NFC-e emitida para o pedido (null/vazio apaga). */
+    'pedidos:nfce': async (id, chave) =>
+      api.requisitar('PATCH', `/equipe/pedidos/${idValido(id, 'pedido')}/nfce`, chaveNfceParaApi(chave)),
+
     'pedidos:criar': async (dados) => api.requisitar('POST', '/equipe/pedidos', pedidoParaApi(dados)),
 
     'caixa:atual': async () => api.requisitar('GET', '/equipe/caixa/atual'),
@@ -279,7 +366,8 @@ export function criarHandlers({ config, api, tempoReal, agente, listarImpressora
     'cardapio:obter': async (turnoId) =>
       api.requisitar('GET', turnoId == null ? '/equipe/cardapio' : `/equipe/cardapio?turnoId=${idValido(turnoId, 'turno')}`),
 
-    'bairros:listar': async () => api.requisitar('GET', '/publico/bairros'),
+    // Bairros da área de entrega DESTA loja (com a taxa dela).
+    'bairros:listar': async () => api.requisitar('GET', '/equipe/bairros'),
 
     'clientes:buscar': async (busca) =>
       api.requisitar('GET', `/equipe/clientes?busca=${encodeURIComponent(texto(busca, 'o nome ou telefone', 60).trim())}`),

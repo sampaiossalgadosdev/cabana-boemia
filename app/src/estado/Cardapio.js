@@ -1,49 +1,60 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
-import { buscarCardapio, ehErroDeRede } from '../lib/api.js';
+import { buscarCardapioDaLoja, buscarConfigDaLoja, ehErroDeRede } from '../lib/api.js';
 import { conciliar, mensagensDaConciliacao } from '../logica/carrinho.js';
-import { categoriasVisiveis, lerCardapioSalvo, podePedir, salvarCardapio } from '../logica/cardapio.js';
+import { categoriasVisiveis, lerCardapioDaLoja, podePedir, salvarCardapioDaLoja } from '../logica/cardapio.js';
 import { useCarrinho } from './Carrinho.js';
 import { useAvisos } from './Avisos.js';
 
 export const INTERVALO_MS = 30_000;
 const CardapioContext = createContext(null);
+const VAZIO = { dados: null, config: null, origem: null, salvoEm: 0, atualizadoEm: 0 };
 
 /**
- * Cardápio da loja, como o useCardapio do site, adaptado ao celular:
- * - busca ao abrir, a cada 30 s com o app em primeiro plano (AppState) e ao
- *   voltar para o app; também quando a internet volta (NetInfo);
- * - a última resposta boa fica salva no aparelho: sem internet, o app abre
- *   com ela e mostra a faixa "sem conexão";
- * - só resposta da rede concilia a sacola (tira o que sumiu, atualiza preço e
- *   avisa). O cardápio salvo nunca concilia: poderia estar velho.
+ * Cardápio DA LOJA ABERTA (`abrirLoja(slug)`, chamado pela página da loja),
+ * com a configuração dela (nome, logo, cor, WhatsApp, dados legais, frete grátis):
+ * - busca ao abrir a loja, a cada 30 s com o app em primeiro plano (AppState),
+ *   ao voltar para o app e quando a internet volta (NetInfo);
+ * - a última resposta boa de CADA loja fica salva no aparelho: sem internet,
+ *   a loja abre com ela e mostra a faixa "sem conexão";
+ * - só resposta da rede concilia a sacola, e só se a sacola é desta loja
+ *   (tira o que sumiu, atualiza preço e avisa). O salvo nunca concilia.
  */
 export function CardapioProvider({ children }) {
   const carrinho = useCarrinho();
   const { avisar } = useAvisos();
+  const [slug, setSlug] = useState(null);
   // origem: 'rede' (agora) | 'aparelho' (salvo) | null (nada ainda)
-  const [estado, setEstado] = useState({ dados: null, origem: null, salvoEm: 0, atualizadoEm: 0 });
+  const [estado, setEstado] = useState(VAZIO);
   const [semConexao, setSemConexao] = useState(false);
-  const [buscando, setBuscando] = useState(true);
+  const [buscando, setBuscando] = useState(false);
   const [primeiraTentativa, setPrimeiraTentativa] = useState(false);
   const controle = useRef(null);
+  const slugRef = useRef(null);
   const emPrimeiroPlano = useRef(AppState.currentState === 'active');
 
   const buscar = useCallback(async ({ forcar = false } = {}) => {
+    const loja = slugRef.current;
+    if (!loja) return;
     controle.current?.abort();
     const atual = new AbortController();
     controle.current = atual;
     setBuscando(true);
     try {
-      const dados = await buscarCardapio(atual.signal, { forcar });
+      const [dados, config] = await Promise.all([
+        buscarCardapioDaLoja(loja, atual.signal, { forcar }),
+        buscarConfigDaLoja(loja, atual.signal, { forcar }),
+      ]);
+      if (slugRef.current !== loja) return;
       const agora = Date.now();
-      setEstado({ dados, origem: 'rede', salvoEm: agora, atualizadoEm: agora });
+      setEstado({ dados, config, origem: 'rede', salvoEm: agora, atualizadoEm: agora });
       setSemConexao(false);
-      salvarCardapio(dados, agora);
+      salvarCardapioDaLoja(loja, { cardapio: dados, config }, agora);
     } catch (erro) {
-      if (erro.name === 'AbortError' && controle.current !== atual) return; // trocada por outra busca
-      // Erro HTTP (API fora, 5xx) também vira "sem conexão": o cliente não tem o que fazer além de esperar.
+      if (erro.name === 'AbortError' && controle.current !== atual) return;
+      if (slugRef.current !== loja) return;
+      // Erro HTTP (API fora, 5xx) também vira "sem conexão"; loja que saiu da vitrine (404) idem: mostra a salva.
       setSemConexao(true);
       if (!ehErroDeRede(erro) && erro.name !== 'AbortError') console.warn('Cardápio:', erro.message);
     } finally {
@@ -54,19 +65,31 @@ export function CardapioProvider({ children }) {
     }
   }, []);
 
-  // Abre com o cardápio salvo (se houver) enquanto a rede responde.
-  useEffect(() => {
-    let vivo = true;
-    lerCardapioSalvo().then((salvo) => {
-      if (!vivo || !salvo) return;
-      setEstado((e) => (e.origem ? e : { dados: salvo.dados, origem: 'aparelho', salvoEm: salvo.salvoEm, atualizadoEm: 0 }));
-    });
-    buscar();
-    return () => {
-      vivo = false;
+  /** Página da loja: troca a loja (mostra a salva no aparelho enquanto a rede responde) ou atualiza a mesma. */
+  const abrirLoja = useCallback(
+    (novo) => {
+      if (!novo) return;
+      // A mesma loja de novo (voltou da lista): mantém o que está na tela e atualiza.
+      if (novo === slugRef.current) {
+        buscar();
+        return;
+      }
+      slugRef.current = novo;
+      setSlug(novo);
       controle.current?.abort();
-    };
-  }, [buscar]);
+      setEstado(VAZIO);
+      setSemConexao(false);
+      setPrimeiraTentativa(false);
+      lerCardapioDaLoja(novo).then((salvo) => {
+        if (slugRef.current !== novo || !salvo) return;
+        setEstado((e) => (e.origem ? e : { dados: salvo.dados, config: salvo.config, origem: 'aparelho', salvoEm: salvo.salvoEm, atualizadoEm: 0 }));
+      });
+      buscar();
+    },
+    [buscar],
+  );
+
+  useEffect(() => () => controle.current?.abort(), []);
 
   // 30 s, só em primeiro plano; voltar para o app busca na hora.
   useEffect(() => {
@@ -89,20 +112,21 @@ export function CardapioProvider({ children }) {
     let conectadoAntes = true;
     return NetInfo.addEventListener((s) => {
       const conectado = s.isConnected !== false && s.isInternetReachable !== false;
-      if (!conectado) setSemConexao(true);
-      else if (!conectadoAntes) buscar();
+      if (!conectado && slugRef.current) setSemConexao(true);
+      else if (conectado && !conectadoAntes) buscar();
       conectadoAntes = conectado;
     });
   }, [buscar]);
 
-  // Cada cardápio novo DA REDE concilia a sacola (depois que ela foi lida do aparelho).
-  const itensRef = useRef(carrinho.itens);
-  itensRef.current = carrinho.itens;
+  // Cada cardápio novo DA REDE concilia a sacola, se ela é desta loja.
+  const carrinhoRef = useRef(carrinho);
+  carrinhoRef.current = carrinho;
   useEffect(() => {
-    if (!estado.atualizadoEm || !carrinho.carregado) return;
-    const r = conciliar(itensRef.current, estado.dados.categorias);
+    const c = carrinhoRef.current;
+    if (!estado.atualizadoEm || !c.carregado || c.loja?.slug !== slug) return;
+    const r = conciliar(c.itens, estado.dados.categorias);
     if (!r.mudou) return;
-    carrinho.substituir(r.itens);
+    c.substituir(r.itens);
     mensagensDaConciliacao(r).forEach(avisar);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só quando chega cardápio novo ou a sacola termina de carregar
   }, [estado.atualizadoEm, carrinho.carregado]);
@@ -112,8 +136,13 @@ export function CardapioProvider({ children }) {
 
   const valor = useMemo(() => {
     const categorias = categoriasVisiveis(estado.dados);
+    // A loja (para o tema, a sacola e o cancelamento): a configuração dela.
+    const loja = estado.config ? { ...estado.config, slug: estado.config.slug ?? slug } : slug ? { slug, nome: '' } : null;
     return {
       ...estado,
+      slug,
+      loja,
+      abrirLoja,
       categorias,
       produtosPorId: new Map(estado.dados?.categorias.flatMap((c) => c.produtos).map((p) => [p.id, p]) ?? []),
       aberto: Boolean(estado.dados?.aberto),
@@ -123,7 +152,7 @@ export function CardapioProvider({ children }) {
       primeiraTentativa,
       recarregar,
     };
-  }, [estado, semConexao, buscando, primeiraTentativa, recarregar]);
+  }, [estado, slug, abrirLoja, semConexao, buscando, primeiraTentativa, recarregar]);
 
   return <CardapioContext.Provider value={valor}>{children}</CardapioContext.Provider>;
 }

@@ -1,9 +1,9 @@
 import { prisma } from '../lib/prisma.js';
 
-/** Turnos ativos com seus horários; ordem por id desempata sobreposição. */
-export function listarAtivosComHorarios(db = prisma) {
+/** Turnos ativos da loja com seus horários; ordem por id desempata sobreposição. */
+export function listarAtivosComHorarios(lojaId, db = prisma) {
   return db.turno.findMany({
-    where: { ativo: true },
+    where: { lojaId, ativo: true },
     select: {
       id: true,
       nome: true,
@@ -13,9 +13,10 @@ export function listarAtivosComHorarios(db = prisma) {
   });
 }
 
-/** Todos os turnos (inclusive inativos) com horários, para a retaguarda. */
-export function listarComHorarios(db = prisma) {
+/** Todos os turnos da loja (inclusive inativos) com horários, para a retaguarda. */
+export function listarComHorarios(lojaId, db = prisma) {
   return db.turno.findMany({
+    where: { lojaId },
     select: {
       id: true,
       nome: true,
@@ -37,7 +38,7 @@ export async function substituirHorarios(turnoId, horarios, db = prisma) {
   }
 }
 
-/** Serializa edições de horários (duas abas salvando ao mesmo tempo não burlam a checagem de sobreposição). */
-export function travarTurnos(db) {
-  return db.$queryRaw`SELECT "id" FROM "Turno" ORDER BY "id" FOR UPDATE`;
+/** Serializa edições de horários da loja (duas abas salvando ao mesmo tempo não burlam a checagem de sobreposição). */
+export function travarTurnos(lojaId, db) {
+  return db.$queryRaw`SELECT "id" FROM "Turno" WHERE "lojaId" = ${lojaId} ORDER BY "id" FOR UPDATE`;
 }

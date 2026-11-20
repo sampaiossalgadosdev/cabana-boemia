@@ -102,7 +102,7 @@
   padding: 10px 16px;
   border-radius: var(--raio-pequeno);
   background: var(--cor-aviso-fundo);
-  color: var(--cor-vermelho-escuro);
+  color: var(--cor-erro-escuro);
   font-weight: 700;
 }
 .novo-pedido__mensagem--info {
@@ -195,7 +195,7 @@
 }
 .opcao-tipo--marcada {
   background: var(--cor-vermelho);
-  color: var(--cor-branco);
+  color: var(--cor-primaria-texto);
 }
 .opcao-tipo {
   transition: background-color 0.15s, color 0.15s, transform 0.15s;
@@ -442,7 +442,7 @@
 }
 .etapa-cliente .campo--erro input,
 .etapa-cliente .campo--erro select {
-  border-bottom: 2px solid var(--cor-vermelho);
+  border-bottom: 2px solid var(--cor-erro);
 }
 .etapa-cliente__secao {
   display: flex;

@@ -60,8 +60,10 @@ export function dataDoPedido(iso) {
  * quantidade e observação. `totalEsperadoCentavos` é o total que o cliente
  * viu: a API recalcula e, se for diferente, responde 409 PRECO_ALTERADO.
  */
-export function corpoDoPedido(itens, { enderecoId, formaPagamento, trocoParaCentavos, chaveIdempotencia, totalEsperadoCentavos }) {
+export function corpoDoPedido(itens, { enderecoId, formaPagamento, trocoParaCentavos, chaveIdempotencia, totalEsperadoCentavos, lojaSlug }) {
   return {
+    // Loja do pedido (multi-loja); sem ela a API usa a loja padrão.
+    ...(lojaSlug ? { lojaSlug } : {}),
     itens: itens.map((i) => ({
       produtoId: i.produtoId,
       quantidade: i.quantidade,

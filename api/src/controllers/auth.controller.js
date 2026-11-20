@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { validar } from '../lib/validar.js';
 import * as authService from '../services/auth.service.js';
+import { identidadeDaLoja } from '../services/identidade.service.js';
 
 const loginSchema = z.object({
   email: z.string().trim().min(1, 'Informe o email'),
@@ -24,6 +25,6 @@ export async function logout(req, res) {
   res.status(204).end();
 }
 
-export function me(req, res) {
-  res.json({ usuario: req.usuario });
+export async function me(req, res) {
+  res.json({ usuario: { ...req.usuario, loja: req.lojaDoUsuario ? await identidadeDaLoja(req.lojaDoUsuario) : null } });
 }

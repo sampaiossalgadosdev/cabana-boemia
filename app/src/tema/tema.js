@@ -4,10 +4,13 @@
  * objeto com o mesmo formato (vindo da API ou de um arquivo por loja) e o
  * <TemaProvider tema={...}> troca tudo de uma vez.
  *
- * Por enquanto: Cabana Boemia (CLAUDE.md › Identidade visual; os mesmos
- * valores de site/src/estilos/tokens.css).
+ * Base: as cores do CLAUDE.md › Identidade visual (as mesmas de
+ * site/src/estilos/tokens.css). Cada loja troca a cor primária e a logo
+ * (`temaDaLoja`, dados da API).
  */
 import { createContext, createElement, useContext, useMemo } from 'react';
+import { BASE } from '../lib/api.js';
+import { coresDaLoja, urlDaImagem } from '../logica/lojas.js';
 
 const marcaCabana = {
   vermelho: '#C8102E',
@@ -59,9 +62,32 @@ export const temaCabana = {
   espaco: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 },
 };
 
-const TemaContext = createContext(temaCabana);
+/**
+ * Tema padrão do app (vitrine, abas, login): Delivery Abatiá, com as cores do
+ * ícone/splash provisórios (as mesmas da Cabana) e sem logo (mostra o nome).
+ */
+export const temaPadrao = { ...temaCabana, id: 'delivery-abatia', nome: 'Delivery Abatiá', logo: null };
 
-export function TemaProvider({ tema = temaCabana, children }) {
+/**
+ * Tema de uma loja (página da loja, produto, sacola e checkout): cor primária
+ * e logo vindas da API (`/publico/lojas/:slug/config`); a base (fundo, texto,
+ * bordas) continua a do app. Sem cor legível: as cores do padrão.
+ */
+export function temaDaLoja(loja) {
+  if (!loja) return temaPadrao;
+  const url = urlDaImagem(loja.logoUrl, BASE);
+  return {
+    ...temaPadrao,
+    id: loja.slug ?? temaPadrao.id,
+    nome: loja.nome || temaPadrao.nome,
+    logo: url ? { uri: url } : null,
+    cores: coresDaLoja(loja, temaPadrao.cores),
+  };
+}
+
+const TemaContext = createContext(temaPadrao);
+
+export function TemaProvider({ tema = temaPadrao, children }) {
   return createElement(TemaContext.Provider, { value: tema }, children);
 }
 

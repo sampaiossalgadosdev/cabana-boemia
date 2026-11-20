@@ -27,7 +27,8 @@ export const TEMPOS_AGENTE = Object.freeze({
   retentativaMaxMs: 60_000,
 });
 
-const RESTAURANTE_PADRAO = 'Cabana Boemia';
+/** Topo do cupom até a API dizer o nome da loja (ex.: "Imprimir teste" antes da primeira busca). */
+const RESTAURANTE_PADRAO = 'PDV do Abatiá';
 
 /** Cupom de teste (botão "Imprimir teste"): mostra acentos, negrito, grande e o corte. */
 export function trabalhoDeTeste(agora = new Date()) {
@@ -68,6 +69,7 @@ export function trabalhoDeTeste(agora = new Date()) {
 /**
  * @param {{
  *   api: { requisitar(metodo: string, rota: string, corpo?: unknown): Promise<any> },
+ *   idAgente?: () => string,
  *   ping: () => Promise<void>,
  *   configuracao: () => import('./configuracao.js').PADRAO_IMPRESSAO,
  *   criarSaida: (cfg: object) => Promise<{ status(): Promise<{ estado: string, mensagem: string }>, imprimir(doc: object): Promise<void> }>,
@@ -79,6 +81,9 @@ export function trabalhoDeTeste(agora = new Date()) {
  */
 export function criarAgente({
   api,
+  // Identificador estável deste computador: a API reserva os cupons para ele
+  // (dois PDVs da mesma loja nunca imprimem o mesmo cupom).
+  idAgente = () => 'pdv',
   ping,
   configuracao,
   criarSaida,
@@ -179,13 +184,19 @@ export function criarAgente({
 
   async function confirmar(id) {
     try {
-      await api.requisitar('POST', `/equipe/impressoes/${id}/confirmar`);
+      await api.requisitar('POST', `/equipe/impressoes/${id}/confirmar`, { agente: idAgente() });
       fila.marcarConfirmado(id);
       info(`[impressão] trabalho ${id} confirmado na API`);
       return true;
     } catch (err) {
       if (err?.status === 404) {
         fila.marcarConfirmado(id); // apagado no servidor: nada a confirmar
+        return true;
+      }
+      if (err?.codigo === 'TRABALHO_RESERVADO') {
+        // A reserva venceu (ficou mais de 2 min sem confirmar) e outro PDV pegou: o papel já saiu aqui.
+        log.warn(`[impressão] trabalho ${id} ficou com outro computador depois de impresso aqui`);
+        fila.marcarConfirmado(id);
         return true;
       }
       erroApi(err);
@@ -200,7 +211,7 @@ export function criarAgente({
 
   async function reportarFalha(id, mensagem) {
     try {
-      await api.requisitar('POST', `/equipe/impressoes/${id}/falha`, { erro: mensagem });
+      await api.requisitar('POST', `/equipe/impressoes/${id}/falha`, { erro: mensagem, agente: idAgente() });
     } catch (err) {
       if (err?.status !== 409) erroApi(err);
     }
@@ -267,7 +278,8 @@ export function criarAgente({
     for (;;) {
       let r;
       try {
-        r = await api.requisitar('GET', '/equipe/impressoes/pendentes');
+        // Reserva os pendentes da loja para este computador (renova os que já eram dele).
+        r = await api.requisitar('POST', '/equipe/impressoes/reservar', { agente: idAgente() });
       } catch (err) {
         erroApi(err);
         return;
@@ -381,6 +393,8 @@ export function criarAgente({
     desligar() {
       sessao = false;
       parar();
+      // A próxima loja (ADMIN trocando de loja) diz o nome dela na primeira busca.
+      restaurante = RESTAURANTE_PADRAO;
       publicar({ conexao: null, estado: 'desligado', mensagem: '' });
     },
     /** Configuração da impressora mudou. */

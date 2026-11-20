@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useCliente } from '../../estado/Cliente.js';
-import { useCardapio } from '../../estado/Cardapio.js';
 import { useUltimoPedido } from '../../estado/UltimoPedido.js';
 import { AvisosNaTela } from '../../estado/Avisos.js';
 import * as api from '../../lib/api.js';
@@ -14,14 +13,23 @@ import { TopoAba } from '../../componentes/TopoAba.js';
 import { BarraSacola } from '../../componentes/BarraSacola.js';
 import { TelaSemInternet } from '../../componentes/TelaSemInternet.js';
 import { useEstilos, useTema } from '../../tema/tema.js';
+import { LogoLoja } from '../../componentes/Loja.js';
+import { LOJA_DA_SACOLA_ANTIGA } from '../../logica/lojas.js';
 
 const ERRO_GENERICO = 'Não foi possível carregar seus pedidos. Confira sua conexão e tente de novo.';
 
-function CartaoPedido({ pedido, podeRepetir, onRepetir }) {
+function CartaoPedido({ pedido, onRepetir }) {
   const s = useEstilos(criarEstilos);
   const cancelado = pedido.status === 'CANCELADO';
+  const loja = pedido.loja ?? LOJA_DA_SACOLA_ANTIGA;
   return (
     <View style={[s.cartao, cancelado && s.cancelado]}>
+      <View style={s.lojaLinha}>
+        <LogoLoja nome={loja.nome} logoUrl={loja.logoUrl} tamanho={32} />
+        <Text style={s.lojaNome} numberOfLines={1}>
+          {loja.nome}
+        </Text>
+      </View>
       <View style={s.topoCartao}>
         <Text style={s.numero}>{`Pedido nº ${pedido.numeroDia}`}</Text>
         <Text style={s.data}>{dataDoPedido(pedido.criadoEm)}</Text>
@@ -35,7 +43,7 @@ function CartaoPedido({ pedido, podeRepetir, onRepetir }) {
             {cancelado && <Text style={s.selo}>Cancelado</Text>}
           </View>
         </View>
-        <Botao titulo="Repetir pedido" variante="secundario" desabilitado={!podeRepetir || pedido.itens.length === 0} onPress={() => onRepetir(pedido)} />
+        <Botao titulo="Repetir pedido" variante="secundario" desabilitado={pedido.itens.length === 0} onPress={() => onRepetir(pedido)} />
       </View>
     </View>
   );
@@ -43,13 +51,14 @@ function CartaoPedido({ pedido, podeRepetir, onRepetir }) {
 
 /**
  * Aba Pedidos (como TelaPedidos.jsx do site): histórico do cliente, mais novo
- * primeiro, 20 por vez ("Ver pedidos mais antigos"), com "Repetir pedido".
+ * primeiro, 20 por vez ("Ver pedidos mais antigos"), de TODAS as lojas, cada
+ * um com a loja. "Repetir pedido" abre a loja do pedido e repete lá (fechada:
+ * avisa; sacola de outra loja: pergunta se pode esvaziar).
  */
 export default function Pedidos() {
   const s = useEstilos(criarEstilos);
   const tema = useTema();
   const { status, chamar, tentarDeNovo } = useCliente();
-  const { podePedir } = useCardapio();
   const { repetir } = useUltimoPedido();
   const [pedidos, setPedidos] = useState(null);
   const [proximo, setProximo] = useState(null);
@@ -112,11 +121,8 @@ export default function Pedidos() {
             }}
           />
         }
-        ListHeaderComponent={
-          !podePedir && pedidos.length > 0 ? <Text style={s.nota}>Estamos fechados agora: dá para repetir um pedido quando abrirmos.</Text> : null
-        }
         ListEmptyComponent={<Text style={s.vazio}>Você ainda não fez nenhum pedido.</Text>}
-        renderItem={({ item }) => <CartaoPedido pedido={item} podeRepetir={podePedir} onRepetir={repetir} />}
+        renderItem={({ item }) => <CartaoPedido pedido={item} onRepetir={repetir} />}
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         ListFooterComponent={
           <View style={{ paddingBottom: 24 }}>
@@ -160,6 +166,8 @@ const criarEstilos = (t) =>
     cartao: { backgroundColor: t.cores.superficie, borderRadius: t.raio.normal, borderWidth: 1, borderColor: t.cores.borda, padding: 14, gap: 8 },
     cancelado: { opacity: 0.75 },
     topoCartao: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
+    lojaLinha: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    lojaNome: { flex: 1, fontSize: t.fontes.tamanho.normal, fontWeight: t.fontes.peso.forte, color: t.cores.texto },
     numero: { fontWeight: t.fontes.peso.forte, color: t.cores.texto, fontSize: t.fontes.tamanho.normal },
     data: { color: t.cores.textoSuave, fontSize: t.fontes.tamanho.pequeno },
     itens: { color: t.cores.texto, fontSize: t.fontes.tamanho.normal },

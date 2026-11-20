@@ -1,6 +1,6 @@
 import { test, describe, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 
 const local = (iso) => new Date(`${iso}-03:00`);
 const SABADO_20H = local('2026-11-14T20:00');
@@ -40,7 +40,7 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
     await prisma.produto.updateMany({ data: { disponivelHoje: true } });
     await prisma.produto.updateMany({ where: { controlaEstoque: true }, data: { estoque: 10 } });
     await prisma.insumo.updateMany({ data: { estoque: 10 } });
-    await prisma.configuracao.update({
+    await prisma.loja.update({
       where: { id: 1 },
       data: { tempoEstimadoPadraoMin: 40, tempoEstimadoManualMin: null, tempoManualDefinidoEm: null },
     });
@@ -79,9 +79,9 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
   });
 
   test('maxSacola: saldo do produto ou dos insumos, nunca acima de 20; fechado = null; sugerirNaSacola', async () => {
-    await prisma.produto.update({ where: { nome: 'Coca-Cola 2L' }, data: { estoque: 3, sugerirNaSacola: true } });
-    await prisma.produto.update({ where: { nome: 'Coca-Cola 1L' }, data: { estoque: 500 } });
-    await prisma.insumo.update({ where: { nome: 'Pão de lanche' }, data: { estoque: 4 } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 2L' } }, data: { estoque: 3, sugerirNaSacola: true } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 1L' } }, data: { estoque: 500 } });
+    await prisma.insumo.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de lanche' } }, data: { estoque: 4 } });
     try {
       const produtos = new Map((await get('/publico/cardapio')).corpo.categorias.flatMap((c) => c.produtos).map((p) => [p.nome, p]));
       assert.equal(produtos.get('Coca-Cola 2L').maxSacola, 3);
@@ -97,36 +97,36 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
       assert.ok(fechado.categorias.flatMap((c) => c.produtos).every((p) => p.maxSacola === null));
     } finally {
       agora = SABADO_20H;
-      await prisma.produto.update({ where: { nome: 'Coca-Cola 2L' }, data: { sugerirNaSacola: false } });
+      await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 2L' } }, data: { sugerirNaSacola: false } });
     }
   });
 
   test('lanche some do cardápio quando o pão zera', async () => {
-    await prisma.insumo.update({ where: { nome: 'Pão de lanche' }, data: { estoque: 0 } });
+    await prisma.insumo.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de lanche' } }, data: { estoque: 0 } });
     const nomes = await nomesNoCardapio();
     assert.ok(!nomes.includes('Misto Quente'));
     assert.ok(!nomes.includes('X-Tudo'));
     assert.ok(nomes.includes('Cachorro Quente'), 'usa outro pão, continua');
 
-    await prisma.insumo.update({ where: { nome: 'Pão de cachorro-quente' }, data: { estoque: 0 } });
+    await prisma.insumo.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de cachorro-quente' } }, data: { estoque: 0 } });
     const cats = (await get('/publico/cardapio')).corpo.categorias.map((c) => c.nome);
     assert.ok(!cats.includes('Lanches'), 'categoria vazia não aparece');
   });
 
   test('bebida some quando o estoque zera', async () => {
-    await prisma.produto.update({ where: { nome: 'Coca-Cola 2L' }, data: { estoque: 0 } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 2L' } }, data: { estoque: 0 } });
     const nomes = await nomesNoCardapio();
     assert.ok(!nomes.includes('Coca-Cola 2L'));
     assert.ok(nomes.includes('Coca-Cola 1L'));
   });
 
   test('produto fora do cardápio do dia ou inativo não aparece', async () => {
-    await prisma.produto.update({ where: { nome: 'Pizza Bacon' }, data: { disponivelHoje: false } });
-    await prisma.produto.update({ where: { nome: 'Salame' }, data: { ativo: false } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pizza Bacon' } }, data: { disponivelHoje: false } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Salame' } }, data: { ativo: false } });
     const nomes = await nomesNoCardapio();
     assert.ok(!nomes.includes('Pizza Bacon'));
     assert.ok(!nomes.includes('Salame'));
-    await prisma.produto.update({ where: { nome: 'Salame' }, data: { ativo: true } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Salame' } }, data: { ativo: true } });
   });
 
   test('quinta 18:59: fechado, com próxima abertura e prévia do cardápio do turno Lanches', async () => {
@@ -147,7 +147,7 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
     await prisma.produto.updateMany({ data: { disponivelHoje: false } });
     await prisma.insumo.updateMany({ data: { estoque: 0 } });
     await prisma.produto.updateMany({ where: { controlaEstoque: true }, data: { estoque: 0 } });
-    await prisma.produto.update({ where: { nome: 'Salame' }, data: { ativo: false } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Salame' } }, data: { ativo: false } });
     try {
       const nomes = await nomesNoCardapio();
       assert.equal(nomes.length, 25, '26 do turno Lanches menos o Salame inativo');
@@ -157,7 +157,7 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
       assert.ok(!nomes.includes('Prato por kg'));
       assert.ok(!nomes.some((n) => n.startsWith('Marmita')), 'Almoço não é o próximo turno');
     } finally {
-      await prisma.produto.update({ where: { nome: 'Salame' }, data: { ativo: true } });
+      await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Salame' } }, data: { ativo: true } });
     }
   });
 
@@ -177,19 +177,19 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
 
   test('tempoEstimadoMin: manual vale no dia OPERACIONAL em que foi definido (vira às 04:00)', async () => {
     // Sábado 20:00. Definido sábado 04:00: mesmo dia operacional.
-    await prisma.configuracao.update({
+    await prisma.loja.update({
       where: { id: 1 },
       data: { tempoEstimadoManualMin: 70, tempoManualDefinidoEm: local('2026-11-14T04:00') },
     });
     assert.equal((await get('/publico/cardapio')).corpo.tempoEstimadoMin, 70);
 
     // Sábado 00:10 ainda é o expediente de sexta: para sábado 20:00, vale o padrão.
-    await prisma.configuracao.update({ where: { id: 1 }, data: { tempoManualDefinidoEm: local('2026-11-14T00:10') } });
+    await prisma.loja.update({ where: { id: 1 }, data: { tempoManualDefinidoEm: local('2026-11-14T00:10') } });
     assert.equal((await get('/publico/cardapio')).corpo.tempoEstimadoMin, 40);
 
     // Definido sexta 23:00 e consultado sábado 00:30: mesmo expediente, continua valendo.
     agora = local('2026-11-14T00:30');
-    await prisma.configuracao.update({ where: { id: 1 }, data: { tempoManualDefinidoEm: local('2026-11-13T23:00') } });
+    await prisma.loja.update({ where: { id: 1 }, data: { tempoManualDefinidoEm: local('2026-11-13T23:00') } });
     assert.equal((await get('/publico/cardapio')).corpo.tempoEstimadoMin, 70);
     agora = SABADO_20H;
   });
@@ -202,14 +202,12 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
     }
   });
 
-  test('GET /publico/bairros: só ativos, com taxa, em ordem alfabética', async () => {
-    await prisma.bairro.createMany({
-      data: [
-        { nome: 'Vila Nova', taxaCentavos: 700 },
-        { nome: 'Centro', taxaCentavos: 500 },
-        { nome: 'Sítio Desativado', taxaCentavos: 1500, ativo: false },
-      ],
-    });
+  test('GET /publico/bairros: onde a loja entrega (área ativa, bairro ativo na cidade), com a taxa dela, em ordem alfabética', async () => {
+    await criarBairro(prisma, { nome: 'Vila Nova', taxaCentavos: 700 });
+    await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
+    await criarBairro(prisma, { nome: 'Sítio Desativado', taxaCentavos: 1500, ativo: false });
+    await criarBairro(prisma, { nome: 'Fechado na Cidade', taxaCentavos: 900, ativoNaCidade: false });
+    await prisma.bairro.create({ data: { nome: 'Fora da Área' } }); // na cidade, mas a Cabana não entrega
     const { corpo } = await get('/publico/bairros');
     assert.deepEqual(
       corpo.bairros.map(({ nome, taxaCentavos }) => ({ nome, taxaCentavos })),
@@ -220,11 +218,20 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
     );
   });
 
-  test('GET /publico/config: nome, whatsapp, client ID do Google e frete grátis (desligado)', async () => {
-    await prisma.configuracao.update({ where: { id: 1 }, data: { whatsappNumero: '5543999990000' } });
+  test('GET /publico/config: nome, identidade da loja, whatsapp, client ID do Google e frete grátis (desligado)', async () => {
+    await prisma.loja.update({ where: { id: 1 }, data: { whatsapp: '5543999990000' } });
     const { corpo } = await get('/publico/config');
+    assert.match(corpo.logoUrl, /^\/api\/publico\/imagens\/\d+$/, 'logo do seed');
     assert.deepEqual(corpo, {
       nome: 'Cabana Boemia',
+      slug: 'cabana-boemia',
+      logoUrl: corpo.logoUrl,
+      corPrimaria: '#C8102E',
+      corTexto: '#FFFFFF',
+      corFundo: '#FBF3E8',
+      razaoSocial: null,
+      documento: null,
+      endereco: null,
       whatsapp: '5543999990000',
       googleClientId: process.env.GOOGLE_CLIENT_ID,
       freteGratis: null,

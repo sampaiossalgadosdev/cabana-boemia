@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { sessao } from '../lib/api.js';
-import { Campo, Logo } from '../componentes/comuns.jsx';
+import { Campo, LogoLoja } from '../componentes/comuns.jsx';
+import { TEMA_PADRAO } from '@restaurante/shared/cores';
 
 export function TelaLogin({ aoEntrar }) {
   const [email, setEmail] = useState('');
@@ -27,7 +28,7 @@ export function TelaLogin({ aoEntrar }) {
   return (
     <main className="login">
       <form className="login__cartao" onSubmit={entrar} noValidate>
-        <Logo className="login__logo" />
+        <LogoLoja className="login__logo" nome={TEMA_PADRAO.nome} />
         <h1 className="login__titulo">Retaguarda</h1>
         {erro && (
           <div className="alerta" role="alert">

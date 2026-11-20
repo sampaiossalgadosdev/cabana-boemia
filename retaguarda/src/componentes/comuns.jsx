@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { centavosParaCampo, lerReais } from '../lib/dinheiro.js';
-import { logoUrl } from '../lib/logo.js';
 
 // ───────── Avisos flutuantes ─────────
 
@@ -243,9 +242,10 @@ export function EstadoCarga({ carga, children }) {
 
 // ───────── Logo ─────────
 
-/** Logo (JPEG em shared/assets); se falhar, o nome em Dancing Script. */
-export function Logo({ className }) {
+/** Logo da loja (enviada na retaguarda); sem logo ou se a imagem falhar, o nome. */
+export function LogoLoja({ nome, logoUrl, className }) {
   const [falhou, setFalhou] = useState(false);
-  if (falhou) return <div className={`menu__nome ${className ?? ''}`}>Cabana Boemia</div>;
-  return <img className={className} src={logoUrl} alt="Cabana Boemia" onError={() => setFalhou(true)} />;
+  useEffect(() => setFalhou(false), [logoUrl]);
+  if (!logoUrl || falhou) return <div className={`menu__nome ${className ?? ''}`}>{nome}</div>;
+  return <img className={className} src={logoUrl} alt={nome} onError={() => setFalhou(true)} />;
 }

@@ -89,17 +89,39 @@ function pareceCardapio(d) {
 }
 
 /** Guarda a última resposta boa da API. @returns {Promise<boolean>} */
-export function salvarCardapio(dados, agora = Date.now(), storage) {
-  return gravarTexto(CHAVE_CARDAPIO, JSON.stringify({ salvoEm: agora, dados }), storage);
+export function salvarCardapio(dados, agora = Date.now(), storage, chave = CHAVE_CARDAPIO) {
+  return gravarTexto(chave, JSON.stringify({ salvoEm: agora, dados }), storage);
 }
 
 /** @returns {Promise<{ dados: any, salvoEm: number } | null>} null = nada salvo ou dado corrompido */
-export async function lerCardapioSalvo(storage) {
-  const texto = await lerTexto(CHAVE_CARDAPIO, storage);
+export async function lerCardapioSalvo(storage, chave = CHAVE_CARDAPIO) {
+  const texto = await lerTexto(chave, storage);
   if (!texto) return null;
   try {
     const { salvoEm, dados } = JSON.parse(texto);
     return Number.isFinite(salvoEm) && pareceCardapio(dados) ? { dados, salvoEm } : null;
+  } catch {
+    return null;
+  }
+}
+
+// ───────── Por loja (multi-loja) ─────────
+
+/** Cada loja tem o seu cardápio salvo (e a configuração dela: nome, cor, logo, WhatsApp, dados legais). */
+export const chaveCardapioDaLoja = (slug) => `delivery-abatia:cardapio:v2:${slug}`;
+
+/** @param {{ cardapio: any, config: any }} dados */
+export function salvarCardapioDaLoja(slug, { cardapio, config }, agora = Date.now(), storage) {
+  return gravarTexto(chaveCardapioDaLoja(slug), JSON.stringify({ salvoEm: agora, dados: cardapio, config }), storage);
+}
+
+/** @returns {Promise<{ dados: any, config: any, salvoEm: number } | null>} */
+export async function lerCardapioDaLoja(slug, storage) {
+  const texto = await lerTexto(chaveCardapioDaLoja(slug), storage);
+  if (!texto) return null;
+  try {
+    const { salvoEm, dados, config } = JSON.parse(texto);
+    return Number.isFinite(salvoEm) && pareceCardapio(dados) && config && typeof config === 'object' ? { dados, config, salvoEm } : null;
   } catch {
     return null;
   }

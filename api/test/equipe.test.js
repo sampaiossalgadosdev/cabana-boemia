@@ -2,7 +2,7 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { io as conectarSocket } from 'socket.io-client';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 
 const local = (iso) => new Date(`${iso}-03:00`);
 const SABADO_20H = local('2026-11-14T20:00'); // turno Lanches aberto
@@ -51,6 +51,7 @@ describe('rotas da equipe (PDV) e socket', { skip: semBancoDeTeste }, () => {
 
   const zap = (nome, agoraPedido = SABADO_20H, pagamento = { forma: 'PIX' }) =>
     criarPedido({
+      lojaId: 1,
       canal: 'WHATSAPP',
       itens: [{ produtoId: p['Coca-Cola 1L'].id, quantidade: 1 }],
       cliente: { nome, telefone: '43988887777' },
@@ -74,11 +75,11 @@ describe('rotas da equipe (PDV) e socket', { skip: semBancoDeTeste }, () => {
     await prisma.produto.updateMany({ data: { disponivelHoje: true, ativo: true } });
     await prisma.produto.updateMany({ where: { controlaEstoque: true }, data: { estoque: 50 } });
     await prisma.insumo.updateMany({ data: { estoque: 50 } });
-    centro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
+    centro = await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
     await criarDono({ nome: 'Dono', email: 'dono@teste.com', senha: 'senha-do-dono' });
     const anaCaixa = await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
     // Finalizar exige caixa aberto (as regras do caixa estão em caixa.test.js).
-    await prisma.caixa.create({ data: { abertoPorId: anaCaixa.id, valorInicialCentavos: 0 } });
+    await prisma.caixa.create({ data: { lojaId: 1, abertoPorId: anaCaixa.id, valorInicialCentavos: 0 } });
 
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
     criarTempoReal(servidor);
@@ -91,6 +92,7 @@ describe('rotas da equipe (PDV) e socket', { skip: semBancoDeTeste }, () => {
     const cliente = await prisma.cliente.create({ data: { googleId: 'g-1', nome: 'Maria', telefone: '43999990000' } });
     pedidos.site = (
       await criarPedido({
+        lojaId: 1,
         canal: 'SITE',
         itens: [{ produtoId: p['Coca-Cola 1L'].id, quantidade: 1 }],
         cliente: { id: cliente.id, nome: cliente.nome, telefone: cliente.telefone },
@@ -104,6 +106,7 @@ describe('rotas da equipe (PDV) e socket', { skip: semBancoDeTeste }, () => {
     pedidos.zap2 = (await zap('Pedro', SABADO_23H30)).pedido;
     pedidos.salao = (
       await criarPedido({
+        lojaId: 1,
         canal: 'SALAO',
         itens: [{ produtoId: p['Coca-Cola 1L'].id, quantidade: 1 }],
         mesaRotulo: 'Mesa 3',
@@ -267,7 +270,7 @@ describe('rotas da equipe (PDV) e socket', { skip: semBancoDeTeste }, () => {
     const r = await api('PUT', '/equipe/config/tempo-estimado', { token: tokenAna, corpo: { minutos: 70 } });
     assert.equal(r.status, 200, JSON.stringify(r.corpo));
     assert.deepEqual(r.corpo, { padraoMin: padrao, manualMin: 70, vigenteMin: 70 });
-    const config = await prisma.configuracao.findUnique({ where: { id: 1 } });
+    const config = await prisma.loja.findUnique({ where: { id: 1 } });
     assert.equal(config.tempoEstimadoManualMin, 70);
     assert.deepEqual(config.tempoManualDefinidoEm, SABADO_20H);
 
@@ -286,7 +289,7 @@ describe('rotas da equipe (PDV) e socket', { skip: semBancoDeTeste }, () => {
       assert.equal(v.status, 200);
       assert.deepEqual(v.corpo, { padraoMin: padrao, manualMin: null, vigenteMin: padrao });
     }
-    const limpo = await prisma.configuracao.findUnique({ where: { id: 1 } });
+    const limpo = await prisma.loja.findUnique({ where: { id: 1 } });
     assert.equal(limpo.tempoEstimadoManualMin, null);
     assert.equal(limpo.tempoManualDefinidoEm, null);
   });

@@ -2,15 +2,15 @@ import { prisma } from '../lib/prisma.js';
 import { SELECT_PEDIDO } from './pedido.repository.js';
 
 /**
- * Trava a linha do pedido até o fim da transação (SELECT ... FOR UPDATE).
+ * Trava a linha do pedido da loja até o fim da transação (SELECT ... FOR UPDATE).
  * Lançar, remover item e fechar a mesma comanda ficam em fila: quem fecha
  * espera o lançamento terminar (e vice-versa), então nenhum item entra numa
  * comanda já fechada. Devolve `{ id, canal, status }` ou null.
  */
-export async function travar(id, tx) {
+export async function travar(lojaId, id, tx) {
   const [linha] = await tx.$queryRaw`
     SELECT "id", "canal"::text AS "canal", "status"::text AS "status"
-    FROM "Pedido" WHERE "id" = ${id} FOR UPDATE`;
+    FROM "Pedido" WHERE "id" = ${id} AND "lojaId" = ${lojaId} FOR UPDATE`;
   return linha ?? null;
 }
 
@@ -61,12 +61,12 @@ export function fechar(id, { formaPagamento, finalizadoEm, caixaId }, tx) {
 }
 
 /**
- * Todas as comandas abertas, de qualquer dia (cliente que fica depois da
- * meia-noite continua na grade), da mais antiga para a mais nova.
+ * Todas as comandas abertas da loja, de qualquer dia (cliente que fica depois
+ * da meia-noite continua na grade), da mais antiga para a mais nova.
  */
-export function listarAbertas(db = prisma) {
+export function listarAbertas(lojaId, db = prisma) {
   return db.pedido.findMany({
-    where: { canal: 'SALAO', status: 'ABERTO' },
+    where: { lojaId, canal: 'SALAO', status: 'ABERTO' },
     orderBy: [{ criadoEm: 'asc' }, { id: 'asc' }],
     select: SELECT_PEDIDO,
   });

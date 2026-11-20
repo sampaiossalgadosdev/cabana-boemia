@@ -1,7 +1,22 @@
-/* Identidade visual da Cabana Boemia (CLAUDE.md › Identidade visual). */
+/* Identidade visual (CLAUDE.md › Identidade visual) + tema da loja. */
 :root {
-  --cor-vermelho: #c8102e;
-  --cor-vermelho-escuro: #9e0b22;
+  /*
+   * Tema da loja: a cor primária vem da loja (src/lib/tema.js aplica
+   * variaveisDoTema() do shared, com o contraste conferido). Estes são os do
+   * tema padrão (Delivery Abatiá). "Vermelho" no CSS = destaque da loja;
+   * erro e alerta usam --cor-erro, que é sempre vermelho.
+   */
+  --cor-primaria: #c8102e;
+  --cor-primaria-escura: #9e0b22;
+  --cor-primaria-suave: #fdecee;
+  --cor-primaria-texto: #ffffff;
+  --cor-primaria-na-base: #9e0b22;
+  --cor-primaria-escura-texto: #ffffff;
+  --cor-erro: #c8102e;
+  --cor-erro-escuro: #9e0b22;
+
+  --cor-vermelho: var(--cor-primaria);
+  --cor-vermelho-escuro: var(--cor-primaria-escura);
   --cor-dourado: #c9a646;
   --cor-preto: #111111;
   --cor-creme: #fbf3e8;

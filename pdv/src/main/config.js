@@ -4,6 +4,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { lerConfigImpressao, validarConfigImpressao } from './agente-impressao/configuracao.js';
 
 /** Prefixo das rotas da API no servidor (o site fica em /, a retaguarda em /admin). */
@@ -81,6 +82,21 @@ export function criarConfig({ caminho, apiUrlPadrao, apiUrlSugerido = null }) {
       const url = validarApiUrl(valor);
       gravar({ ...salvo, apiUrl: url });
       return url;
+    },
+    /**
+     * Identificador deste computador para o agente de impressão (a API reserva os
+     * cupons para ele). Gerado na primeira vez e guardado: não muda entre aberturas.
+     */
+    idAgente() {
+      if (typeof salvo.idAgente === 'string' && /^pdv-[A-Za-z0-9-]{1,60}$/.test(salvo.idAgente)) return salvo.idAgente;
+      const id = `pdv-${randomUUID()}`;
+      gravar({ ...salvo, idAgente: id });
+      return id;
+    },
+    /** Loja que o ADMIN escolheu da última vez (slug) neste computador. */
+    lojaAdmin: () => (typeof salvo.lojaAdmin === 'string' && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(salvo.lojaAdmin) ? salvo.lojaAdmin : null),
+    definirLojaAdmin(slug) {
+      gravar({ ...salvo, lojaAdmin: slug || null });
     },
     /** Impressora deste computador (modo, nome no Windows, largura, tabela, guilhotina). */
     impressao: () => lerConfigImpressao(salvo.impressao),

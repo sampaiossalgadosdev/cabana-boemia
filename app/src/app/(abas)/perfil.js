@@ -77,7 +77,7 @@ export default function Perfil() {
   const carregar = useCallback(async () => {
     setErro('');
     try {
-      const [{ enderecos: lista }, { bairros: b }] = await Promise.all([chamar((token) => api.listarEnderecos(token)), api.buscarBairros()]);
+      const [{ enderecos: lista }, { bairros: b }] = await Promise.all([chamar((token) => api.listarEnderecos(token)), api.buscarBairrosDaCidade()]);
       setEnderecos(lista);
       setBairros(b);
     } catch (e) {

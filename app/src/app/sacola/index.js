@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Stack, router, useIsFocused } from 'expo-router';
-import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCarrinho } from '../../estado/Carrinho.js';
@@ -23,6 +22,8 @@ import { quandoAbre } from '../../logica/horario.js';
 import { Botao, ImagemProduto, Quantidade } from '../../componentes/basicos.js';
 import { LinhaFreteGratis } from '../../componentes/BarraSacola.js';
 import { useEstilos, useTema } from '../../tema/tema.js';
+import { LogoLoja } from '../../componentes/Loja.js';
+import { taxaNaLoja } from '../../logica/lojas.js';
 
 function ItemSacola({ item, produto, limite, onEditar, onMudar, onRemover }) {
   const s = useEstilos(criarEstilos);
@@ -75,24 +76,27 @@ function ItemSacola({ item, produto, limite, onEditar, onMudar, onRemover }) {
   );
 }
 
-/** Taxa do bairro do endereço salvo (logado), ou null se ainda não dá para saber (como no site). */
-function useTaxaDoCliente(emFoco) {
+/**
+ * Taxa DESTA LOJA para o endereço principal (logado), pela área de entrega
+ * dela; null se ainda não dá para saber ou se ela não entrega lá (o checkout explica).
+ */
+function useTaxaDoCliente(emFoco, slug) {
   const { status, chamar } = useCliente();
   const [taxa, setTaxa] = useState(null);
   useEffect(() => {
-    if (status !== 'logado') {
+    if (status !== 'logado' || !slug) {
       setTaxa(null);
       return undefined;
     }
     if (!emFoco) return undefined;
     let vivo = true;
-    chamar((token) => api.listarEnderecos(token))
-      .then(({ enderecos }) => vivo && setTaxa(enderecoDaTaxa(enderecos)?.bairro.taxaCentavos ?? null))
+    Promise.all([chamar((token) => api.listarEnderecos(token)), api.buscarBairrosDaLoja(slug)])
+      .then(([{ enderecos }, { bairros }]) => vivo && setTaxa(taxaNaLoja(enderecoDaTaxa(enderecos), bairros)))
       .catch(() => vivo && setTaxa(null));
     return () => {
       vivo = false;
     };
-  }, [status, chamar, emFoco]);
+  }, [status, chamar, emFoco, slug]);
   return taxa;
 }
 
@@ -134,7 +138,7 @@ export default function TelaSacola() {
   const { bottom } = useSafeAreaInsets();
   const emFoco = useIsFocused();
   const { itens, totalItens, adicionar, editar, remover, substituir, carregado } = useCarrinho();
-  const { dados, podePedir } = useCardapio();
+  const { dados, podePedir, slug, loja } = useCardapio();
   const { avisar } = useAvisos();
   const [recem, setRecem] = useState(() => new Set());
 
@@ -147,7 +151,7 @@ export default function TelaSacola() {
 
   const produtos = useMemo(() => produtosDoCardapio(dados?.categorias), [dados]);
   const freteGratis = dados?.freteGratis ?? null;
-  const taxaBairro = useTaxaDoCliente(emFoco);
+  const taxaBairro = useTaxaDoCliente(emFoco, slug);
   const resumo = resumoDaSacola(itens, { taxaBairroCentavos: taxaBairro, freteGratis });
   const listaSugestoes = podePedir ? listarSugestoes(dados, itens, recem) : [];
 
@@ -158,7 +162,7 @@ export default function TelaSacola() {
     ]);
 
   const adicionarSugestao = (produto) => {
-    adicionar(produto, 1, '');
+    adicionar(produto, 1, '', { slug, nome: loja?.nome || slug });
     avisar(`${produto.nome} foi para a sacola`);
     setRecem((r) => new Set(r).add(produto.id));
     setTimeout(
@@ -192,9 +196,7 @@ export default function TelaSacola() {
       />
       <ScrollView contentContainerStyle={s.conteudo}>
         <View style={s.restaurante}>
-          <View style={s.logoFundo}>
-            <Image source={tema.logo} style={s.logo} contentFit="contain" accessible={false} />
-          </View>
+          <LogoLoja nome={tema.nome} logoUrl={loja?.logoUrl} tamanho={52} />
           <View>
             <Text style={s.restauranteNome}>{tema.nome}</Text>
             <Pressable onPress={fechar} accessibilityRole="button" hitSlop={6}>

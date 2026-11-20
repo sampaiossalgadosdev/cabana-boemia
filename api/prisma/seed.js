@@ -1,20 +1,32 @@
 /**
- * Seed idempotente do cardápio a partir de cardapio-cabana-boemia.json.
+ * Seed idempotente de UMA loja e do cardápio dela, a partir de um JSON
+ * (padrão: cardapio-cabana-boemia.json, a Cabana Boemia). Outra loja:
+ * `npm run seed -w api -- --cardapio prisma/cardapios/<arquivo>.json`.
+ *
+ * O bloco "loja" do JSON diz qual loja (slug) e, só na criação, a cor e a
+ * logo PADRÃO (arquivo relativo ao JSON). "pratoPorKg": true acrescenta o
+ * "Prato por kg" (padrão: só na Cabana). "areaEntrega" acrescenta bairros
+ * (na lista da cidade, se faltarem) à área da loja, com a taxa, só se ainda
+ * não estiverem nela.
  *
  * Política (ver CLAUDE.md › Seed): cria o que falta e NUNCA sobrescreve o que o
  * dono pode editar (preço, ativo, disponivelHoje, descrição, estoque, horários,
- * Configuracao). Em registro existente só atualiza a estrutura (categoria/ordem)
- * e acrescenta vínculos ProdutoTurno/ProdutoInsumo que faltarem.
+ * configuração, cor e logo da loja, taxas, ordem das categorias, categoria e
+ * ordem dos produtos). Em registro existente só acrescenta vínculos
+ * ProdutoTurno/ProdutoInsumo que faltarem. Tudo por loja: os nomes são únicos dentro da loja (upsert por
+ * [lojaId, nome]).
  */
 import { readFile } from 'node:fs/promises';
+import { parseArgs } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 
-const CAMINHO_JSON = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  'cardapio-cabana-boemia.json',
-);
+const PASTA = path.dirname(fileURLToPath(import.meta.url));
+export const CAMINHO_JSON = path.join(PASTA, 'cardapio-cabana-boemia.json');
+const TIPOS_LOGO = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
+const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const MAX_LOGO_BYTES = 500 * 1024;
 
 const DIAS = {
   domingo: 0,
@@ -24,6 +36,16 @@ const DIAS = {
   quinta: 4,
   sexta: 5,
   sabado: 6,
+};
+
+/**
+ * Mesmo slug de src/services/loja.service.js (SLUG_LOJA_PADRAO): a migration
+ * multi_loja já cria a loja. Vale para JSON sem bloco "loja".
+ */
+export const LOJA_CABANA = {
+  slug: 'cabana-boemia',
+  corPrimaria: '#C8102E',
+  corFundo: '#FBF3E8',
 };
 
 const PRATO_POR_KG = {
@@ -49,13 +71,28 @@ export async function lerCardapio(caminho = CAMINHO_JSON) {
   return JSON.parse(await readFile(caminho, 'utf8'));
 }
 
+/** Arquivo da logo (relativo ao JSON) → { mime, dados }; só PNG/JPEG/WebP até 500 KB. */
+async function lerLogo(arquivo, pastaJson) {
+  const caminho = path.resolve(pastaJson, arquivo);
+  const mime = TIPOS_LOGO[path.extname(caminho).toLowerCase()];
+  if (!mime) throw new Error(`Logo "${arquivo}": use PNG, JPEG ou WebP`);
+  const dados = await readFile(caminho);
+  if (dados.length === 0 || dados.length > MAX_LOGO_BYTES) throw new Error(`Logo "${arquivo}": vazia ou com mais de 500 KB`);
+  return { mime, dados };
+}
+
 /**
  * @param {import('@prisma/client').PrismaClient} prisma
- * @param {{ cardapio?: any, log?: (msg: string) => void }} [opcoes]
+ * @param {{ cardapio?: any, caminho?: string, log?: (msg: string) => void }} [opcoes]
+ *   `caminho`: o JSON (padrão: o da Cabana); `cardapio`: o JSON já lido (a logo é relativa a `caminho`)
  * @returns {Promise<string[]>} avisos emitidos
  */
-export async function seed(prisma, { cardapio, log = console.log } = {}) {
-  cardapio ??= await lerCardapio();
+export async function seed(prisma, { cardapio, caminho = CAMINHO_JSON, log = console.log } = {}) {
+  cardapio ??= await lerCardapio(caminho);
+  const dadosLoja = { ...LOJA_CABANA, ...(cardapio.loja ?? {}) };
+  if (!SLUG.test(dadosLoja.slug ?? '')) throw new Error(`Slug da loja inválido no JSON: "${dadosLoja.slug}"`);
+  const logo = dadosLoja.logo ? await lerLogo(dadosLoja.logo, path.dirname(caminho)) : null;
+  const pratoPorKg = cardapio.pratoPorKg ?? dadosLoja.slug === LOJA_CABANA.slug;
   const avisos = [];
   const avisar = (msg) => {
     avisos.push(msg);
@@ -64,22 +101,47 @@ export async function seed(prisma, { cardapio, log = console.log } = {}) {
 
   await prisma.$transaction(
     async (tx) => {
-      // ── Configuracao (linha única) ──
-      const config = await tx.configuracao.upsert({
-        where: { id: 1 },
-        create: { id: 1, nomeRestaurante: cardapio.restaurante.nome },
+      // ── Loja (a da Cabana a migration multi_loja já cria; aqui só se faltar). ──
+      // A cor e a logo do JSON são o PADRÃO da loja; nada do que já existe é sobrescrito.
+      const cor = dadosLoja.corPrimaria ?? null;
+      let loja = await tx.loja.upsert({
+        where: { slug: dadosLoja.slug },
+        create: {
+          slug: dadosLoja.slug,
+          nome: cardapio.restaurante.nome,
+          corPrimaria: cor,
+          corPrimariaPadrao: cor,
+          corFundo: dadosLoja.corFundo ?? null,
+          descricao: dadosLoja.descricao ?? null,
+          ...(dadosLoja.ordem != null && { ordem: dadosLoja.ordem }),
+        },
         update: {},
       });
-      if (!config.whatsappNumero) {
-        avisar('Configuracao.whatsappNumero vazio: defina na retaguarda (usado no link wa.me).');
+      const lojaId = loja.id;
+      if (loja.corPrimariaPadrao == null && cor) {
+        loja = await tx.loja.update({
+          where: { id: lojaId },
+          data: { corPrimariaPadrao: cor, ...(loja.corPrimaria == null && { corPrimaria: cor }) },
+        });
+      }
+      if (logo && loja.logoUrlPadrao == null) {
+        const img = await tx.imagemLoja.create({ data: { lojaId, ...logo }, select: { id: true } });
+        const url = `/api/publico/imagens/${img.id}`;
+        loja = await tx.loja.update({
+          where: { id: lojaId },
+          data: { logoUrlPadrao: url, ...(loja.logoUrl == null && { logoUrl: url }) },
+        });
+      }
+      if (!loja.whatsapp) {
+        avisar(`WhatsApp da loja vazio (${loja.nome}): defina na retaguarda (Configurações; usado no link wa.me).`);
       }
 
       // ── Turnos e horários ──
       const turnoId = new Map();
       for (const t of cardapio.turnos) {
         const turno = await tx.turno.upsert({
-          where: { nome: t.nome },
-          create: { nome: t.nome },
+          where: { lojaId_nome: { lojaId, nome: t.nome } },
+          create: { lojaId, nome: t.nome },
           update: {},
         });
         turnoId.set(t.nome, turno.id);
@@ -101,19 +163,29 @@ export async function seed(prisma, { cardapio, log = console.log } = {}) {
 
       // ── Insumos ──
       const insumoId = new Map();
-      for (const i of cardapio.insumos) {
+      for (const i of cardapio.insumos ?? []) {
         const insumo = await tx.insumo.upsert({
-          where: { nome: i.nome },
-          create: { nome: i.nome, estoque: i.estoque_inicial ?? 0, estoqueMinimo: 0 },
+          where: { lojaId_nome: { lojaId, nome: i.nome } },
+          create: { lojaId, nome: i.nome, estoque: i.estoque_inicial ?? 0, estoqueMinimo: 0 },
           update: {},
         });
         insumoId.set(i.nome, insumo.id);
       }
 
-      // ── Categorias e produtos (JSON + Prato por kg) ──
-      const categorias = [
-        ...cardapio.categorias,
-        {
+      // ── Área de entrega (bairros da cidade + taxa): só acrescenta o que falta ──
+      for (const a of cardapio.areaEntrega ?? []) {
+        const bairro = await tx.bairro.upsert({ where: { nome: a.bairro }, create: { nome: a.bairro }, update: {} });
+        await tx.areaEntrega.upsert({
+          where: { lojaId_bairroId: { lojaId, bairroId: bairro.id } },
+          create: { lojaId, bairroId: bairro.id, taxaCentavos: a.taxa_centavos ?? 0 },
+          update: {},
+        });
+      }
+
+      // ── Categorias e produtos (JSON + Prato por kg, na Cabana) ──
+      const categorias = [...cardapio.categorias];
+      if (pratoPorKg) {
+        categorias.push({
           nome: PRATO_POR_KG.categoria,
           turnos: PRATO_POR_KG.turnos,
           produtos: [
@@ -126,14 +198,14 @@ export async function seed(prisma, { cardapio, log = console.log } = {}) {
               insumos: [],
             },
           ],
-        },
-      ];
+        });
+      }
 
       for (const [ordemCat, c] of categorias.entries()) {
         const categoria = await tx.categoria.upsert({
-          where: { nome: c.nome },
-          create: { nome: c.nome, ordem: ordemCat },
-          update: { ordem: ordemCat },
+          where: { lojaId_nome: { lojaId, nome: c.nome } },
+          create: { lojaId, nome: c.nome, ordem: ordemCat },
+          update: {}, // a ordem é do dono (retaguarda › Categorias ↑ ↓): só na criação
         });
 
         const idsTurnos = c.turnos.map((nome) => {
@@ -146,8 +218,9 @@ export async function seed(prisma, { cardapio, log = console.log } = {}) {
         for (const [ordemProd, p] of c.produtos.entries()) {
           const semPreco = p.preco_centavos == null;
           const produto = await tx.produto.upsert({
-            where: { nome: p.nome },
+            where: { lojaId_nome: { lojaId, nome: p.nome } },
             create: {
+              lojaId,
               nome: p.nome,
               descricao: p.descricao ?? '',
               categoriaId: categoria.id,
@@ -161,7 +234,7 @@ export async function seed(prisma, { cardapio, log = console.log } = {}) {
               estoque: controlaEstoque ? (p.estoque_inicial ?? 0) : null,
               ordem: ordemProd,
             },
-            update: { categoriaId: categoria.id, ordem: ordemProd },
+            update: {}, // categoria e ordem são do dono (retaguarda › Produtos): só na criação
           });
 
           if (produto.precoCentavos === 0) {
@@ -193,7 +266,7 @@ export async function seed(prisma, { cardapio, log = console.log } = {}) {
 /** Contagem por tabela, usada no fim do seed e nos testes. */
 export async function contarTabelas(prisma) {
   const [
-    configuracao,
+    loja,
     turno,
     horarioTurno,
     insumo,
@@ -202,7 +275,7 @@ export async function contarTabelas(prisma) {
     produtoTurno,
     produtoInsumo,
   ] = await Promise.all([
-    prisma.configuracao.count(),
+    prisma.loja.count(),
     prisma.turno.count(),
     prisma.horarioTurno.count(),
     prisma.insumo.count(),
@@ -212,7 +285,7 @@ export async function contarTabelas(prisma) {
     prisma.produtoInsumo.count(),
   ]);
   return {
-    configuracao,
+    loja,
     turno,
     horarioTurno,
     insumo,
@@ -223,11 +296,13 @@ export async function contarTabelas(prisma) {
   };
 }
 
-// Execução direta: `npm run seed` ou `prisma db seed`
+// Execução direta: `npm run seed` ou `prisma db seed` (a Cabana);
+// outra loja: `npm run seed -w api -- --cardapio prisma/cardapios/loja-teste.json`.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const { values } = parseArgs({ options: { cardapio: { type: 'string' } } });
   const prisma = new PrismaClient();
   try {
-    const avisos = await seed(prisma);
+    const avisos = await seed(prisma, { caminho: values.cardapio ? path.resolve(values.cardapio) : CAMINHO_JSON });
     console.log('\nSeed concluído. Registros por tabela:');
     console.table(await contarTabelas(prisma));
     console.log(`${avisos.length} aviso(s).`);

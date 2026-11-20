@@ -32,7 +32,7 @@
 .botao-icone--ativo {
   border-color: var(--cor-vermelho);
   background: var(--cor-vermelho);
-  color: var(--cor-branco);
+  color: var(--cor-primaria-texto);
 }
 
 .campo select:focus-visible,
@@ -200,7 +200,7 @@
   color: var(--cor-ok);
 }
 .linha-pedido__atraso {
-  color: var(--cor-vermelho);
+  color: var(--cor-erro);
   font-weight: 800;
 }
 .linha-pedido__registro {
@@ -253,7 +253,7 @@
   color: var(--cor-texto-suave);
 }
 .status-pedido--cancelado {
-  color: var(--cor-vermelho-escuro);
+  color: var(--cor-erro-escuro);
 }
 .selo--pago {
   background: var(--cor-ok);
@@ -360,4 +360,16 @@
   .painel-delivery__filtros {
     flex-wrap: wrap;
   }
+}
+
+/* Chave da NFC-e: números em grupos de 4, fonte de largura fixa para conferir com a nota. */
+.detalhe-pedido__nfce {
+  font-family: Consolas, 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  word-break: break-word;
+}
+input.detalhe-pedido__nfce {
+  width: 100%;
+  font-size: 18px;
 }

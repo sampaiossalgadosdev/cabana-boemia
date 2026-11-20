@@ -1,87 +1,145 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
-import { useCardapio } from '../../estado/Cardapio.js';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useLojas } from '../../estado/Lojas.js';
+import { useCarrinho } from '../../estado/Carrinho.js';
 import { AvisosNaTela } from '../../estado/Avisos.js';
-import { useUltimoPedido } from '../../estado/UltimoPedido.js';
-import { Botao } from '../../componentes/basicos.js';
-import { Cabecalho } from '../../componentes/Cabecalho.js';
-import { AvisoFechado, FaixaSemConexao } from '../../componentes/Faixas.js';
-import { AbasCategorias, ListaCardapio } from '../../componentes/ListaCardapio.js';
-import { BarraSacola } from '../../componentes/BarraSacola.js';
+import { FaixaSemConexao } from '../../componentes/Faixas.js';
 import { TelaSemInternet } from '../../componentes/TelaSemInternet.js';
+import { LogoLoja } from '../../componentes/Loja.js';
+import { filtrarLojas, situacaoDaLoja } from '../../logica/lojas.js';
+import { formatarPreco } from '../../logica/dinheiro.js';
+import { rotuloItens } from '../../logica/sacola.js';
 import { useEstilos, useTema } from '../../tema/tema.js';
 
-/** Início: cardápio do turno ativo (ou a prévia do próximo, com a loja fechada). */
-export default function Inicio() {
+const hora = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const textoListaSalva = (salvoEm) => `Mostrando a lista das ${hora.format(new Date(salvoEm))}.`;
+
+function CartaoLoja({ loja }) {
   const s = useEstilos(criarEstilos);
   const tema = useTema();
-  const { dados, categorias, podePedir, semConexao, salvoEm, buscando, recarregar } = useCardapio();
-  const { ultimoPedido, repetir } = useUltimoPedido();
-  const lista = useRef(null);
-  const [ativa, setAtiva] = useState(null);
+  const situacao = situacaoDaLoja(loja);
+  return (
+    <Pressable
+      onPress={() => router.push(`/loja/${loja.slug}`)}
+      accessibilityRole="button"
+      accessibilityLabel={`${loja.nome}, ${situacao}`}
+      style={({ pressed }) => [s.cartao, pressed && s.pressionado]}
+    >
+      <LogoLoja nome={loja.nome} logoUrl={loja.logoUrl} cor={loja.corPrimaria ?? undefined} tamanho={60} />
+      <View style={s.textos}>
+        <Text style={s.nome} numberOfLines={1}>
+          {loja.nome}
+        </Text>
+        {loja.descricao ? (
+          <Text style={s.descricao} numberOfLines={2}>
+            {loja.descricao}
+          </Text>
+        ) : null}
+        <View style={s.linha}>
+          <View style={[s.bolinha, loja.aberta ? s.aberta : s.fechada]} />
+          <Text style={[s.situacao, loja.aberta && s.situacaoAberta]} numberOfLines={1}>
+            {situacao}
+          </Text>
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={tema.cores.textoSuave} />
+    </Pressable>
+  );
+}
+
+/** Sacola de alguma loja (fora da página dela): volta para a loja. */
+function BarraSacolaDaLoja() {
+  const s = useEstilos(criarEstilos);
+  const { loja, totalItens, totalCentavos } = useCarrinho();
+  if (!loja || !totalItens) return null;
+  return (
+    <Pressable onPress={() => router.push(`/loja/${loja.slug}`)} accessibilityRole="button" style={s.sacola}>
+      <View style={{ flex: 1 }}>
+        <Text style={s.sacolaLoja} numberOfLines={1}>{`Sua sacola em ${loja.nome}`}</Text>
+        <Text style={s.sacolaResumo}>{`${formatarPreco(totalCentavos)} / ${rotuloItens(totalItens)}`}</Text>
+      </View>
+      <Text style={s.sacolaAcao}>Ver loja</Text>
+    </Pressable>
+  );
+}
+
+/** Início: as lojas do Delivery Abatiá (logo, nome, aberta/fechada, próxima abertura), com busca. */
+export default function Vitrine() {
+  const s = useEstilos(criarEstilos);
+  const tema = useTema();
+  const { top } = useSafeAreaInsets();
+  const { lojas, semConexao, salvoEm, buscando, recarregar } = useLojas();
+  const [busca, setBusca] = useState('');
   const [puxou, setPuxou] = useState(false);
+  const visiveis = useMemo(() => filtrarLojas(lojas, busca), [lojas, busca]);
 
-  useEffect(() => {
-    if (!categorias.some((c) => c.id === ativa)) setAtiva(categorias[0]?.id ?? null);
-  }, [categorias, ativa]);
-  useEffect(() => {
-    if (!buscando) setPuxou(false);
-  }, [buscando]);
+  const topo = (
+    <View style={[s.topo, { paddingTop: top + 12 }]}>
+      <Text style={s.titulo} accessibilityRole="header">
+        Delivery Abatiá
+      </Text>
+      <View style={s.busca}>
+        <Ionicons name="search" size={18} color={tema.cores.textoSuave} />
+        <TextInput
+          value={busca}
+          onChangeText={setBusca}
+          placeholder="Buscar loja"
+          placeholderTextColor={tema.cores.textoDesabilitado}
+          style={s.buscaCampo}
+          returnKeyType="search"
+          accessibilityLabel="Buscar loja"
+        />
+        {busca ? (
+          <Pressable onPress={() => setBusca('')} accessibilityRole="button" accessibilityLabel="Limpar busca" hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color={tema.cores.textoSuave} />
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
 
-  const abrirProduto = useCallback((produto) => router.push({ pathname: '/produto', params: { id: produto.id } }), []);
-  const irPara = (id) => {
-    setAtiva(id);
-    lista.current?.irPara(id);
-  };
-
-  // Nada para mostrar (primeira abertura sem internet e sem cardápio salvo).
-  if (!dados) {
+  if (!lojas) {
     return (
       <View style={s.tela}>
-        <Cabecalho cardapio={null} />
+        {topo}
         {semConexao ? (
           <TelaSemInternet onTentarDeNovo={recarregar} tentando={buscando} />
         ) : (
-          <View style={s.carregando}>
-            <ActivityIndicator size="large" color={tema.cores.acao} accessibilityLabel="Carregando cardápio" />
-          </View>
+          <ActivityIndicator style={{ marginTop: 32 }} size="large" color={tema.cores.acao} accessibilityLabel="Carregando lojas" />
         )}
       </View>
     );
   }
 
-  const fechado = !dados.aberto;
   return (
     <View style={s.tela}>
-      <Cabecalho cardapio={dados} />
-      {categorias.length > 0 && <AbasCategorias categorias={categorias} ativa={ativa} onSelecionar={irPara} />}
-      <ListaCardapio
-        ref={lista}
-        categorias={categorias}
-        desabilitado={!podePedir}
-        onAbrir={abrirProduto}
-        onCategoriaVisivel={setAtiva}
-        atualizando={puxou && buscando}
-        onAtualizar={() => {
-          setPuxou(true);
-          recarregar();
-        }}
-        cabecalho={
-          <>
-            {semConexao && <FaixaSemConexao salvoEm={salvoEm} podePedir={podePedir} />}
-            {fechado && <AvisoFechado proximaAbertura={dados.proximaAbertura} />}
-            {podePedir && ultimoPedido?.itens.length > 0 && categorias.length > 0 && (
-              <View style={s.repetir}>
-                <Text style={s.repetirTexto}>Bateu a vontade de novo?</Text>
-                <Botao titulo="Repetir último pedido" variante="secundario" onPress={() => repetir(ultimoPedido)} />
-              </View>
-            )}
-          </>
+      {topo}
+      <FlatList
+        data={visiveis}
+        keyExtractor={(l) => l.slug}
+        contentContainerStyle={s.lista}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={puxou && buscando}
+            onRefresh={() => {
+              setPuxou(true);
+              recarregar();
+            }}
+          />
         }
+        ListHeaderComponent={semConexao ? <FaixaSemConexao salvoEm={salvoEm} podePedir textoSalvo={textoListaSalva} /> : null}
+        ListEmptyComponent={
+          <Text style={s.vazio}>{busca ? `Nenhuma loja encontrada para "${busca}".` : 'Nenhuma loja disponível no momento.'}</Text>
+        }
+        renderItem={({ item }) => <CartaoLoja loja={item} />}
+        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
       />
-      <BarraSacola />
-      <AvisosNaTela distanciaDoFim={90} />
+      <BarraSacolaDaLoja />
+      <AvisosNaTela distanciaDoFim={80} />
     </View>
   );
 }
@@ -89,19 +147,50 @@ export default function Inicio() {
 const criarEstilos = (t) =>
   StyleSheet.create({
     tela: { flex: 1, backgroundColor: t.cores.fundo },
-    carregando: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    repetir: {
+    topo: { backgroundColor: t.cores.cabecalho, paddingHorizontal: 16, paddingBottom: 14, gap: 10 },
+    titulo: { color: t.cores.textoInverso, fontSize: t.fontes.tamanho.titulo, fontWeight: t.fontes.peso.pesado },
+    busca: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
+      gap: 8,
+      backgroundColor: t.cores.superficie,
+      borderRadius: t.raio.pilula,
+      paddingHorizontal: 14,
+    },
+    buscaCampo: { flex: 1, paddingVertical: 10, fontSize: t.fontes.tamanho.normal, color: t.cores.texto },
+    lista: { padding: 16, paddingBottom: 32 },
+    cartao: {
+      flexDirection: 'row',
+      alignItems: 'center',
       gap: 12,
-      marginHorizontal: 16,
-      marginTop: 12,
       padding: 12,
       borderRadius: t.raio.normal,
       backgroundColor: t.cores.superficie,
       borderWidth: 1,
       borderColor: t.cores.borda,
     },
-    repetirTexto: { flex: 1, fontSize: t.fontes.tamanho.normal, fontWeight: t.fontes.peso.medio, color: t.cores.texto },
+    pressionado: { opacity: 0.85 },
+    textos: { flex: 1, gap: 2 },
+    nome: { fontSize: t.fontes.tamanho.medio, fontWeight: t.fontes.peso.forte, color: t.cores.texto },
+    descricao: { fontSize: t.fontes.tamanho.pequeno, color: t.cores.textoSuave },
+    linha: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+    bolinha: { width: 8, height: 8, borderRadius: 4 },
+    aberta: { backgroundColor: t.cores.sucesso },
+    fechada: { backgroundColor: t.cores.textoDesabilitado },
+    situacao: { fontSize: t.fontes.tamanho.pequeno, color: t.cores.textoSuave, flexShrink: 1 },
+    situacaoAberta: { color: t.cores.sucesso, fontWeight: t.fontes.peso.forte },
+    vazio: { marginTop: 32, textAlign: 'center', color: t.cores.textoSuave, fontSize: t.fontes.tamanho.normal },
+    sacola: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: t.cores.superficie,
+      borderTopWidth: 1,
+      borderTopColor: t.cores.borda,
+    },
+    sacolaLoja: { fontSize: t.fontes.tamanho.normal, fontWeight: t.fontes.peso.forte, color: t.cores.texto },
+    sacolaResumo: { fontSize: t.fontes.tamanho.pequeno, color: t.cores.textoSuave },
+    sacolaAcao: { color: t.cores.acao, fontWeight: t.fontes.peso.forte, fontSize: t.fontes.tamanho.normal },
   });

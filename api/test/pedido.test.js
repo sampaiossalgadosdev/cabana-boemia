@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { io as conectarSocket } from 'socket.io-client';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 
 const local = (iso) => new Date(`${iso}-03:00`);
 const SABADO_20H = local('2026-11-14T20:00'); // turno Lanches aberto
@@ -64,8 +64,8 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
     });
   }
 
-  const estoqueInsumo = async (nome) => (await prisma.insumo.findUnique({ where: { nome } })).estoque;
-  const estoqueProduto = async (nome) => (await prisma.produto.findUnique({ where: { nome } })).estoque;
+  const estoqueInsumo = async (nome) => (await prisma.insumo.findUnique({ where: { lojaId_nome: { lojaId: 1, nome } } })).estoque;
+  const estoqueProduto = async (nome) => (await prisma.produto.findUnique({ where: { lojaId_nome: { lojaId: 1, nome } } })).estoque;
 
   before(async () => {
     resetarBancoDeTeste();
@@ -80,7 +80,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
 
     for (const prod of await prisma.produto.findMany()) p[prod.nome] = prod;
     for (const i of await prisma.insumo.findMany()) insumo[i.nome] = i;
-    centro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
+    centro = await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
     await criarDono({ nome: 'Dono', email: 'dono@teste.com', senha: 'senha-do-dono' });
 
     const app = criarApp({ log: false, relogio: () => agora });
@@ -179,7 +179,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
   });
 
   test('dois pedidos concorrentes pelo último pão: um passa, outro recebe 409 e o estoque fica em 0', async () => {
-    await prisma.insumo.update({ where: { nome: 'Pão de lanche' }, data: { estoque: 1 } });
+    await prisma.insumo.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de lanche' } }, data: { estoque: 1 } });
     const [a, b] = await Promise.all([novoCliente(), novoCliente()]);
 
     const respostas = await Promise.all([pedir(a, [item('X-Bacon')]), pedir(b, [item('X-Salada')])]);
@@ -195,7 +195,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
   });
 
   test('dez pedidos concorrentes por 3 pães: exatamente 3 passam, estoque 0, números do dia sem repetição', async () => {
-    await prisma.insumo.update({ where: { nome: 'Pão de lanche' }, data: { estoque: 3 } });
+    await prisma.insumo.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de lanche' } }, data: { estoque: 3 } });
     const clientes = await Promise.all(Array.from({ length: 10 }, () => novoCliente()));
 
     const respostas = await Promise.all(clientes.map((c) => pedir(c, [item('X-Burguer'), item('Refrigerante Lata')])));
@@ -211,7 +211,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
   });
 
   test('baixa atômica (determinística): a transação concorrente espera a trava e não leva o pão já vendido', async () => {
-    await prisma.insumo.update({ where: { nome: 'Pão de lanche' }, data: { estoque: 1 } });
+    await prisma.insumo.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de lanche' } }, data: { estoque: 1 } });
     const necessidade = {
       produtos: [],
       insumos: [{ id: insumo['Pão de lanche'].id, nome: 'Pão de lanche', quantidade: 1, produtos: ['X-Bacon'] }],
@@ -302,7 +302,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
   });
 
   test('bebida sem estoque = 409 com o nome dela, e a baixa do outro item é desfeita', async () => {
-    await prisma.produto.update({ where: { nome: 'Coca-Cola 2L' }, data: { estoque: 0 } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 2L' } }, data: { estoque: 0 } });
     const c = await novoCliente();
     const r = await pedir(c, [item('X-Bacon'), item('Coca-Cola 2L')]);
     assert.equal(r.status, 409);
@@ -313,7 +313,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
   });
 
   test('quantidade somada de linhas diferentes do mesmo produto conta para o estoque', async () => {
-    await prisma.insumo.update({ where: { nome: 'Pão de lanche' }, data: { estoque: 3 } });
+    await prisma.insumo.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de lanche' } }, data: { estoque: 3 } });
     const c = await novoCliente();
     const r = await pedir(c, [item('X-Bacon', 2), item('X-Bacon', 2, { observacao: 'sem tomate' })]);
     assert.equal(r.status, 409);
@@ -322,7 +322,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
 
   test('produto fora do dia, inativo, de outro turno ou não vendido no site = 409 PRODUTO_INDISPONIVEL', async () => {
     const c = await novoCliente();
-    await prisma.produto.update({ where: { nome: 'Pizza Bacon' }, data: { disponivelHoje: false } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pizza Bacon' } }, data: { disponivelHoje: false } });
     for (const nome of ['Pizza Bacon', 'Marmita P', 'Prato por kg']) {
       const r = await pedir(c, [item(nome)]);
       assert.equal(r.status, 409, nome);
@@ -385,7 +385,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
     const c = await novoCliente();
     const itens = [item('X-Bacon', 2), item('Coca-Cola 1L')];
     const visto = totalVisto(itens); // 2×1600 + 900 + 500 = 4600
-    await prisma.produto.update({ where: { nome: 'X-Bacon' }, data: { precoCentavos: 1800 } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'X-Bacon' } }, data: { precoCentavos: 1800 } });
     try {
       const r = await pedir(c, itens, { totalEsperadoCentavos: visto });
       assert.equal(r.status, 409);
@@ -410,7 +410,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
       assert.equal(ok.status, 201);
       assert.equal(ok.corpo.pedido.totalCentavos, 2 * 1800 + 900 + 500);
     } finally {
-      await prisma.produto.update({ where: { nome: 'X-Bacon' }, data: { precoCentavos: 1600 } });
+      await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'X-Bacon' } }, data: { precoCentavos: 1600 } });
     }
   });
 
@@ -418,21 +418,20 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
 
   describe('frete grátis (configuração da retaguarda)', () => {
     const ligar = (minimo) =>
-      prisma.configuracao.upsert({
+      prisma.loja.update({
         where: { id: 1 },
-        update: { freteGratisAtivo: true, freteGratisMinimoCentavos: minimo },
-        create: { id: 1, freteGratisAtivo: true, freteGratisMinimoCentavos: minimo },
+        data: { freteGratisAtivo: true, freteGratisMinimoCentavos: minimo },
       });
-    after(() => prisma.configuracao.update({ where: { id: 1 }, data: { freteGratisAtivo: false, freteGratisMinimoCentavos: null } }));
+    after(() => prisma.loja.update({ where: { id: 1 }, data: { freteGratisAtivo: false, freteGratisMinimoCentavos: null } }));
 
     test('padrão (antes do dono configurar): desligado no banco e pedido alto paga a taxa do bairro', async () => {
-      // A coluna nasce NOT NULL DEFAULT false: linhas que já existiam ganham false no ALTER TABLE.
+      // A coluna nasce NOT NULL DEFAULT false (hoje na Loja; a migration multi_loja copia da Configuracao).
       const [col] = await prisma.$queryRaw`
         SELECT column_default, is_nullable FROM information_schema.columns
-        WHERE table_name = 'Configuracao' AND column_name = 'freteGratisAtivo'`;
+        WHERE table_name = 'Loja' AND column_name = 'freteGratisAtivo'`;
       assert.equal(col.column_default, 'false');
       assert.equal(col.is_nullable, 'NO');
-      const config = await prisma.configuracao.findUnique({ where: { id: 1 } });
+      const config = await prisma.loja.findUnique({ where: { id: 1 } });
       assert.equal(config.freteGratisAtivo, false);
       assert.equal(config.freteGratisMinimoCentavos, null);
       assert.equal((await api('GET', '/publico/config')).corpo.freteGratis, null);
@@ -481,6 +480,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
     test('desligado: taxa do bairro mesmo acima do mínimo guardado; WhatsApp segue a mesma regra', async () => {
       await ligar(4100);
       const zap = await criarPedido({
+        lojaId: 1,
         canal: 'WHATSAPP',
         itens: [{ produtoId: p['X-Bacon'].id, quantidade: 3 }],
         cliente: { nome: 'Seu João', telefone: '43988887777' },
@@ -490,7 +490,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
       assert.equal(zap.pedido.taxaEntregaCentavos, 0);
       assert.equal(zap.pedido.totalCentavos, 4800);
 
-      await prisma.configuracao.update({ where: { id: 1 }, data: { freteGratisAtivo: false } });
+      await prisma.loja.update({ where: { id: 1 }, data: { freteGratisAtivo: false } });
       const c = await novoCliente();
       const r = await pedir(c, [item('X-Bacon', 3)], { totalEsperadoCentavos: 4800 + 500 });
       assert.equal(r.status, 201, JSON.stringify(r.corpo));
@@ -512,7 +512,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
       assert.equal(r.corpo.pedido.taxaEntregaCentavos, 0);
 
       // O cupom sai do trabalho que o agente busca na fila, montado como no PDV.
-      const fila = await api('GET', '/equipe/impressoes/pendentes', { token: tokenDono });
+      const fila = await api('POST', '/equipe/impressoes/reservar', { corpo: { agente: 'teste' }, token: tokenDono });
       const trabalho = fila.corpo.trabalhos.find((t) => t.pedido?.id === r.corpo.pedido.id);
       for (const colunas of [48, 32]) {
         const texto = cupomParaTexto(montarCupom(trabalho, { colunas, restaurante: 'Cabana Boemia' }), colunas);
@@ -523,10 +523,11 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
 
     test('opção "vale também para o WhatsApp" desligada: WhatsApp paga a taxa, o site continua com frete grátis', async () => {
       await ligar(4100);
-      await prisma.configuracao.update({ where: { id: 1 }, data: { freteGratisWhatsapp: false } });
+      await prisma.loja.update({ where: { id: 1 }, data: { freteGratisWhatsapp: false } });
       try {
         assert.equal((await api('GET', '/equipe/cardapio', { token: tokenDono })).corpo.freteGratis, null);
         const zap = await criarPedido({
+          lojaId: 1,
           canal: 'WHATSAPP',
           itens: [{ produtoId: p['X-Bacon'].id, quantidade: 3 }],
           cliente: { nome: 'Seu João', telefone: '43988887777' },
@@ -540,7 +541,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
         assert.equal(site.status, 201, JSON.stringify(site.corpo));
         assert.equal(site.corpo.pedido.taxaEntregaCentavos, 0);
       } finally {
-        await prisma.configuracao.update({ where: { id: 1 }, data: { freteGratisWhatsapp: true } });
+        await prisma.loja.update({ where: { id: 1 }, data: { freteGratisWhatsapp: true } });
       }
     });
 
@@ -548,13 +549,13 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
       await ligar(6900);
       assert.deepEqual((await api('GET', '/publico/config')).corpo.freteGratis, { minimoCentavos: 6900 });
       assert.deepEqual((await api('GET', '/publico/cardapio')).corpo.freteGratis, { minimoCentavos: 6900 });
-      await prisma.configuracao.update({ where: { id: 1 }, data: { freteGratisAtivo: false } });
+      await prisma.loja.update({ where: { id: 1 }, data: { freteGratisAtivo: false } });
       assert.equal((await api('GET', '/publico/config')).corpo.freteGratis, null);
     });
 
     test('o banco recusa frete grátis ligado sem mínimo (CHECK)', async () => {
       await assert.rejects(
-        prisma.configuracao.update({ where: { id: 1 }, data: { freteGratisAtivo: true, freteGratisMinimoCentavos: null } }),
+        prisma.loja.update({ where: { id: 1 }, data: { freteGratisAtivo: true, freteGratisMinimoCentavos: null } }),
       );
     });
   });
@@ -570,6 +571,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
 
   test('WHATSAPP e SALAO fora do horário: a equipe lança, com baixa de estoque e sem conferir total', async () => {
     const zap = await criarPedido({
+      lojaId: 1,
       canal: 'WHATSAPP',
       itens: [{ produtoId: p['X-Bacon'].id, quantidade: 1 }],
       cliente: { nome: 'Seu João', telefone: '43988887777' },
@@ -583,9 +585,10 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
     assert.equal(zap.pedido.totalCentavos, 2100);
 
     // Salão: depois do fim do turno, com produto fora do dia e de outro turno (Almoço).
-    await prisma.produto.update({ where: { nome: 'Coca-Cola 2L' }, data: { disponivelHoje: false } });
-    await prisma.produto.update({ where: { nome: 'Prato por kg' }, data: { precoCentavos: 5990 } }); // R$ 59,90/kg
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 2L' } }, data: { disponivelHoje: false } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Prato por kg' } }, data: { precoCentavos: 5990 } }); // R$ 59,90/kg
     const salao = await criarPedido({
+      lojaId: 1,
       canal: 'SALAO',
       itens: [
         { produtoId: p['Coca-Cola 2L'].id, quantidade: 1 },
@@ -608,6 +611,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
   test('WHATSAPP e SALAO: produto inativo ou sem saldo continua bloqueado (409)', async () => {
     const lancar = (canal, nome) =>
       criarPedido({
+        lojaId: 1,
         canal,
         itens: [{ produtoId: p[nome].id, quantidade: 1 }],
         cliente: { nome: 'Balcão' },
@@ -615,12 +619,12 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
         agora: QUINTA_18H59,
       });
 
-    await prisma.produto.update({ where: { nome: 'Salame' }, data: { ativo: false } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Salame' } }, data: { ativo: false } });
     for (const canal of ['WHATSAPP', 'SALAO']) {
       await assert.rejects(lancar(canal, 'Salame'), { status: 409, codigo: 'PRODUTO_INDISPONIVEL' }, canal);
     }
 
-    await prisma.insumo.update({ where: { nome: 'Pão de lanche' }, data: { estoque: 0 } });
+    await prisma.insumo.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de lanche' } }, data: { estoque: 0 } });
     for (const canal of ['WHATSAPP', 'SALAO']) {
       await assert.rejects(lancar(canal, 'X-Tudo'), { status: 409, codigo: 'ESTOQUE_INSUFICIENTE' }, canal);
     }
@@ -628,8 +632,8 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
   });
 
   test('o banco recusa estoque negativo (CHECK), mesmo fora do service', async () => {
-    await assert.rejects(prisma.insumo.update({ where: { nome: 'Pão de lanche' }, data: { estoque: -1 } }));
-    await assert.rejects(prisma.produto.update({ where: { nome: 'Coca-Cola 1L' }, data: { estoque: -1 } }));
+    await assert.rejects(prisma.insumo.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de lanche' } }, data: { estoque: -1 } }));
+    await assert.rejects(prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 1L' } }, data: { estoque: -1 } }));
   });
 
   test('Socket.IO: a sala da equipe recebe pedido:novo e impressao:nova; token de cliente é recusado', async () => {

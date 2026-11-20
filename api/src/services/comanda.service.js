@@ -31,6 +31,7 @@ import {
   motivoIndisponivel,
   necessidadesDeEstoque,
   pedidoPublico,
+  ehDaLoja,
 } from './pedido.service.js';
 import { exigirCaixaAberto } from './caixa.service.js';
 
@@ -40,8 +41,8 @@ const naoEncontrada = () => new ErroHttp(404, 'Comanda não encontrada', { codig
  * Trava a comanda e confere que ainda está aberta.
  * Não existe ou não é do salão = 404; fechada/cancelada = 409 PEDIDO_ENCERRADO.
  */
-async function travarAberta(tx, id) {
-  const c = await comandaRepo.travar(id, tx);
+async function travarAberta(tx, lojaId, id) {
+  const c = await comandaRepo.travar(lojaId, id, tx);
   if (!c || c.canal !== 'SALAO') throw naoEncontrada();
   if (c.status !== 'ABERTO') {
     const situacao = c.status === 'CANCELADO' ? 'cancelada' : 'fechada';
@@ -50,18 +51,19 @@ async function travarAberta(tx, id) {
   return c;
 }
 
-function avisar(comanda) {
-  emitirParaEquipe('pedido:atualizado', comanda);
+function avisar(lojaId, comanda) {
+  emitirParaEquipe(lojaId, 'pedido:atualizado', comanda);
   return comanda;
 }
 
 /** @param {{ nomeCliente: string, mesaRotulo?: string | null }} dados */
-export async function abrirComanda({ nomeCliente, mesaRotulo = null }, { usuarioId = null, agora = new Date() } = {}) {
+export async function abrirComanda(lojaId, { nomeCliente, mesaRotulo = null }, { usuarioId = null, agora = new Date() } = {}) {
   const pedido = await prisma.$transaction(async (tx) => {
-    const dia = diaOperacional(agora, await horaVirada(tx));
-    const numeroDia = await pedidoRepo.proximoNumeroDoDia(dia, tx);
+    const dia = diaOperacional(agora, await horaVirada(lojaId, tx));
+    const numeroDia = await pedidoRepo.proximoNumeroDoDia(lojaId, dia, tx);
     const { id } = await pedidoRepo.criarPedido(
       {
+        lojaId,
         numeroDia,
         dataRef: paraCampoData(dia),
         canal: 'SALAO',
@@ -76,28 +78,28 @@ export async function abrirComanda({ nomeCliente, mesaRotulo = null }, { usuario
     return pedidoRepo.buscarPorId(id, tx);
   }, OPCOES_TRANSACAO);
   const comanda = pedidoPublico(pedido);
-  emitirParaEquipe('pedido:novo', comanda);
+  emitirParaEquipe(lojaId, 'pedido:novo', comanda);
   return comanda;
 }
 
-export async function listarAbertas() {
-  return (await comandaRepo.listarAbertas()).map(pedidoPublico);
+export async function listarAbertas(lojaId) {
+  return (await comandaRepo.listarAbertas(lojaId)).map(pedidoPublico);
 }
 
-export async function buscarComanda(id) {
+export async function buscarComanda(lojaId, id) {
   const p = await pedidoRepo.buscarPorId(id);
-  if (!p || p.canal !== 'SALAO') throw naoEncontrada();
+  if (!ehDaLoja(p, lojaId) || p.canal !== 'SALAO') throw naoEncontrada();
   return pedidoPublico(p);
 }
 
 /**
  * @param {{ produtoId: number, quantidade?: number, pesoGramas?: number | null, observacao?: string | null }} item
  */
-export async function lancarItem(id, item, { usuarioId = null } = {}) {
+export async function lancarItem(lojaId, id, item, { usuarioId = null } = {}) {
   const pedido = await prisma.$transaction(async (tx) => {
-    await travarAberta(tx, id);
+    await travarAberta(tx, lojaId, id);
 
-    const [produto] = await pedidoRepo.buscarProdutosParaPedido([item.produtoId], tx);
+    const [produto] = await pedidoRepo.buscarProdutosParaPedido(lojaId, [item.produtoId], tx);
     const motivo = motivoIndisponivel(produto, { canal: 'SALAO' });
     if (motivo) {
       throw new ErroHttp(409, `Indisponível agora: ${produto?.nome ?? `produto ${item.produtoId}`} (${motivo})`, {
@@ -116,12 +118,12 @@ export async function lancarItem(id, item, { usuarioId = null } = {}) {
     await comandaRepo.recalcularTotais(id, tx);
     return pedidoRepo.buscarPorId(id, tx);
   }, OPCOES_TRANSACAO);
-  return avisar(pedidoPublico(pedido));
+  return avisar(lojaId, pedidoPublico(pedido));
 }
 
-export async function removerItem(id, itemId, { usuarioId = null, agora = new Date() } = {}) {
+export async function removerItem(lojaId, id, itemId, { usuarioId = null, agora = new Date() } = {}) {
   const pedido = await prisma.$transaction(async (tx) => {
-    await travarAberta(tx, id);
+    await travarAberta(tx, lojaId, id);
     if ((await comandaRepo.cancelarItemSeAtivo(id, itemId, agora, tx)) === 0) {
       const item = await comandaRepo.buscarItem(id, itemId, tx);
       if (!item) throw new ErroHttp(404, 'Item não encontrado nesta comanda', { codigo: 'NAO_ENCONTRADO' });
@@ -131,18 +133,18 @@ export async function removerItem(id, itemId, { usuarioId = null, agora = new Da
     await comandaRepo.recalcularTotais(id, tx);
     return pedidoRepo.buscarPorId(id, tx);
   }, OPCOES_TRANSACAO);
-  return avisar(pedidoPublico(pedido));
+  return avisar(lojaId, pedidoPublico(pedido));
 }
 
 /**
  * @param {{ formaPagamento: string, imprimirConta?: boolean }} dados
  * @returns {Promise<{ comanda: object, trabalho: object | null }>}
  */
-export async function fecharComanda(id, { formaPagamento, imprimirConta = false }, { agora = new Date() } = {}) {
+export async function fecharComanda(lojaId, id, { formaPagamento, imprimirConta = false }, { agora = new Date() } = {}) {
   const { pedido, trabalho } = await prisma.$transaction(async (tx) => {
     // Caixa antes da comanda: mesma ordem de travas da finalização do delivery.
-    const caixaId = await exigirCaixaAberto(tx);
-    await travarAberta(tx, id);
+    const caixaId = await exigirCaixaAberto(lojaId, tx);
+    await travarAberta(tx, lojaId, id);
     if ((await comandaRepo.contarItensAtivos(id, tx)) === 0) {
       throw new ErroHttp(409, 'A comanda não tem itens. Lance os itens ou exclua a comanda.', {
         codigo: 'COMANDA_VAZIA',
@@ -150,11 +152,11 @@ export async function fecharComanda(id, { formaPagamento, imprimirConta = false 
     }
     await comandaRepo.fechar(id, { formaPagamento, finalizadoEm: agora, caixaId }, tx);
     const trabalho = imprimirConta
-      ? await pedidoRepo.criarTrabalhoImpressao({ pedidoId: id, tipo: 'CONTA', status: 'PENDENTE' }, tx)
+      ? await pedidoRepo.criarTrabalhoImpressao({ lojaId, pedidoId: id, tipo: 'CONTA', status: 'PENDENTE' }, tx)
       : null;
     return { pedido: await pedidoRepo.buscarPorId(id, tx), trabalho };
   }, OPCOES_TRANSACAO);
-  const comanda = avisar(pedidoPublico(pedido));
-  if (trabalho) emitirParaEquipe('impressao:nova', trabalho);
+  const comanda = avisar(lojaId, pedidoPublico(pedido));
+  if (trabalho) emitirParaEquipe(lojaId, 'impressao:nova', trabalho);
   return { comanda, trabalho };
 }

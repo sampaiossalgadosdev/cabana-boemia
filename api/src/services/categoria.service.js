@@ -12,15 +12,15 @@ const naoEncontrada = () => new ErroHttp(404, 'Categoria não encontrada', { cod
 
 const publica = ({ _count, ...c }) => ({ ...c, quantidadeProdutos: _count.produtos });
 
-export async function listar() {
-  return (await categoriaRepo.listar()).map(publica);
+export async function listar(lojaId) {
+  return (await categoriaRepo.listar(lojaId)).map(publica);
 }
 
 /** @param {{ nome: string, ordem?: number, ativo?: boolean }} dados */
-export async function criar(dados) {
+export async function criar(lojaId, dados) {
   try {
-    const categoria = await categoriaRepo.criar(dados);
-    avisarCardapioAtualizado('categorias');
+    const categoria = await categoriaRepo.criar(lojaId, dados);
+    avisarCardapioAtualizado(lojaId, 'categorias');
     return publica(categoria);
   } catch (err) {
     if (ehDuplicado(err)) throw nomeEmUso();
@@ -29,10 +29,10 @@ export async function criar(dados) {
 }
 
 /** @param {{ nome?: string, ordem?: number, ativo?: boolean }} dados */
-export async function atualizar(id, dados) {
+export async function atualizar(lojaId, id, dados) {
   try {
-    const categoria = await categoriaRepo.atualizar(id, dados);
-    avisarCardapioAtualizado('categorias');
+    const categoria = await categoriaRepo.atualizar(lojaId, id, dados);
+    avisarCardapioAtualizado(lojaId, 'categorias');
     return publica(categoria);
   } catch (err) {
     if (ehDuplicado(err)) throw nomeEmUso();

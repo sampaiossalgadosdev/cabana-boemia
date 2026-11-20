@@ -14,6 +14,7 @@ const EVENTOS = [
   'impressao:status',
   'caixa:atualizado',
   'cardapio:atualizado', // a retaguarda mudou produtos, turnos, bairros, estoque ou configuração
+  'loja:atualizada', // nome, logo ou cor da loja mudou (tema novo)
 ];
 
 const chamar = (canal, ...args) => ipcRenderer.invoke(canal, ...args);
@@ -22,6 +23,12 @@ contextBridge.exposeInMainWorld('pdv', {
   config: {
     obter: () => chamar('config:obter'),
     definirApiUrl: (url) => chamar('config:definirApiUrl', String(url ?? '')),
+  },
+  loja: {
+    // ADMIN: lojas para escolher e a escolha (null = voltar à lista).
+    listar: () => chamar('lojas:listar'),
+    escolher: (slug) => chamar('loja:escolher', slug == null ? null : String(slug)),
+    atual: () => chamar('loja:atual'),
   },
   sessao: {
     restaurar: () => chamar('sessao:restaurar'),
@@ -37,6 +44,7 @@ contextBridge.exposeInMainWorld('pdv', {
     cancelar: (id) => chamar('pedidos:cancelar', Number(id)),
     criar: (dados) => chamar('pedidos:criar', dados),
     reimprimir: (id) => chamar('pedidos:reimprimir', Number(id)),
+    nfce: (id, chave) => chamar('pedidos:nfce', Number(id), chave == null ? null : String(chave)),
   },
   caixa: {
     atual: () => chamar('caixa:atual'),

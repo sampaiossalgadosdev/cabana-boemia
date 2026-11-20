@@ -1,6 +1,6 @@
-// Configuração do app "Delivery Abatiá" (Expo). Nesta etapa só a Cabana Boemia
-// (a API atual); o multi-loja vem depois. Pastas android/ e ios/ são geradas
-// pelo prebuild (CNG) e não vão para o git: tudo nativo se configura aqui.
+// Configuração do app "Delivery Abatiá" (Expo), multi-loja: vitrine de lojas,
+// página de cada loja no tema dela (cor e logo da API). Pastas android/ e ios/
+// são geradas pelo prebuild (CNG) e não vão para o git: tudo nativo se configura aqui.
 
 const ID_APP = 'br.com.deliveryabatia.app';
 
@@ -17,7 +17,7 @@ export default {
   name: 'Delivery Abatiá',
   slug: 'delivery-abatia',
   scheme: 'deliveryabatia',
-  version: '0.1.0',
+  version: '0.2.0',
   orientation: 'portrait',
   icon: './assets/icone.png',
   userInterfaceStyle: 'light',
@@ -27,7 +27,7 @@ export default {
     supportsTablet: false,
     // "Entrar com Apple" (exigido pela App Store quando há login com Google).
     usesAppleSignIn: true,
-    buildNumber: '1',
+    buildNumber: '2',
     infoPlist: {
       // Sem criptografia própria (só HTTPS do sistema): dispensa a pergunta da App Store.
       ITSAppUsesNonExemptEncryption: false,
@@ -35,7 +35,8 @@ export default {
   },
   android: {
     package: ID_APP,
-    versionCode: 1,
+    // Aumentar a cada envio ao Google Play (appVersionSource: local no eas.json).
+    versionCode: 2,
     adaptiveIcon: {
       foregroundImage: './assets/icone-android-frente.png',
       monochromeImage: './assets/icone-android-monocromatico.png',

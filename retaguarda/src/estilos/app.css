@@ -78,8 +78,169 @@ h3 {
 .menu__nome {
   font-family: var(--fonte-marca);
   font-size: 30px;
-  color: var(--cor-vermelho-escuro);
+  color: var(--cor-primaria-na-base);
   text-align: center;
+}
+
+/* Nome da loja embaixo da logo (no menu, sobre a cor da loja). */
+.menu__loja {
+  margin: -8px 4px 12px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+/* ADMIN: escolhe a loja que abre (ou a plataforma). */
+.menu__seletor {
+  display: grid;
+  gap: 4px;
+  margin: 0 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.95;
+}
+.menu__seletor .entrada {
+  width: 100%;
+  color: var(--cor-texto);
+  background: var(--cor-superficie);
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 14px;
+}
+
+/* Perfil da loja: paleta, prévia e logo. */
+.paleta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.paleta__cor {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid var(--cor-superficie);
+  box-shadow: 0 0 0 1px var(--cor-borda-forte);
+  cursor: pointer;
+}
+.paleta__cor[aria-pressed='true'] {
+  box-shadow: 0 0 0 3px var(--cor-texto);
+}
+.seletor-cor {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.seletor-cor input[type='color'] {
+  width: 48px;
+  height: 40px;
+  padding: 2px;
+  border: 1px solid var(--cor-borda-forte);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+}
+.previa {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  min-height: 190px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  overflow: hidden;
+  background: var(--cor-fundo);
+}
+.previa__menu {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 12px;
+  background: var(--previa-escura);
+  color: var(--previa-escura-texto);
+  font-size: 13px;
+}
+.previa__logo {
+  padding: 6px;
+  background: var(--cor-creme);
+  border-radius: var(--raio-pequeno);
+  border-bottom: 3px solid var(--cor-dourado);
+  text-align: center;
+}
+.previa__logo img {
+  display: block;
+  width: 100%;
+  max-height: 48px;
+  object-fit: contain;
+}
+.previa__logo .menu__nome {
+  font-size: 18px;
+  color: var(--previa-na-base);
+}
+.previa__item {
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+.previa__item--ativo {
+  background: var(--cor-creme);
+  color: var(--previa-na-base);
+  font-weight: 700;
+}
+.previa__corpo {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 16px;
+}
+.previa__titulo {
+  margin: 0;
+  font-size: 18px;
+  color: var(--previa-na-base);
+}
+.previa__abas {
+  display: flex;
+  gap: 6px;
+}
+.previa__aba {
+  padding: 6px 12px;
+  border: 1px solid var(--cor-borda-forte);
+  border-radius: 999px;
+  background: var(--cor-superficie);
+  font-size: 13px;
+  font-weight: 600;
+}
+.previa__aba--ativa {
+  background: var(--previa-escura);
+  border-color: var(--previa-escura);
+  color: var(--previa-escura-texto);
+}
+.previa__botao {
+  justify-self: start;
+  padding: 8px 16px;
+  border-radius: var(--raio-pequeno);
+  background: var(--previa-cor);
+  color: var(--previa-texto);
+  font-weight: 700;
+}
+.logo-atual {
+  display: grid;
+  place-items: center;
+  width: 220px;
+  min-height: 90px;
+  padding: 10px;
+  background: var(--cor-creme);
+  border: 1px dashed var(--cor-borda-forte);
+  border-radius: var(--raio);
+}
+.logo-atual img {
+  max-width: 100%;
+  max-height: 90px;
+  object-fit: contain;
+}
+@media (max-width: 560px) {
+  .previa {
+    grid-template-columns: 1fr;
+  }
 }
 
 .menu__item {
@@ -105,7 +266,7 @@ h3 {
 
 .menu__item[aria-current='page'] {
   background: var(--cor-creme);
-  color: var(--cor-vermelho-escuro);
+  color: var(--cor-primaria-na-base);
   border-left-color: var(--cor-dourado);
   font-weight: 700;
 }
@@ -271,7 +432,7 @@ h3 {
 .botao--primario {
   background: var(--cor-acao);
   border-color: var(--cor-acao);
-  color: var(--cor-branco);
+  color: var(--cor-primaria-texto);
 }
 
 .botao--primario:hover:not(:disabled) {
@@ -298,7 +459,7 @@ h3 {
 .botao--texto {
   border-color: transparent;
   background: transparent;
-  color: var(--cor-vermelho-escuro);
+  color: var(--cor-primaria-na-base);
   padding-inline: 6px;
 }
 
@@ -377,6 +538,7 @@ textarea.entrada {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 16px;
+  align-items: start;
 }
 
 .grade-form .inteiro {
@@ -407,9 +569,9 @@ textarea.entrada {
 }
 
 .opcao:has(input:checked) {
-  border-color: var(--cor-vermelho);
-  background: #fdecee;
-  color: var(--cor-vermelho-escuro);
+  border-color: var(--cor-primaria);
+  background: var(--cor-primaria-suave);
+  color: var(--cor-primaria-na-base);
   font-weight: 600;
 }
 
@@ -419,7 +581,7 @@ textarea.entrada {
 }
 
 .opcao input {
-  accent-color: var(--cor-vermelho);
+  accent-color: var(--cor-primaria);
 }
 
 /* Interruptor (checkbox com role=switch) */
@@ -618,9 +780,9 @@ textarea.entrada {
 }
 
 .aba[aria-selected='true'] {
-  background: var(--cor-vermelho-escuro);
-  border-color: var(--cor-vermelho-escuro);
-  color: var(--cor-creme);
+  background: var(--cor-primaria-escura);
+  border-color: var(--cor-primaria-escura);
+  color: var(--cor-primaria-escura-texto);
 }
 
 /* Filtros */
@@ -772,7 +934,7 @@ textarea.entrada {
   place-items: center;
   min-height: 100vh;
   padding: 16px;
-  background: linear-gradient(160deg, var(--cor-vermelho-escuro), #5c0614);
+  background: linear-gradient(160deg, var(--cor-primaria-escura), color-mix(in srgb, var(--cor-primaria-escura) 60%, #000));
 }
 
 .login__cartao {
@@ -828,7 +990,7 @@ textarea.entrada {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--cor-vermelho-escuro);
+  color: var(--cor-primaria-na-base);
 }
 
 .item-dia {
@@ -1066,7 +1228,7 @@ textarea.entrada {
 }
 
 .numero--destaque .numero__valor {
-  color: var(--cor-vermelho-escuro);
+  color: var(--cor-primaria-na-base);
 }
 
 .nota-cancelados {
@@ -1112,13 +1274,13 @@ textarea.entrada {
 .barra__marca {
   display: block;
   height: 100%;
-  background: var(--cor-vermelho-escuro);
+  background: var(--cor-primaria-escura);
   border-radius: 0 4px 4px 0;
   transition: width 0.3s ease;
 }
 
 .barra:hover .barra__marca {
-  background: var(--cor-vermelho);
+  background: var(--cor-primaria);
 }
 
 .barra__valor {

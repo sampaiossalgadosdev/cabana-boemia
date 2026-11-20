@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import * as identidadeService from '../services/identidade.service.js';
+import * as bairroService from '../services/bairro.service.js';
 import { validar } from '../lib/validar.js';
 import { horaVirada } from '../services/diaOperacional.service.js';
 import * as pedidoService from '../services/pedido.service.js';
@@ -187,7 +189,16 @@ const fecharComandaSchema = z.object({
   imprimirConta: z.boolean().default(false),
 });
 
-const falhaSchema = z.object({ erro: z.string().max(2000).optional() });
+/** Identificador do agente de impressão (um por computador; gerado pelo PDV). */
+const agente = z.string({ error: 'Informe o agente' }).trim().regex(/^[A-Za-z0-9._:-]{1,64}$/, 'Agente inválido');
+const falhaSchema = z.object({ erro: z.string().max(2000).optional(), agente });
+const confirmarSchema = z.object({ agente });
+const reservarSchema = z.object({ agente, limite: z.number().int().min(1).max(50).optional() });
+
+/** Chave de acesso da NFC-e (aceita espaços/pontos); null ou "" = apagar. */
+const nfceSchema = z.object({
+  chaveNfce: z.union([z.literal('').transform(() => null), z.null(), z.string().max(80)]),
+});
 
 const finalizarSchema = z.object({
   formaPagamento: z.enum(FORMAS_PAGAMENTO, { error: 'Informe a forma de pagamento' }),
@@ -212,10 +223,19 @@ const tempoSchema = z.object({
 /** @param {() => Date} [relogio] fonte do "agora" (injetável nos testes) */
 export function criarEquipeController(relogio = () => new Date()) {
   return {
+    /** Bairros onde ESTA loja entrega (área ativa, bairro ativo na cidade), com a taxa dela. */
+    async bairros(req, res) {
+      res.json({ bairros: await bairroService.listarOndeEntrega(req.lojaId) });
+    },
+    /** Loja em que o PDV está trabalhando (nome, logo, cor) para o tema e o cupom. */
+    async loja(req, res) {
+      res.json({ loja: await identidadeService.identidadeDaLoja(req.lojaId) });
+    },
     async listarPedidos(req, res) {
       const q = validar(listarSchema, req.query);
       res.json(
         await equipeService.listarPedidosDoDia(
+          req.lojaId,
           { dataRef: q.dataRef, canais: q.canal, somenteAbertos: q.status === 'abertos' },
           relogio(),
         ),
@@ -225,29 +245,29 @@ export function criarEquipeController(relogio = () => new Date()) {
     async finalizarPedido(req, res) {
       const { id } = validar(idSchema, req.params);
       const dados = validar(finalizarSchema, req.body ?? {});
-      res.json({ pedido: await equipeService.finalizarPedido(id, dados, relogio()) });
+      res.json({ pedido: await equipeService.finalizarPedido(req.lojaId, id, dados, relogio()) });
     },
 
     async alterarStatus(req, res) {
       const { id } = validar(idSchema, req.params);
       const { status } = validar(statusSchema, req.body ?? {});
-      res.json({ pedido: await pedidoService.alterarStatus(id, status) });
+      res.json({ pedido: await pedidoService.alterarStatus(req.lojaId, id, status) });
     },
 
     async alterarAgendamento(req, res) {
       const { id } = validar(idSchema, req.params);
       const { agendadoPara } = validar(agendamentoSchema, req.body ?? {});
-      res.json({ pedido: await pedidoService.alterarAgendamento(id, agendadoPara, relogio()) });
+      res.json({ pedido: await pedidoService.alterarAgendamento(req.lojaId, id, agendadoPara, relogio()) });
     },
 
     async cancelarPedido(req, res) {
       const { id } = validar(idSchema, req.params);
-      res.json({ pedido: await pedidoService.cancelarPedido(id, { usuarioId: req.usuario.id, agora: relogio() }) });
+      res.json({ pedido: await pedidoService.cancelarPedido(req.lojaId, id, { usuarioId: req.usuario.id, agora: relogio() }) });
     },
 
     async criarPedido(req, res) {
       const dados = validar(pedidoWhatsappSchema, req.body);
-      const { pedido, criado } = await pedidoService.criarPedidoDoWhatsapp(dados, {
+      const { pedido, criado } = await pedidoService.criarPedidoDoWhatsapp(req.lojaId, dados, {
         usuarioId: req.usuario.id,
         agora: relogio(),
       });
@@ -256,114 +276,124 @@ export function criarEquipeController(relogio = () => new Date()) {
 
     async buscarClientes(req, res) {
       const { busca } = validar(buscaSchema, req.query);
-      res.json({ clientes: await equipeService.buscarClientes(busca) });
+      res.json({ clientes: await equipeService.buscarClientes(req.lojaId, busca) });
     },
 
     async criarCliente(req, res) {
-      res.status(201).json({ cliente: await equipeService.criarCliente(validar(clienteNovoSchema, req.body)) });
+      res.status(201).json({ cliente: await equipeService.criarCliente(req.lojaId, validar(clienteNovoSchema, req.body)) });
     },
 
     async atualizarCliente(req, res) {
       const { id } = validar(idSchema, req.params);
-      res.json({ cliente: await equipeService.atualizarCliente(id, validar(clienteEdicaoSchema, req.body ?? {})) });
+      res.json({ cliente: await equipeService.atualizarCliente(req.lojaId, id, validar(clienteEdicaoSchema, req.body ?? {})) });
     },
 
     async adicionarEndereco(req, res) {
       const { id } = validar(idSchema, req.params);
       const endereco = validar(enderecoNovoSchema, req.body);
-      res.status(201).json({ cliente: await equipeService.adicionarEndereco(id, endereco) });
+      res.status(201).json({ cliente: await equipeService.adicionarEndereco(req.lojaId, id, endereco) });
     },
 
     async atualizarEndereco(req, res) {
       const { id, enderecoId } = validar(enderecoIdSchema, req.params);
       const endereco = validar(enderecoNovoSchema, req.body ?? {});
-      res.json({ cliente: await equipeService.atualizarEndereco(id, enderecoId, endereco) });
+      res.json({ cliente: await equipeService.atualizarEndereco(req.lojaId, id, enderecoId, endereco) });
     },
 
     async cardapio(req, res) {
       const { turnoId } = validar(cardapioSchema, req.query);
-      res.json(await equipeService.cardapioDaEquipe({ turnoId }, relogio()));
+      res.json(await equipeService.cardapioDaEquipe(req.lojaId, { turnoId }, relogio()));
     },
 
     async obterTempo(req, res) {
-      res.json(await equipeService.obterTempoEstimado(relogio()));
+      res.json(await equipeService.obterTempoEstimado(req.lojaId, relogio()));
     },
 
     async definirTempo(req, res) {
       const { minutos } = validar(tempoSchema, req.body ?? {});
-      res.json(await equipeService.definirTempoEstimado(minutos, relogio()));
+      res.json(await equipeService.definirTempoEstimado(req.lojaId, minutos, relogio()));
     },
 
     async caixaAtual(req, res) {
       // horaViradaDia: o PDV usa para saber se o caixa é "de outro dia" (dia operacional).
-      const [caixa, horaViradaDia] = await Promise.all([caixaService.caixaAtual(), horaVirada()]);
+      const [caixa, horaViradaDia] = await Promise.all([caixaService.caixaAtual(req.lojaId), horaVirada(req.lojaId)]);
       res.json({ caixa, horaViradaDia });
     },
 
     async abrirCaixa(req, res) {
       const dados = validar(abrirCaixaSchema, req.body ?? {});
-      res.status(201).json({ caixa: await caixaService.abrirCaixa(dados, { usuarioId: req.usuario.id, agora: relogio() }) });
+      res.status(201).json({ caixa: await caixaService.abrirCaixa(req.lojaId, dados, { usuarioId: req.usuario.id, agora: relogio() }) });
     },
 
     async movimentoCaixa(req, res) {
       const dados = validar(movimentoCaixaSchema, req.body ?? {});
-      res.status(201).json({ caixa: await caixaService.registrarMovimento(dados, { usuarioId: req.usuario.id, agora: relogio() }) });
+      res.status(201).json({ caixa: await caixaService.registrarMovimento(req.lojaId, dados, { usuarioId: req.usuario.id, agora: relogio() }) });
     },
 
     async fecharCaixa(req, res) {
       const dados = validar(fecharCaixaSchema, req.body ?? {});
-      res.json({ caixa: await caixaService.fecharCaixa(dados, { usuarioId: req.usuario.id, agora: relogio() }) });
+      res.json({ caixa: await caixaService.fecharCaixa(req.lojaId, dados, { usuarioId: req.usuario.id, agora: relogio() }) });
     },
 
     async listarComandas(req, res) {
-      res.json({ comandas: await comandaService.listarAbertas() });
+      res.json({ comandas: await comandaService.listarAbertas(req.lojaId) });
     },
 
     async obterComanda(req, res) {
       const { id } = validar(idSchema, req.params);
-      res.json({ comanda: await comandaService.buscarComanda(id) });
+      res.json({ comanda: await comandaService.buscarComanda(req.lojaId, id) });
     },
 
     async abrirComanda(req, res) {
       const dados = validar(comandaNovaSchema, req.body ?? {});
-      res.status(201).json({ comanda: await comandaService.abrirComanda(dados, { usuarioId: req.usuario.id, agora: relogio() }) });
+      res.status(201).json({ comanda: await comandaService.abrirComanda(req.lojaId, dados, { usuarioId: req.usuario.id, agora: relogio() }) });
     },
 
     async lancarItemComanda(req, res) {
       const { id } = validar(idSchema, req.params);
       const item = validar(itemComandaSchema, req.body ?? {});
-      res.status(201).json({ comanda: await comandaService.lancarItem(id, item, { usuarioId: req.usuario.id }) });
+      res.status(201).json({ comanda: await comandaService.lancarItem(req.lojaId, id, item, { usuarioId: req.usuario.id }) });
     },
 
     async removerItemComanda(req, res) {
       const { id, itemId } = validar(itemIdSchema, req.params);
-      res.json({ comanda: await comandaService.removerItem(id, itemId, { usuarioId: req.usuario.id, agora: relogio() }) });
+      res.json({ comanda: await comandaService.removerItem(req.lojaId, id, itemId, { usuarioId: req.usuario.id, agora: relogio() }) });
     },
 
     async fecharComanda(req, res) {
       const { id } = validar(idSchema, req.params);
       const dados = validar(fecharComandaSchema, req.body ?? {});
-      res.json(await comandaService.fecharComanda(id, dados, { agora: relogio() }));
+      res.json(await comandaService.fecharComanda(req.lojaId, id, dados, { agora: relogio() }));
     },
 
-    async impressoesPendentes(req, res) {
-      res.json(await impressaoService.listarPendentes(relogio()));
+    /** Agente: reserva os pendentes (dois PDVs da loja nunca pegam o mesmo cupom). */
+    async reservarImpressoes(req, res) {
+      const { agente: id, limite } = validar(reservarSchema, req.body ?? {});
+      res.json(await impressaoService.reservarPendentes(req.lojaId, id, relogio(), { limite }));
     },
 
     async confirmarImpressao(req, res) {
       const { id } = validar(idSchema, req.params);
-      res.json(await impressaoService.confirmar(id, relogio()));
+      const { agente: quem } = validar(confirmarSchema, req.body ?? {});
+      res.json(await impressaoService.confirmar(req.lojaId, id, relogio(), { agente: quem }));
     },
 
     async falhaImpressao(req, res) {
       const { id } = validar(idSchema, req.params);
-      const { erro } = validar(falhaSchema, req.body ?? {});
-      res.json(await impressaoService.registrarFalha(id, erro));
+      const { erro, agente: quem } = validar(falhaSchema, req.body ?? {});
+      res.json(await impressaoService.registrarFalha(req.lojaId, id, erro, { agente: quem, agora: relogio() }));
+    },
+
+    /** Prova de emissão da NFC-e da venda (chave de 44 números); null apaga. */
+    async definirNfce(req, res) {
+      const { id } = validar(idSchema, req.params);
+      const { chaveNfce } = validar(nfceSchema, req.body ?? {});
+      res.json({ pedido: await pedidoService.definirChaveNfce(req.lojaId, id, chaveNfce) });
     },
 
     async reimprimirPedido(req, res) {
       const { id } = validar(idSchema, req.params);
-      res.status(201).json({ trabalho: await impressaoService.reimprimir(id) });
+      res.status(201).json({ trabalho: await impressaoService.reimprimir(req.lojaId, id) });
     },
   };
 }

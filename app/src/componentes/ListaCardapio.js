@@ -91,7 +91,7 @@ const CardProduto = memo(function CardProduto({ produto, desabilitado, onAbrir }
  * seção; `onCategoriaVisivel` diz qual está no topo (para a aba ativa).
  */
 export const ListaCardapio = forwardRef(function ListaCardapio(
-  { categorias, desabilitado, onAbrir, onCategoriaVisivel, cabecalho, rodapeEspaco = 0, atualizando, onAtualizar },
+  { categorias, desabilitado, onAbrir, onCategoriaVisivel, cabecalho, rodape = null, rodapeEspaco = 0, atualizando, onAtualizar },
   ref,
 ) {
   const s = useEstilos(criarEstilos);
@@ -135,7 +135,12 @@ export const ListaCardapio = forwardRef(function ListaCardapio(
       ItemSeparatorComponent={Divisoria}
       ListHeaderComponent={cabecalho}
       ListEmptyComponent={<Text style={s.vazio}>Nenhum item disponível no momento.</Text>}
-      ListFooterComponent={<View style={{ height: 24 + rodapeEspaco }} />}
+      ListFooterComponent={
+        <>
+          {rodape}
+          <View style={{ height: 24 + rodapeEspaco }} />
+        </>
+      }
       stickySectionHeadersEnabled={false}
       initialNumToRender={60}
       onViewableItemsChanged={aoMudarVisiveis}

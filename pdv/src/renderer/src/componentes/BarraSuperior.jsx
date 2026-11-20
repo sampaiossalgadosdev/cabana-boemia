@@ -1,4 +1,4 @@
-import { Logo } from './Logo.jsx';
+import { Logo, useLoja } from './Logo.jsx';
 import { CampoTempo } from './CampoTempo.jsx';
 import { IndicadorConexao } from './IndicadorConexao.jsx';
 import { IndicadorImpressora } from './IndicadorImpressora.jsx';
@@ -24,10 +24,22 @@ function BotaoCaixa({ caixa, aoAbrir }) {
   );
 }
 
-export function BarraSuperior({ aba, aoTrocarAba, statusConexao, usuario, aoSair, saindo, caixa, aoAbrirCaixa }) {
+export function BarraSuperior({ aba, aoTrocarAba, statusConexao, usuario, aoSair, saindo, caixa, aoAbrirCaixa, aoTrocarLoja }) {
+  const loja = useLoja();
   return (
     <header className="barra">
-      <Logo className="barra__logo" />
+      <div className={`barra__loja ${loja?.logoDataUrl ? 'barra__loja--com-nome' : ''}`}>
+        <div className="barra__marca">
+          <Logo className="barra__logo" />
+          {/* Com logo, o nome vem embaixo (sem logo, o nome em texto já está no lugar dela). */}
+          {loja?.logoDataUrl && <span className="barra__nome-loja">{loja.nome}</span>}
+        </div>
+        {aoTrocarLoja && (
+          <button type="button" className="botao botao--contorno botao--pequeno" onClick={aoTrocarLoja} title="Trabalhar em outra loja">
+            Trocar loja
+          </button>
+        )}
+      </div>
 
       <nav className="barra__abas" aria-label="Área">
         <button

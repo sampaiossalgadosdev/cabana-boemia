@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 
 /**
  * ID tokens do Google são simulados com uma chave RSA gerada aqui: o
@@ -42,6 +42,7 @@ describe('cliente do site: login Google, perfil e endereços', { skip: semBancoD
   let centro;
   let vilaNova;
   let desativado;
+  let foraDaArea;
 
   async function api(metodo, rota, { corpo, token, url = base } = {}) {
     const headers = {};
@@ -80,9 +81,10 @@ describe('cliente do site: login Google, perfil e endereços', { skip: semBancoD
     const { criarDono } = await import('../src/services/usuario.service.js');
 
     await criarDono({ nome: 'Dono', email: 'dono@teste.com', senha: 'senha-do-dono' });
-    centro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
-    vilaNova = await prisma.bairro.create({ data: { nome: 'Vila Nova', taxaCentavos: 700 } });
-    desativado = await prisma.bairro.create({ data: { nome: 'Sítio', taxaCentavos: 1500, ativo: false } });
+    centro = await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
+    vilaNova = await criarBairro(prisma, { nome: 'Vila Nova', taxaCentavos: 700 });
+    desativado = await criarBairro(prisma, { nome: 'Sítio', taxaCentavos: 1500, ativoNaCidade: false });
+    foraDaArea = await criarBairro(prisma, { nome: 'Longe', taxaCentavos: 2000, ativo: false });
 
     const verificarIdTokenGoogle = criarVerificadorGoogle({
       clientId: CLIENT_ID,
@@ -349,13 +351,25 @@ describe('cliente do site: login Google, perfil e endereços', { skip: semBancoD
     assert.deepEqual(lista.map((e) => [e.id, e.principal]), [[b.id, true]]);
   });
 
-  test('bairro inexistente ou desativado responde 422 BAIRRO_INVALIDO', async () => {
+  test('bairro inexistente ou desativado NA CIDADE responde 422 BAIRRO_INVALIDO', async () => {
     const { token } = await novoCliente();
     for (const bairroId of [desativado.id, 999999]) {
       const r = await api('POST', '/cliente/enderecos', { token, corpo: endereco({ bairroId }) });
       assert.equal(r.status, 422, String(bairroId));
       assert.equal(r.corpo.erro.codigo, 'BAIRRO_INVALIDO');
     }
+  });
+
+  test('endereço vale para qualquer loja: bairro fora da área da loja é aceito e aparece como "não entregamos"', async () => {
+    const { token } = await novoCliente();
+    const r = await api('POST', '/cliente/enderecos', { token, corpo: endereco({ bairroId: foraDaArea.id }) });
+    assert.equal(r.status, 201, JSON.stringify(r.corpo));
+    assert.deepEqual(r.corpo.endereco.bairro, { id: foraDaArea.id, nome: 'Longe', taxaCentavos: null, ativo: false });
+    const lista = (await api('GET', '/cliente/enderecos', { token })).corpo.enderecos;
+    assert.equal(lista.find((e) => e.id === r.corpo.endereco.id).bairro.ativo, false);
+    // Bairro da área: a taxa da loja, como sempre.
+    const centroEnd = await api('POST', '/cliente/enderecos', { token, corpo: endereco() });
+    assert.deepEqual(centroEnd.corpo.endereco.bairro, { id: centro.id, nome: 'Centro', taxaCentavos: 500, ativo: true });
   });
 
   test('endereço sem rua, número ou bairro responde 400', async () => {

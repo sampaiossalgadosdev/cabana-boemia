@@ -5,6 +5,7 @@ import * as clienteService from '../services/cliente.service.js';
 import * as enderecoService from '../services/endereco.service.js';
 import * as pedidoService from '../services/pedido.service.js';
 import { registrarAcesso } from '../services/registroAcesso.service.js';
+import { buscarAtivaPorSlug } from '../services/loja.service.js';
 
 const googleSchema = z.object({
   credential: z.string().min(1, 'Informe o credential do Google').max(4096),
@@ -33,7 +34,9 @@ const perfilSchema = z.object({
   telefone,
 });
 
-/** Pedido do site (itens: ver itemPedidoSchema; o preço sempre sai do banco). */
+const slugLoja = z.string({ error: 'Loja inválida' }).trim().toLowerCase().min(1, 'Loja inválida').max(60);
+
+/** Pedido do site e do app (itens: ver itemPedidoSchema; o preço sempre sai do banco). */
 const pedidoSchema = z
   .object({
     itens: z.array(itemPedidoSchema, { error: 'A sacola está vazia' }).min(1, 'A sacola está vazia').max(50),
@@ -43,10 +46,20 @@ const pedidoSchema = z
     chaveIdempotencia: z.uuid().optional(),
     // Total que o cliente viu (só para conferir: o preço sempre sai do banco).
     totalEsperadoCentavos: z.number({ error: 'Informe o total do pedido' }).int().min(0),
+    // Loja do pedido (app). Ausente = loja padrão (Cabana), como o site atual.
+    lojaSlug: slugLoja.optional(),
   })
   .superRefine(trocoSoEmDinheiro);
 
-const historicoSchema = z.object({ antesDeId: z.coerce.number().int().positive().optional() });
+const historicoSchema = z.object({
+  antesDeId: z.coerce.number().int().positive().optional(),
+  lojaSlug: slugLoja.optional(), // só os pedidos desta loja (ausente = de todas)
+});
+
+const ultimoSchema = z.object({ lojaSlug: slugLoja.optional() });
+
+/** Loja do slug informado (ativa; senão 404), ou a padrão da rota. */
+const lojaDoPedido = async (lojaSlug, padrao) => (lojaSlug ? (await buscarAtivaPorSlug(lojaSlug)).id : padrao);
 
 /**
  * @param {{ verificarIdTokenGoogle: Function, verificarIdentityTokenApple: Function, revogarApple: Function }} deps
@@ -108,18 +121,18 @@ export function criarClienteController(
     },
 
     async listarEnderecos(req, res) {
-      res.json({ enderecos: await enderecoService.listar(req.cliente.id) });
+      res.json({ enderecos: await enderecoService.listar(req.cliente.id, { lojaId: req.lojaId }) });
     },
 
     async criarEndereco(req, res) {
       const dados = validar(enderecoSchema, req.body);
-      res.status(201).json({ endereco: await enderecoService.criar(req.cliente.id, dados) });
+      res.status(201).json({ endereco: await enderecoService.criar(req.cliente.id, dados, { lojaId: req.lojaId }) });
     },
 
     async atualizarEndereco(req, res) {
       const { id } = validar(idSchema, req.params);
       const dados = validar(enderecoSchema, req.body);
-      res.json({ endereco: await enderecoService.atualizar(req.cliente.id, id, dados) });
+      res.json({ endereco: await enderecoService.atualizar(req.cliente.id, id, dados, { lojaId: req.lojaId }) });
     },
 
     async removerEndereco(req, res) {
@@ -130,17 +143,23 @@ export function criarClienteController(
 
     async criarPedido(req, res) {
       const dados = validar(pedidoSchema, req.body);
-      const { pedido, criado } = await pedidoService.criarPedidoDoSite(req.cliente, dados, { agora: relogio() });
+      const lojaId = await lojaDoPedido(dados.lojaSlug, req.lojaId);
+      const { pedido, criado } = await pedidoService.criarPedidoDoSite(lojaId, req.cliente, dados, { agora: relogio() });
       await registrarAcesso({ clienteId: req.cliente.id, ip: req.ip, evento: 'PEDIDO' });
       res.status(criado ? 201 : 200).json({ pedido });
     },
 
+    /** Histórico de todas as lojas (cada pedido traz `loja`); `lojaSlug` filtra uma. */
     async listarPedidos(req, res) {
-      res.json(await pedidoService.pedidosDoCliente(req.cliente.id, validar(historicoSchema, req.query)));
+      const { antesDeId, lojaSlug } = validar(historicoSchema, req.query);
+      const lojaId = lojaSlug ? (await buscarAtivaPorSlug(lojaSlug)).id : undefined;
+      res.json(await pedidoService.pedidosDoCliente(req.cliente.id, { antesDeId, lojaId }));
     },
 
+    /** "Repetir último pedido" é de uma loja: a do `lojaSlug` ou, sem ele, a padrão (site atual). */
     async ultimoPedido(req, res) {
-      res.json({ pedido: await pedidoService.ultimoPedidoDoCliente(req.cliente.id) });
+      const { lojaSlug } = validar(ultimoSchema, req.query);
+      res.json({ pedido: await pedidoService.ultimoPedidoDoCliente(req.cliente.id, await lojaDoPedido(lojaSlug, req.lojaId)) });
     },
   };
 }

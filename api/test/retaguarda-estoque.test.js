@@ -179,7 +179,7 @@ describe('retaguarda: estoque (entrada, ajuste, histórico)', { skip: semBancoDe
     const desde = (await prisma.movimentacaoEstoque.aggregate({ _max: { id: true } }))._max.id ?? 0;
     const [ajuste, venda] = await Promise.all([
       api('POST', '/retaguarda/estoque/ajuste', { produtoId: coca().id, saldoContado: 4, motivo: 'Contagem' }),
-      criarPedido({ canal: 'SALAO', itens: [{ produtoId: coca().id, quantidade: 2 }], cliente: { nome: 'Mesa' } }),
+      criarPedido({ lojaId: 1, canal: 'SALAO', itens: [{ produtoId: coca().id, quantidade: 2 }], cliente: { nome: 'Mesa' } }),
     ]);
     assert.equal(ajuste.status, 201, JSON.stringify(ajuste.corpo));
     assert.ok(venda.pedido.id);

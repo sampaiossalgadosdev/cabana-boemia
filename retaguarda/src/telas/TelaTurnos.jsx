@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api.js';
 import { DIAS_SEMANA } from '../lib/formatar.js';
 import { gravarEmOrdem, ordenarTurnos, prepararGravacao } from '../lib/turnos.js';
-import { EstadoCarga, useAvisar, useCarregar } from '../componentes/comuns.jsx';
+import { Campo, Dialogo, EstadoCarga, Interruptor, useAvisar, useCarregar } from '../componentes/comuns.jsx';
 
 // Segunda primeiro (como o dono pensa a semana); domingo no fim.
 const ORDEM_DIAS = [1, 2, 3, 4, 5, 6, 0];
@@ -31,9 +31,148 @@ export function TelaTurnos() {
         </div>
       </div>
       <EstadoCarga carga={carga}>
-        {({ turnos }) => <TabelaHorarios turnos={turnos} aoSalvar={carga.recarregar} />}
+        {({ turnos }) => (
+          <>
+            <ListaTurnos turnos={turnos} aoMudar={carga.recarregar} />
+            {turnos.length > 0 && <TabelaHorarios turnos={turnos} aoSalvar={carga.recarregar} />}
+          </>
+        )}
       </EstadoCarga>
     </>
+  );
+}
+
+/**
+ * Turnos da loja: criar, renomear e desativar. Desativado não abre a loja nem
+ * entra no cardápio; os horários ficam guardados para religar.
+ */
+function ListaTurnos({ turnos, aoMudar }) {
+  const avisar = useAvisar();
+  const [editando, setEditando] = useState(null); // turno | 'novo'
+  const ordenados = useMemo(() => ordenarTurnos(turnos), [turnos]);
+
+  async function alternar(t, ativo) {
+    try {
+      await api.turnos.alterar(t.id, { ativo });
+      avisar(ativo ? `${t.nome} ativado.` : `${t.nome} desativado: não abre a loja até ser ativado de novo.`);
+    } catch (err) {
+      avisar(err.message, 'erro');
+    }
+    await aoMudar();
+  }
+
+  return (
+    <section className="cartao" style={{ marginBottom: 16 }}>
+      <div className="cartao__topo">
+        <h2 className="cartao__titulo">Turnos</h2>
+        <button type="button" className="botao botao--primario" onClick={() => setEditando('novo')}>
+          + Novo turno
+        </button>
+      </div>
+      {ordenados.length === 0 ? (
+        <p className="estado">Nenhum turno ainda. Crie o primeiro (ex.: Almoço, Lanches) e depois defina os horários.</p>
+      ) : (
+        <table className="tabela">
+          <thead>
+            <tr>
+              <th>Turno</th>
+              <th>Ativo</th>
+              <th className="fim">
+                <span className="visualmente-oculto">Ações</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {ordenados.map((t) => (
+              <tr key={t.id} className={t.ativo ? undefined : 'linha--inativa'}>
+                <td className="produto-nome">{t.nome}</td>
+                <td>
+                  <Interruptor ligado={t.ativo} aoMudar={(v) => alternar(t, v)} rotulo={`${t.nome} ativo`} ocultarRotulo />
+                </td>
+                <td className="fim">
+                  <button type="button" className="botao botao--pequeno" onClick={() => setEditando(t)}>
+                    Renomear
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <FormTurno
+        turno={editando}
+        aoFechar={() => setEditando(null)}
+        aoSalvar={async (mensagem) => {
+          setEditando(null);
+          avisar(mensagem);
+          await aoMudar();
+        }}
+      />
+    </section>
+  );
+}
+
+function FormTurno({ turno, aoFechar, aoSalvar }) {
+  const novo = turno === 'novo';
+  const [nome, setNome] = useState('');
+  const [erro, setErro] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    setNome(turno && !novo ? turno.nome : '');
+    setErro('');
+    setSalvando(false);
+  }, [turno, novo]);
+
+  async function salvar() {
+    const limpo = nome.trim();
+    if (!limpo) {
+      setErro('Informe o nome do turno');
+      return;
+    }
+    setSalvando(true);
+    try {
+      if (novo) await api.turnos.criar(limpo);
+      else await api.turnos.alterar(turno.id, { nome: limpo });
+      await aoSalvar(novo ? `Turno ${limpo} criado. Agora defina os horários.` : 'Turno renomeado.');
+    } catch (err) {
+      setErro(err.message);
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <Dialogo
+      aberto={Boolean(turno)}
+      titulo={novo ? 'Novo turno' : 'Renomear turno'}
+      aoFechar={aoFechar}
+      aoEnviar={salvar}
+      rodape={
+        <>
+          <button type="button" className="botao" onClick={aoFechar}>
+            Cancelar
+          </button>
+          <button type="submit" className="botao botao--primario" disabled={salvando}>
+            {salvando ? 'Salvando…' : 'Salvar'}
+          </button>
+        </>
+      }
+    >
+      <Campo rotulo="Nome" erro={erro} ajuda="Ex.: Almoço, Lanches, Café da manhã">
+        {(id, desc) => (
+          <input
+            id={id}
+            className="entrada"
+            value={nome}
+            maxLength={40}
+            autoFocus
+            aria-invalid={Boolean(erro) || undefined}
+            aria-describedby={desc}
+            onChange={(e) => setNome(e.target.value)}
+          />
+        )}
+      </Campo>
+    </Dialogo>
   );
 }
 

@@ -9,7 +9,8 @@ import { Campo, Opcao, TextoErro, Titulo } from './formulario.js';
 
 /**
  * Endereço novo (POST) ou edição (`endereco` presente → PUT, sem mexer no
- * "principal"). Usado no checkout e no Perfil. Bairro só dos ativos, com a taxa.
+ * "principal"). Usado no checkout (bairros onde a loja entrega, com a taxa
+ * dela) e no Perfil (bairros da cidade, sem taxa: o endereço vale para qualquer loja).
  */
 export function FormEndereco({ bairros, endereco = null, titulo, onSalvo, onCancelar }) {
   const { chamar } = useCliente();
@@ -48,17 +49,17 @@ export function FormEndereco({ bairros, endereco = null, titulo, onSalvo, onCanc
       <Campo rotulo="Rua" value={dados.rua} onChangeText={mudar('rua')} maxLength={120} autoComplete="street-address" textContentType="streetAddressLine1" erro={erros.rua} />
       <Campo rotulo="Número" value={dados.numero} onChangeText={mudar('numero')} maxLength={20} keyboardType="numbers-and-punctuation" erro={erros.numero} />
       <Text style={{ marginTop: 12, fontWeight: '700' }}>Bairro</Text>
-      {bairros.length === 0 && <TextoErro>Nenhum bairro de entrega cadastrado no momento.</TextoErro>}
+      {bairros.length === 0 && <TextoErro>Nenhum bairro disponível no momento.</TextoErro>}
       {bairros.map((b) => (
         <Opcao
           key={b.id}
           titulo={b.nome}
-          detalhe={`Entrega ${formatarPreco(b.taxaCentavos)}`}
+          detalhe={Number.isInteger(b.taxaCentavos) ? `Entrega ${formatarPreco(b.taxaCentavos)}` : undefined}
           marcada={dados.bairroId === b.id}
           onPress={() => mudar('bairroId')(b.id)}
         />
       ))}
-      {endereco && !bairroAtivo && <TextoErro>{`Não entregamos mais em ${endereco.bairro.nome}. Escolha outro bairro.`}</TextoErro>}
+      {endereco && !bairroAtivo && <TextoErro>{`O bairro ${endereco.bairro.nome} não está disponível. Escolha outro bairro.`}</TextoErro>}
       <TextoErro>{erros.bairroId}</TextoErro>
       <Campo rotulo="Complemento (opcional)" value={dados.complemento} onChangeText={mudar('complemento')} maxLength={120} />
       <Campo rotulo="Ponto de referência (opcional)" value={dados.referencia} onChangeText={mudar('referencia')} maxLength={200} />

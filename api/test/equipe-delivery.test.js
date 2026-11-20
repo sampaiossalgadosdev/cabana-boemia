@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { io as conectarSocket } from 'socket.io-client';
-import { semBancoDeTeste, resetarBancoDeTeste } from './helpers/banco.js';
+import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 
 const local = (iso) => new Date(`${iso}-03:00`);
 const SABADO_20H = local('2026-11-14T20:00'); // turno Lanches aberto
@@ -55,8 +55,8 @@ describe('delivery do WhatsApp pelo PDV: clientes, lançamento, cancelamento e g
     });
   }
 
-  const estoqueProduto = async (nome) => (await prisma.produto.findUnique({ where: { nome } })).estoque;
-  const estoqueInsumo = async (nome) => (await prisma.insumo.findUnique({ where: { nome } })).estoque;
+  const estoqueProduto = async (nome) => (await prisma.produto.findUnique({ where: { lojaId_nome: { lojaId: 1, nome } } })).estoque;
+  const estoqueInsumo = async (nome) => (await prisma.insumo.findUnique({ where: { lojaId_nome: { lojaId: 1, nome } } })).estoque;
 
   async function conectar() {
     const login = await api('POST', '/auth/login', { corpo: { email: 'ana@teste.com', senha: 'senha-da-ana' }, token: null });
@@ -84,12 +84,12 @@ describe('delivery do WhatsApp pelo PDV: clientes, lançamento, cancelamento e g
 
     for (const prod of await prisma.produto.findMany()) p[prod.nome] = prod;
     for (const i of await prisma.insumo.findMany()) insumo[i.nome] = i;
-    centro = await prisma.bairro.create({ data: { nome: 'Centro', taxaCentavos: 500 } });
-    vila = await prisma.bairro.create({ data: { nome: 'Vila Nova', taxaCentavos: 700 } });
-    fechado = await prisma.bairro.create({ data: { nome: 'Longe', taxaCentavos: 2000, ativo: false } });
+    centro = await criarBairro(prisma, { nome: 'Centro', taxaCentavos: 500 });
+    vila = await criarBairro(prisma, { nome: 'Vila Nova', taxaCentavos: 700 });
+    fechado = await criarBairro(prisma, { nome: 'Longe', taxaCentavos: 2000, ativoNaCidade: false });
     ana = await criarAtendente({ nome: 'Ana', email: 'ana@teste.com', senha: 'senha-da-ana' });
     // Finalizar exige caixa aberto (as regras do caixa estão em caixa.test.js).
-    await prisma.caixa.create({ data: { abertoPorId: ana.id, valorInicialCentavos: 0 } });
+    await prisma.caixa.create({ data: { lojaId: 1, abertoPorId: ana.id, valorInicialCentavos: 0 } });
 
     servidor = http.createServer(criarApp({ log: false, relogio: () => agora }));
     criarTempoReal(servidor);
@@ -139,7 +139,7 @@ describe('delivery do WhatsApp pelo PDV: clientes, lançamento, cancelamento e g
     assert.equal(r.corpo.erro.detalhes.cliente.nome, 'Seu João');
   });
 
-  test('POST /equipe/clientes: telefone inválido = 400; bairro inativo = 422 sem criar o cliente', async () => {
+  test('POST /equipe/clientes: telefone inválido = 400; bairro desativado na cidade = 422 sem criar o cliente', async () => {
     const t = await api('POST', '/equipe/clientes', { corpo: { nome: 'X', telefone: '1234', endereco: endereco() } });
     assert.equal(t.status, 400);
     const b = await api('POST', '/equipe/clientes', {
@@ -230,7 +230,7 @@ describe('delivery do WhatsApp pelo PDV: clientes, lançamento, cancelamento e g
     const semForma = await lancar(a, [item('X-Burguer')], { formaPagamento: undefined });
     assert.equal(semForma.status, 400);
 
-    await prisma.insumo.update({ where: { nome: 'Pão de lanche' }, data: { estoque: 1 } });
+    await prisma.insumo.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de lanche' } }, data: { estoque: 1 } });
     const sem = await lancar(a, [item('X-Burguer', 2)]);
     assert.equal(sem.status, 409);
     assert.equal(sem.corpo.erro.codigo, 'ESTOQUE_INSUFICIENTE');
@@ -363,6 +363,7 @@ describe('delivery do WhatsApp pelo PDV: clientes, lançamento, cancelamento e g
     const cliente = await prisma.cliente.create({ data: { googleId: 'g-site', nome: 'Maria', telefone: '43911112222' } });
     const antes = await estoqueProduto('Coca-Cola 1L');
     const { pedido } = await criarPedido({
+      lojaId: 1,
       canal: 'SITE',
       itens: [{ produtoId: p['Coca-Cola 1L'].id, quantidade: 2 }],
       cliente: { id: cliente.id, nome: cliente.nome, telefone: cliente.telefone },
@@ -379,10 +380,10 @@ describe('delivery do WhatsApp pelo PDV: clientes, lançamento, cancelamento e g
   // ───────── Grade (cardápio do PDV) ─────────
 
   test('GET /equipe/cardapio: item esgotado vem marcado (a grade desabilita), com o saldo', async () => {
-    await prisma.produto.update({ where: { nome: 'Coca-Cola 1L' }, data: { estoque: 0 } });
-    await prisma.insumo.update({ where: { nome: 'Pão de cachorro-quente' }, data: { estoque: 0 } });
-    await prisma.insumo.update({ where: { nome: 'Pão de lanche' }, data: { estoque: 4 } });
-    await prisma.produto.update({ where: { nome: 'X-Egg' }, data: { disponivelHoje: false } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 1L' } }, data: { estoque: 0 } });
+    await prisma.insumo.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de cachorro-quente' } }, data: { estoque: 0 } });
+    await prisma.insumo.update({ where: { lojaId_nome: { lojaId: 1, nome: 'Pão de lanche' } }, data: { estoque: 4 } });
+    await prisma.produto.update({ where: { lojaId_nome: { lojaId: 1, nome: 'X-Egg' } }, data: { disponivelHoje: false } });
 
     const r = await api('GET', '/equipe/cardapio');
     assert.equal(r.status, 200, JSON.stringify(r.corpo));

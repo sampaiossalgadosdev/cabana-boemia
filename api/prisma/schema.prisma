@@ -108,7 +108,7 @@ model Loja {
   produtos   Produto[]
   insumos    Insumo[]
   turnos     Turno[]
-  bairros    Bairro[]
+  areas      AreaEntrega[]
   pedidos    Pedido[]
   contadores ContadorPedido[]
   caixas     Caixa[]
@@ -197,18 +197,32 @@ model Endereco {
   @@index([clienteId])
 }
 
-/// Bairro atendido por uma loja, com a taxa dela.
+/// Bairro da cidade (lista única, cadastrada pelo ADMIN). O endereço do cliente
+/// aponta para ele e vale para qualquer loja; onde cada loja entrega (e por quanto)
+/// fica em AreaEntrega. Desativado na cidade = nenhuma loja entrega lá.
 model Bairro {
-  id           Int     @id @default(autoincrement())
+  id    Int     @id @default(autoincrement())
+  nome  String  @unique
+  ativo Boolean @default(true)
+
+  enderecos Endereco[]
+  areas     AreaEntrega[]
+}
+
+/// Área de entrega da loja: bairros onde ela entrega, com a taxa dela.
+/// Sem linha (ou inativa) = a loja não entrega no bairro (BAIRRO_FORA_DA_AREA).
+/// CHECK (migration bairros_da_cidade): taxaCentavos >= 0.
+model AreaEntrega {
   lojaId       Int
-  nome         String
+  bairroId     Int
   taxaCentavos Int
   ativo        Boolean @default(true)
 
-  loja      Loja       @relation(fields: [lojaId], references: [id])
-  enderecos Endereco[]
+  loja   Loja   @relation(fields: [lojaId], references: [id])
+  bairro Bairro @relation(fields: [bairroId], references: [id])
 
-  @@unique([lojaId, nome])
+  @@id([lojaId, bairroId])
+  @@index([bairroId])
 }
 
 // ───────────── Cardápio ─────────────

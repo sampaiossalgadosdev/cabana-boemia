@@ -11,9 +11,9 @@
  *
  * Política (ver CLAUDE.md › Seed): cria o que falta e NUNCA sobrescreve o que o
  * dono pode editar (preço, ativo, disponivelHoje, descrição, estoque, horários,
- * configuração, cor e logo da loja, taxas). Em registro existente só atualiza a
- * estrutura (categoria/ordem) e acrescenta vínculos ProdutoTurno/ProdutoInsumo
- * que faltarem. Tudo por loja: os nomes são únicos dentro da loja (upsert por
+ * configuração, cor e logo da loja, taxas, ordem das categorias, categoria e
+ * ordem dos produtos). Em registro existente só acrescenta vínculos
+ * ProdutoTurno/ProdutoInsumo que faltarem. Tudo por loja: os nomes são únicos dentro da loja (upsert por
  * [lojaId, nome]).
  */
 import { readFile } from 'node:fs/promises';
@@ -205,7 +205,7 @@ export async function seed(prisma, { cardapio, caminho = CAMINHO_JSON, log = con
         const categoria = await tx.categoria.upsert({
           where: { lojaId_nome: { lojaId, nome: c.nome } },
           create: { lojaId, nome: c.nome, ordem: ordemCat },
-          update: { ordem: ordemCat },
+          update: {}, // a ordem é do dono (retaguarda › Categorias ↑ ↓): só na criação
         });
 
         const idsTurnos = c.turnos.map((nome) => {
@@ -234,7 +234,7 @@ export async function seed(prisma, { cardapio, caminho = CAMINHO_JSON, log = con
               estoque: controlaEstoque ? (p.estoque_inicial ?? 0) : null,
               ordem: ordemProd,
             },
-            update: { categoriaId: categoria.id, ordem: ordemProd },
+            update: {}, // categoria e ordem são do dono (retaguarda › Produtos): só na criação
           });
 
           if (produto.precoCentavos === 0) {

@@ -100,6 +100,25 @@ describe('seed do cardápio', { skip: semBancoDeTeste }, () => {
     assert.equal(pao.estoque, 40);
   });
 
+  test('rodar de novo não desfaz a ordem das categorias nem a categoria/ordem dos produtos editadas pelo dono', async () => {
+    const lanches = await prisma.categoria.findUnique({ where: { lojaId_nome: { lojaId: 1, nome: 'Lanches' } } });
+    const bebidas = await prisma.categoria.findUnique({ where: { lojaId_nome: { lojaId: 1, nome: 'Bebidas' } } });
+    await prisma.categoria.update({ where: { id: lanches.id }, data: { ordem: 90 } });
+    await prisma.categoria.update({ where: { id: bebidas.id }, data: { ordem: 5 } });
+    const coca = await prisma.produto.update({
+      where: { lojaId_nome: { lojaId: 1, nome: 'Coca-Cola 2L' } },
+      data: { categoriaId: lanches.id, ordem: 77 },
+    });
+
+    await seed(prisma, { log: () => {} });
+
+    assert.equal((await prisma.categoria.findUnique({ where: { id: lanches.id } })).ordem, 90);
+    assert.equal((await prisma.categoria.findUnique({ where: { id: bebidas.id } })).ordem, 5);
+    const depois = await prisma.produto.findUnique({ where: { id: coca.id } });
+    assert.equal(depois.categoriaId, lanches.id, 'o dono mudou de categoria: o seed não devolve');
+    assert.equal(depois.ordem, 77);
+  });
+
   test('avisos: marmitas e prato sem preço, Almoço sem horários, WhatsApp vazio', () => {
     const avisos = avisosPorRodada[0];
     const semPreco = avisos.filter((a) => a.includes('sem preço'));

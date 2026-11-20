@@ -223,11 +223,14 @@ O levantamento original desta seção apontava um sistema **single-tenant de pon
 - **Identidade por loja**: cor primária com contraste conferido (`shared/src/cores.js`) e logo enviada (guardada no banco, `/api/publico/imagens/:id`), padrão definido pelo ADMIN; vem da API para retaguarda, PDV e app.
 - **Seed por loja** (JSON) e script da loja de teste.
 
-### 6.6 O que ainda falta
-- **App**: tela de escolha da loja (vitrine), sacola presa a uma loja, rotas por slug e aplicar o tema da loja (`corPrimaria`, `corTexto`, `logoUrl` já vêm da API).
-- **NFC-e na comanda do salão** (hoje só no detalhe do pedido do painel de delivery).
-- **Barramento de eventos em memória** (`lib/eventos.js`): com mais de uma instância da API, eventos de uma não chegam aos sockets da outra (segue na seção 9).
-- **Documentos legais**: o controlador dos dados e as obrigações de cada loja (termo com as lojas) continuam pendentes de revisão jurídica (`CLAUDE.md` › Autenticação do cliente).
+### 6.6 Feito na etapa 5 (20/11/2026)
+- **App multi-loja**: vitrine com busca, página da loja no tema dela (cor e logo da API) com razão social e CNPJ/CPF (Decreto 7.962/2013), sacola presa a uma loja, checkout pela área de entrega da loja (`BAIRRO_FORA_DA_AREA` tratado), pedidos e "Repetir" com a loja, cancelamento pelo WhatsApp da loja, cardápio salvo por loja.
+- **PDV único "PDV do Abatiá"** (antes "Cabana Boemia PDV"), que importa a configuração e o login do programa antigo no primeiro uso.
+
+### 6.7 O que ainda falta
+- Testar o app em aparelho (APK de preview) e configurar os logins nativos (Google Cloud, Apple, Play Console).
+- Documentos legais e o termo com cada loja (`CLAUDE.md` › Autenticação do cliente).
+- Barramento de eventos em memória (uma instância da API).
 
 ## 7. Reaproveitamento para o app
 

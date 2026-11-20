@@ -116,6 +116,27 @@ export async function requisitar(
 export const buscarCardapio = (signal, { forcar = false, fetch } = {}) =>
   requisitar('GET', '/publico/cardapio', { signal, semCache: forcar, fetch });
 
+// ───── Multi-loja: vitrine e rotas por loja (slug) ─────
+
+/** GET /publico/lojas → { lojas: [{ slug, nome, descricao, logoUrl, corPrimaria, corTexto, corFundo, aberta, proximaAbertura }] } */
+export const buscarLojas = (signal, { forcar = false, fetch } = {}) => requisitar('GET', '/publico/lojas', { signal, semCache: forcar, fetch });
+
+const daLoja = (slug, rota) => `/publico/lojas/${encodeURIComponent(slug)}/${rota}`;
+
+/** GET /publico/lojas/:slug/cardapio (mesmo formato do /publico/cardapio). */
+export const buscarCardapioDaLoja = (slug, signal, { forcar = false, fetch } = {}) =>
+  requisitar('GET', daLoja(slug, 'cardapio'), { signal, semCache: forcar, fetch });
+
+/** GET /publico/lojas/:slug/config → { nome, slug, logoUrl, corPrimaria, corTexto, whatsapp, razaoSocial, documento, endereco, freteGratis, ... } */
+export const buscarConfigDaLoja = (slug, signal, { forcar = false, fetch } = {}) =>
+  requisitar('GET', daLoja(slug, 'config'), { signal, semCache: forcar, fetch });
+
+/** GET /publico/lojas/:slug/bairros → { bairros: [{ id, nome, taxaCentavos }] } (onde a loja entrega) */
+export const buscarBairrosDaLoja = (slug) => requisitar('GET', daLoja(slug, 'bairros'));
+
+/** GET /publico/bairros-da-cidade → { bairros: [{ id, nome }] } (endereço vale para qualquer loja) */
+export const buscarBairrosDaCidade = () => requisitar('GET', '/publico/bairros-da-cidade');
+
 /** GET /publico/config → { nome, whatsapp, googleClientId, freteGratis } */
 export const buscarConfig = () => requisitar('GET', '/publico/config');
 
@@ -167,8 +188,9 @@ export const removerEndereco = (token, id) => requisitar('DELETE', `/cliente/end
 /** POST /cliente/pedidos → { pedido } (201 criado; 200 = mesma chave, pedido já existia) */
 export const enviarPedido = (token, corpo) => requisitar('POST', '/cliente/pedidos', { token, corpo });
 
-/** GET /cliente/pedidos/ultimo → { pedido | null } */
-export const buscarUltimoPedido = (token) => requisitar('GET', '/cliente/pedidos/ultimo', { token });
+/** GET /cliente/pedidos/ultimo?lojaSlug → { pedido | null } (o último daquela loja) */
+export const buscarUltimoPedido = (token, lojaSlug) =>
+  requisitar('GET', `/cliente/pedidos/ultimo${lojaSlug ? `?lojaSlug=${encodeURIComponent(lojaSlug)}` : ''}`, { token });
 
 /** GET /cliente/pedidos → { pedidos, proximo } (mais novo primeiro; `proximo` pagina) */
 export const listarPedidos = (token, antesDeId) =>

@@ -123,12 +123,24 @@ async function main() {
   log(`Dia operacional: ${dia}. Usuário: ${dono.nome} (#${dono.id}).\n`);
 
   // ── 1. Bairros ──
-  let bairros = await prisma.bairro.findMany({ where: { lojaId, ativo: true }, orderBy: { id: 'asc' } });
+  // Bairros onde a loja entrega (área de entrega; o bairro é da lista da cidade).
+  const ondeEntrega = () =>
+    prisma.areaEntrega.findMany({
+      where: { lojaId, ativo: true, bairro: { ativo: true } },
+      orderBy: { bairroId: 'asc' },
+      select: { bairroId: true },
+    });
+  let bairros = (await ondeEntrega()).map((a) => ({ id: a.bairroId }));
   if (!bairros.length) {
     for (const b of BAIRROS_DEMO) {
-      await prisma.bairro.upsert({ where: { lojaId_nome: { lojaId, nome: b.nome } }, update: { ativo: true }, create: { ...b, lojaId } });
+      const cidade = await prisma.bairro.upsert({ where: { nome: b.nome }, update: { ativo: true }, create: { nome: b.nome } });
+      await prisma.areaEntrega.upsert({
+        where: { lojaId_bairroId: { lojaId, bairroId: cidade.id } },
+        update: { ativo: true },
+        create: { lojaId, bairroId: cidade.id, taxaCentavos: b.taxaCentavos },
+      });
     }
-    bairros = await prisma.bairro.findMany({ where: { lojaId, ativo: true }, orderBy: { id: 'asc' } });
+    bairros = (await ondeEntrega()).map((a) => ({ id: a.bairroId }));
     log(`Bairros: nenhum ativo; criados ${BAIRROS_DEMO.map((b) => `${b.nome} (${reais(b.taxaCentavos)})`).join(' e ')}. Ajuste na retaguarda.`);
   }
   const bairroDo = (i) => bairros[Math.min(i, bairros.length - 1)];

@@ -17,6 +17,7 @@
  *
  * Site com a loja fechada: o pedido passa pelo mesmo criarPedido do WhatsApp (sem trava de
  * horário) e depois é marcado como SITE; assim o script funciona a qualquer hora.
+ * Tudo na loja padrão (Cabana Boemia).
  */
 import { parseArgs } from 'node:util';
 import { prisma } from '../src/lib/prisma.js';
@@ -28,6 +29,10 @@ import { criarCliente, finalizarPedido } from '../src/services/equipe.service.js
 import { abrirComanda, lancarItem, fecharComanda } from '../src/services/comanda.service.js';
 import { abrirCaixa, caixaAtual } from '../src/services/caixa.service.js';
 import { registrarEntrada, registrarAjuste } from '../src/services/estoque.service.js';
+import { lojaPadraoId } from '../src/services/loja.service.js';
+
+/** Loja da demonstração (a padrão), lida no início do main. */
+let lojaId;
 
 const MOTIVO = 'Demonstração (seed:demo)';
 const PRECO_KG_DEMO = 5990; // R$ 59,90 o quilo, só se o dono ainda não definiu
@@ -78,14 +83,15 @@ async function main() {
     process.exit(1);
   }
 
-  const dono = await prisma.usuario.findFirst({ where: { papel: 'DONO', ativo: true }, orderBy: { id: 'asc' } });
+  lojaId = await lojaPadraoId();
+  const dono = await prisma.usuario.findFirst({ where: { lojaId, papel: 'DONO', ativo: true }, orderBy: { id: 'asc' } });
   if (!dono) throw new Error('Nenhum DONO ativo. Rode antes: npm run criar-dono -w api -- --nome ... --email ... --senha ...');
   const usuarioId = dono.id;
 
   const agora = new Date();
-  const dia = diaOperacional(agora, await horaVirada());
+  const dia = diaOperacional(agora, await horaVirada(lojaId));
   const jaRodou = await prisma.pedido.count({
-    where: { dataRef: paraCampoData(dia), cliente: { telefone: { in: CLIENTES.map((c) => c.telefone) } } },
+    where: { lojaId, dataRef: paraCampoData(dia), cliente: { telefone: { in: CLIENTES.map((c) => c.telefone) } } },
   });
   if (jaRodou) {
     console.error(`Os dados de demonstração já foram criados no dia operacional ${dia} (${jaRodou} pedido(s) dos clientes de demo).`);
@@ -94,8 +100,8 @@ async function main() {
   const ultimoTrabalho = (await prisma.trabalhoImpressao.aggregate({ _max: { id: true } }))._max.id ?? 0;
 
   // ── Produtos e insumos por nome ──
-  const produtos = new Map((await prisma.produto.findMany()).map((p) => [p.nome, p]));
-  const insumos = new Map((await prisma.insumo.findMany()).map((i) => [i.nome, i]));
+  const produtos = new Map((await prisma.produto.findMany({ where: { lojaId } })).map((p) => [p.nome, p]));
+  const insumos = new Map((await prisma.insumo.findMany({ where: { lojaId } })).map((i) => [i.nome, i]));
   const produto = (nome) => {
     const p = produtos.get(nome);
     if (!p) throw new Error(`Produto "${nome}" não existe. Rode antes: npm run seed -w api`);
@@ -117,10 +123,12 @@ async function main() {
   log(`Dia operacional: ${dia}. Usuário: ${dono.nome} (#${dono.id}).\n`);
 
   // ── 1. Bairros ──
-  let bairros = await prisma.bairro.findMany({ where: { ativo: true }, orderBy: { id: 'asc' } });
+  let bairros = await prisma.bairro.findMany({ where: { lojaId, ativo: true }, orderBy: { id: 'asc' } });
   if (!bairros.length) {
-    for (const b of BAIRROS_DEMO) await prisma.bairro.upsert({ where: { nome: b.nome }, update: { ativo: true }, create: b });
-    bairros = await prisma.bairro.findMany({ where: { ativo: true }, orderBy: { id: 'asc' } });
+    for (const b of BAIRROS_DEMO) {
+      await prisma.bairro.upsert({ where: { lojaId_nome: { lojaId, nome: b.nome } }, update: { ativo: true }, create: { ...b, lojaId } });
+    }
+    bairros = await prisma.bairro.findMany({ where: { lojaId, ativo: true }, orderBy: { id: 'asc' } });
     log(`Bairros: nenhum ativo; criados ${BAIRROS_DEMO.map((b) => `${b.nome} (${reais(b.taxaCentavos)})`).join(' e ')}. Ajuste na retaguarda.`);
   }
   const bairroDo = (i) => bairros[Math.min(i, bairros.length - 1)];
@@ -137,16 +145,16 @@ async function main() {
   // ── 3. Estoque (entrada) ──
   for (const [nome, qtd] of Object.entries(ENTRADAS.produtos)) {
     if (!produto(nome).controlaEstoque) continue;
-    await registrarEntrada({ produtoId: produto(nome).id }, { quantidade: qtd, motivo: MOTIVO }, { usuarioId });
+    await registrarEntrada(lojaId, { produtoId: produto(nome).id }, { quantidade: qtd, motivo: MOTIVO }, { usuarioId });
   }
   for (const [nome, qtd] of Object.entries(ENTRADAS.insumos)) {
-    await registrarEntrada({ insumoId: insumo(nome).id }, { quantidade: qtd, motivo: MOTIVO }, { usuarioId });
+    await registrarEntrada(lojaId, { insumoId: insumo(nome).id }, { quantidade: qtd, motivo: MOTIVO }, { usuarioId });
   }
   log('Estoque: entrada nas bebidas e nos pães.');
 
   // ── 4. Caixa ──
-  if (!(await caixaAtual())) {
-    await abrirCaixa({ valorInicialCentavos: 10000 }, { usuarioId });
+  if (!(await caixaAtual(lojaId))) {
+    await abrirCaixa(lojaId, { valorInicialCentavos: 10000 }, { usuarioId });
     log('Caixa: aberto com fundo de troco de R$ 100,00.');
   } else {
     log('Caixa: já havia um aberto (os pedidos finalizados entram nele).');
@@ -157,7 +165,7 @@ async function main() {
   for (const c of CLIENTES) {
     let id;
     try {
-      id = (await criarCliente({
+      id = (await criarCliente(lojaId, {
         nome: c.nome,
         telefone: c.telefone,
         endereco: { rua: c.rua, numero: c.numero, complemento: c.complemento ?? null, referencia: c.referencia ?? null, bairroId: bairroDo(c.bairro).id },
@@ -181,18 +189,18 @@ async function main() {
 
   // ── 7. Comandas abertas ──
   for (const c of COMANDAS_ABERTAS) {
-    const comanda = await abrirComanda({ nomeCliente: c.nome, mesaRotulo: c.mesa }, { usuarioId });
+    const comanda = await abrirComanda(lojaId, { nomeCliente: c.nome, mesaRotulo: c.mesa }, { usuarioId });
     let atual = comanda;
-    for (const item of itensDe(c.itens)) atual = await lancarItem(comanda.id, item, { usuarioId });
+    for (const item of itensDe(c.itens)) atual = await lancarItem(lojaId, comanda.id, item, { usuarioId });
     resumo.push({ numero: atual.numeroDia, canal: 'SALAO', quem: `${c.nome} (mesa ${c.mesa})`, total: atual.totalCentavos, situacao: 'comanda aberta' });
   }
 
   // ── 8. Pão acabando ──
-  await registrarAjuste({ insumoId: insumo(PAO_ACABANDO.insumo).id }, { saldoContado: PAO_ACABANDO.saldo, motivo: `${MOTIVO}: pão acabando` }, { usuarioId });
+  await registrarAjuste(lojaId, { insumoId: insumo(PAO_ACABANDO.insumo).id }, { saldoContado: PAO_ACABANDO.saldo, motivo: `${MOTIVO}: pão acabando` }, { usuarioId });
 
   // ── 9. Cupons já "impressos" ──
   const { count } = await prisma.trabalhoImpressao.updateMany({
-    where: { id: { gt: ultimoTrabalho }, status: 'PENDENTE' },
+    where: { lojaId, id: { gt: ultimoTrabalho }, status: 'PENDENTE' },
     data: { status: 'IMPRESSO', impressoEm: new Date() },
   });
 
@@ -212,28 +220,28 @@ async function delivery(spec, cliente, itens, usuarioId) {
   if (spec.canal === 'SITE') {
     try {
       // O site manda o total que o cliente viu; aqui ele vem do 409 PRECO_ALTERADO (preço do banco).
-      pedido = await criarPedidoDoSite(cliente, { ...base, totalEsperadoCentavos: -1 }).catch((err) => {
+      pedido = await criarPedidoDoSite(lojaId, cliente, { ...base, totalEsperadoCentavos: -1 }).catch((err) => {
         if (err?.codigo !== 'PRECO_ALTERADO') throw err;
-        return criarPedidoDoSite(cliente, { ...base, totalEsperadoCentavos: err.detalhes.totalCentavos });
+        return criarPedidoDoSite(lojaId, cliente, { ...base, totalEsperadoCentavos: err.detalhes.totalCentavos });
       });
       pedido = pedido.pedido;
     } catch (err) {
       if (!['LOJA_FECHADA', 'PRODUTO_INDISPONIVEL'].includes(err?.codigo)) throw err;
       // Loja fechada (ou outro turno): mesmo criarPedido pelo caminho da equipe, marcado SITE.
-      pedido = (await criarPedidoDoWhatsapp({ clienteId: cliente.id, ...base }, { usuarioId })).pedido;
+      pedido = (await criarPedidoDoWhatsapp(lojaId, { clienteId: cliente.id, ...base }, { usuarioId })).pedido;
       await prisma.pedido.update({ where: { id: pedido.id }, data: { canal: 'SITE', criadoPorId: null } });
       observacaoCanal = ' (loja fechada agora: lançado sem trava de horário)';
     }
   } else {
-    pedido = (await criarPedidoDoWhatsapp({ clienteId: cliente.id, ...base }, { usuarioId })).pedido;
+    pedido = (await criarPedidoDoWhatsapp(lojaId, { clienteId: cliente.id, ...base }, { usuarioId })).pedido;
   }
 
   let situacao = 'aberto na fila do PDV';
   if (spec.depois === 'finalizar') {
-    await finalizarPedido(pedido.id, { formaPagamento: spec.forma });
+    await finalizarPedido(lojaId, pedido.id, { formaPagamento: spec.forma });
     situacao = `finalizado (${spec.forma})`;
   } else if (spec.depois === 'cancelar') {
-    await cancelarPedido(pedido.id, { usuarioId });
+    await cancelarPedido(lojaId, pedido.id, { usuarioId });
     situacao = 'cancelado (estoque devolvido)';
   }
   return { numero: pedido.numeroDia, canal: spec.canal, quem: cliente.nome, total: pedido.totalCentavos, situacao: situacao + observacaoCanal };
@@ -241,10 +249,10 @@ async function delivery(spec, cliente, itens, usuarioId) {
 
 /** Comanda do salão: abre, lança item a item (baixa na hora) e fecha. */
 async function comandaFechada(spec, itens, usuarioId) {
-  const comanda = await abrirComanda({ nomeCliente: spec.nome, mesaRotulo: spec.mesa }, { usuarioId });
+  const comanda = await abrirComanda(lojaId, { nomeCliente: spec.nome, mesaRotulo: spec.mesa }, { usuarioId });
   let atual = comanda;
-  for (const item of itens) atual = await lancarItem(comanda.id, item, { usuarioId });
-  await fecharComanda(comanda.id, { formaPagamento: spec.forma, imprimirConta: false });
+  for (const item of itens) atual = await lancarItem(lojaId, comanda.id, item, { usuarioId });
+  await fecharComanda(lojaId, comanda.id, { formaPagamento: spec.forma, imprimirConta: false });
   return { numero: atual.numeroDia, canal: 'SALAO', quem: `${spec.nome} (mesa ${spec.mesa})`, total: atual.totalCentavos, situacao: `comanda fechada (${spec.forma})` };
 }
 

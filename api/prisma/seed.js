@@ -1,10 +1,12 @@
 /**
- * Seed idempotente do cardápio a partir de cardapio-cabana-boemia.json.
+ * Seed idempotente da loja Cabana Boemia e do cardápio dela, a partir de
+ * cardapio-cabana-boemia.json.
  *
  * Política (ver CLAUDE.md › Seed): cria o que falta e NUNCA sobrescreve o que o
  * dono pode editar (preço, ativo, disponivelHoje, descrição, estoque, horários,
- * Configuracao). Em registro existente só atualiza a estrutura (categoria/ordem)
- * e acrescenta vínculos ProdutoTurno/ProdutoInsumo que faltarem.
+ * configuração da loja). Em registro existente só atualiza a estrutura
+ * (categoria/ordem) e acrescenta vínculos ProdutoTurno/ProdutoInsumo que faltarem.
+ * Tudo por loja: os nomes são únicos dentro da loja (upsert por [lojaId, nome]).
  */
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -24,6 +26,13 @@ const DIAS = {
   quinta: 4,
   sexta: 5,
   sabado: 6,
+};
+
+/** Mesmo slug de src/services/loja.service.js (SLUG_LOJA_PADRAO): a migration multi_loja já cria a loja. */
+export const LOJA_CABANA = {
+  slug: 'cabana-boemia',
+  corPrimaria: '#C8102E',
+  corFundo: '#FBF3E8',
 };
 
 const PRATO_POR_KG = {
@@ -64,22 +73,23 @@ export async function seed(prisma, { cardapio, log = console.log } = {}) {
 
   await prisma.$transaction(
     async (tx) => {
-      // ── Configuracao (linha única) ──
-      const config = await tx.configuracao.upsert({
-        where: { id: 1 },
-        create: { id: 1, nomeRestaurante: cardapio.restaurante.nome },
+      // ── Loja (a migration multi_loja já cria; aqui só se faltar) ──
+      const loja = await tx.loja.upsert({
+        where: { slug: LOJA_CABANA.slug },
+        create: { ...LOJA_CABANA, nome: cardapio.restaurante.nome },
         update: {},
       });
-      if (!config.whatsappNumero) {
-        avisar('Configuracao.whatsappNumero vazio: defina na retaguarda (usado no link wa.me).');
+      const lojaId = loja.id;
+      if (!loja.whatsapp) {
+        avisar('WhatsApp da loja vazio: defina na retaguarda (Configurações; usado no link wa.me).');
       }
 
       // ── Turnos e horários ──
       const turnoId = new Map();
       for (const t of cardapio.turnos) {
         const turno = await tx.turno.upsert({
-          where: { nome: t.nome },
-          create: { nome: t.nome },
+          where: { lojaId_nome: { lojaId, nome: t.nome } },
+          create: { lojaId, nome: t.nome },
           update: {},
         });
         turnoId.set(t.nome, turno.id);
@@ -103,8 +113,8 @@ export async function seed(prisma, { cardapio, log = console.log } = {}) {
       const insumoId = new Map();
       for (const i of cardapio.insumos) {
         const insumo = await tx.insumo.upsert({
-          where: { nome: i.nome },
-          create: { nome: i.nome, estoque: i.estoque_inicial ?? 0, estoqueMinimo: 0 },
+          where: { lojaId_nome: { lojaId, nome: i.nome } },
+          create: { lojaId, nome: i.nome, estoque: i.estoque_inicial ?? 0, estoqueMinimo: 0 },
           update: {},
         });
         insumoId.set(i.nome, insumo.id);
@@ -131,8 +141,8 @@ export async function seed(prisma, { cardapio, log = console.log } = {}) {
 
       for (const [ordemCat, c] of categorias.entries()) {
         const categoria = await tx.categoria.upsert({
-          where: { nome: c.nome },
-          create: { nome: c.nome, ordem: ordemCat },
+          where: { lojaId_nome: { lojaId, nome: c.nome } },
+          create: { lojaId, nome: c.nome, ordem: ordemCat },
           update: { ordem: ordemCat },
         });
 
@@ -146,8 +156,9 @@ export async function seed(prisma, { cardapio, log = console.log } = {}) {
         for (const [ordemProd, p] of c.produtos.entries()) {
           const semPreco = p.preco_centavos == null;
           const produto = await tx.produto.upsert({
-            where: { nome: p.nome },
+            where: { lojaId_nome: { lojaId, nome: p.nome } },
             create: {
+              lojaId,
               nome: p.nome,
               descricao: p.descricao ?? '',
               categoriaId: categoria.id,
@@ -193,7 +204,7 @@ export async function seed(prisma, { cardapio, log = console.log } = {}) {
 /** Contagem por tabela, usada no fim do seed e nos testes. */
 export async function contarTabelas(prisma) {
   const [
-    configuracao,
+    loja,
     turno,
     horarioTurno,
     insumo,
@@ -202,7 +213,7 @@ export async function contarTabelas(prisma) {
     produtoTurno,
     produtoInsumo,
   ] = await Promise.all([
-    prisma.configuracao.count(),
+    prisma.loja.count(),
     prisma.turno.count(),
     prisma.horarioTurno.count(),
     prisma.insumo.count(),
@@ -212,7 +223,7 @@ export async function contarTabelas(prisma) {
     prisma.produtoInsumo.count(),
   ]);
   return {
-    configuracao,
+    loja,
     turno,
     horarioTurno,
     insumo,

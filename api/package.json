@@ -15,7 +15,8 @@
     "prisma:generate": "prisma generate",
     "seed": "node --env-file-if-exists=.env prisma/seed.js",
     "seed:demo": "node --env-file-if-exists=.env scripts/seed-demo.js",
-    "criar-dono": "node --env-file-if-exists=.env scripts/criar-dono.js"
+    "criar-dono": "node --env-file-if-exists=.env scripts/criar-dono.js",
+    "promover-admin": "node --env-file-if-exists=.env scripts/promover-admin.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

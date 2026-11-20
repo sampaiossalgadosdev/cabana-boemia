@@ -23,6 +23,8 @@ export function criarPublicoRoutes({ relogio } = {}) {
   r.get('/lojas/:slug/cardapio', lojaDoSlug, assincrono(c.cardapio));
   r.get('/lojas/:slug/bairros', lojaDoSlug, assincrono(c.bairros));
   r.get('/lojas/:slug/config', lojaDoSlug, assincrono(c.config));
+  // Logo enviada pela retaguarda: cada envio é outro id, então o cache é longo.
+  r.get('/imagens/:id', assincrono(c.imagem));
   r.get('/cardapio', lojaDoSite, assincrono(c.cardapio));
   r.get('/bairros', lojaDoSite, assincrono(c.bairros));
   r.get('/config', lojaDoSite, assincrono(c.config));

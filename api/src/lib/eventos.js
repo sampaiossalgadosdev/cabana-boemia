@@ -22,7 +22,7 @@ export function emitirParaEquipe(lojaId, evento, dados) {
  * dia, turnos, bairros, estoque, configuração): o PDV recarrega o que estiver
  * na tela. Chamar SÓ depois do commit.
  * @param {number} lojaId
- * @param {'produtos' | 'categorias' | 'cardapio-do-dia' | 'turnos' | 'bairros' | 'estoque' | 'config'} origem
+ * @param {'produtos' | 'categorias' | 'cardapio-do-dia' | 'turnos' | 'bairros' | 'estoque' | 'config' | 'loja'} origem ('loja' = nome, logo ou cor)
  */
 export function avisarCardapioAtualizado(lojaId, origem) {
   emitirParaEquipe(lojaId, 'cardapio:atualizado', { origem });

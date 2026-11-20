@@ -4,6 +4,7 @@ import { compararSenha, obterHashFicticio } from '../lib/senha.js';
 import { gerarAccessToken, gerarRefreshToken, hashRefreshToken } from '../lib/tokens.js';
 import * as usuarioRepo from '../repositories/usuario.repository.js';
 import * as refreshRepo from '../repositories/refreshToken.repository.js';
+import { identidadeDaLoja } from './identidade.service.js';
 
 export function normalizarEmail(email) {
   return email.trim().toLowerCase();
@@ -11,6 +12,14 @@ export function normalizarEmail(email) {
 
 export function usuarioPublico(u) {
   return { id: u.id, nome: u.nome, email: u.email, papel: u.papel };
+}
+
+/**
+ * O usuário + a identidade da loja dele (nome, logo, cor) para o PDV e a
+ * retaguarda montarem o tema. ADMIN não tem loja: `loja: null` (escolhe depois).
+ */
+export async function usuarioComLoja(u) {
+  return { ...usuarioPublico(u), loja: u.lojaId ? await identidadeDaLoja(u.lojaId) : null };
 }
 
 const credenciaisInvalidas = () =>
@@ -35,7 +44,7 @@ export async function login({ email, senha }) {
   }
 
   const tokens = await emitirSessao(usuario);
-  return { ...tokens, usuario: usuarioPublico(usuario) };
+  return { ...tokens, usuario: await usuarioComLoja(usuario) };
 }
 
 export async function renovar({ refreshToken }) {

@@ -143,3 +143,62 @@ export async function definirHorarios(lojaId, turnoId, horarios) {
   avisarCardapioAtualizado(lojaId, 'turnos');
   return (await turnoRepo.listarComHorarios(lojaId)).find((t) => t.id === turnoId);
 }
+
+// ───────── Retaguarda: criar, renomear, desativar ─────────
+
+const nomeEmUso = () => new ErroHttp(409, 'Já existe um turno com este nome', { codigo: 'NOME_EM_USO' });
+
+function erroDeSobreposicao(conflito) {
+  return new ErroHttp(422, mensagemSobreposicao(conflito), {
+    codigo: 'HORARIO_SOBREPOSTO',
+    detalhes: conflito.map(({ turno: t, horario: h }) => ({
+      turnoId: t.id,
+      turno: t.nome,
+      diaSemana: h.diaSemana,
+      inicio: h.inicio,
+      fim: h.fim,
+    })),
+  });
+}
+
+/** Turno novo da loja (sem horários: o dono define em "Turnos e horários"). */
+export async function criarTurno(lojaId, { nome }) {
+  try {
+    const turno = await prisma.turno.create({ data: { lojaId, nome } });
+    avisarCardapioAtualizado(lojaId, 'turnos');
+    return (await turnoRepo.listarComHorarios(lojaId)).find((t) => t.id === turno.id);
+  } catch (err) {
+    if (err?.code === 'P2002') throw nomeEmUso();
+    throw err;
+  }
+}
+
+/**
+ * Renomeia e/ou ativa/desativa o turno. Turno desativado não abre a loja nem
+ * entra no cardápio (os horários ficam guardados). Reativar confere os horários
+ * dele contra os outros turnos ativos (422 HORARIO_SOBREPOSTO), com os turnos travados.
+ * @param {{ nome?: string, ativo?: boolean }} dados
+ */
+export async function alterarTurno(lojaId, turnoId, dados) {
+  try {
+    await prisma.$transaction(async (tx) => {
+      await turnoRepo.travarTurnos(lojaId, tx);
+      const turnos = await turnoRepo.listarComHorarios(lojaId, tx);
+      const turno = turnos.find((t) => t.id === turnoId);
+      if (!turno) throw new ErroHttp(404, 'Turno não encontrado', { codigo: 'NAO_ENCONTRADO' });
+      if (dados.ativo === true && !turno.ativo) {
+        const lista = turnos
+          .filter((t) => t.id === turnoId || t.ativo)
+          .flatMap((t) => t.horarios.map((horario) => ({ turno: t, horario })));
+        const conflito = acharSobreposicao(lista);
+        if (conflito) throw erroDeSobreposicao(conflito);
+      }
+      await tx.turno.update({ where: { id: turnoId }, data: dados });
+    });
+  } catch (err) {
+    if (err?.code === 'P2002') throw nomeEmUso();
+    throw err;
+  }
+  avisarCardapioAtualizado(lojaId, 'turnos');
+  return (await turnoRepo.listarComHorarios(lojaId)).find((t) => t.id === turnoId);
+}

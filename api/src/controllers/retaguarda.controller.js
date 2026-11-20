@@ -10,6 +10,7 @@ import * as estoqueService from '../services/estoque.service.js';
 import * as configuracaoService from '../services/configuracao.service.js';
 import * as turnoService from '../services/turno.service.js';
 import * as relatorioService from '../services/relatorio.service.js';
+import * as identidadeService from '../services/identidade.service.js';
 
 // ───────── Schemas ─────────
 
@@ -110,6 +111,12 @@ const horariosSchema = z.object({
     )
     .max(50),
 });
+
+const corPerfilSchema = z.object({ corPrimaria: z.string({ error: 'Escolha a cor' }).trim().min(1, 'Escolha a cor') });
+const turnoCriarSchema = z.object({ nome: nome(40) });
+const turnoAlterarSchema = z
+  .object({ nome: nome(40).optional(), ativo: ativo.optional() })
+  .refine((d) => d.nome !== undefined || d.ativo !== undefined, 'Nada para alterar');
 
 const insumoSchema = z.object({
   nome: nome(60),
@@ -254,6 +261,12 @@ export function criarRetaguardaController(relogio = () => new Date()) {
     async listarTurnos(req, res) {
       res.json({ turnos: await turnoService.listarTurnos(req.lojaId) });
     },
+    async criarTurno(req, res) {
+      res.status(201).json({ turno: await turnoService.criarTurno(req.lojaId, validar(turnoCriarSchema, req.body ?? {})) });
+    },
+    async alterarTurno(req, res) {
+      res.json({ turno: await turnoService.alterarTurno(req.lojaId, id(req), validar(turnoAlterarSchema, req.body ?? {})) });
+    },
     async definirHorarios(req, res) {
       const { horarios } = validar(horariosSchema, req.body);
       res.json({ turno: await turnoService.definirHorarios(req.lojaId, id(req), horarios) });
@@ -312,6 +325,21 @@ export function criarRetaguardaController(relogio = () => new Date()) {
     async imprimirRelatorioDia(req, res) {
       const { data } = validar(imprimirSchema, req.body ?? {});
       res.status(201).json(await relatorioService.imprimirRelatorio(req.lojaId, data, relogio()));
+    },
+
+    // Perfil da loja (identidade visual)
+    async obterPerfil(req, res) {
+      res.json({ perfil: await identidadeService.obterPerfil(req.lojaId) });
+    },
+    async definirCor(req, res) {
+      const { corPrimaria } = validar(corPerfilSchema, req.body ?? {});
+      res.json({ perfil: await identidadeService.definirCor(req.lojaId, corPrimaria) });
+    },
+    async definirLogo(req, res) {
+      res.json({ perfil: await identidadeService.definirLogo(req.lojaId, req.body) });
+    },
+    async voltarAoPadrao(req, res) {
+      res.json({ perfil: await identidadeService.voltarAoPadrao(req.lojaId) });
     },
 
     // Configurações

@@ -6,6 +6,8 @@ import * as solicitacaoRepo from '../repositories/solicitacaoExclusao.repository
 import * as lojaService from '../services/loja.service.js';
 import * as usuarioService from '../services/usuario.service.js';
 import { normalizarWhatsapp } from '../services/configuracao.service.js';
+import * as identidadeService from '../services/identidade.service.js';
+import { avaliarCor } from '@restaurante/shared/cores';
 
 const idSchema = z.object({ id: z.coerce.number().int().positive() });
 const nomeBairro = z.string({ error: 'Informe o nome' }).trim().min(1, 'Informe o nome').max(80);
@@ -59,6 +61,19 @@ const cor = z
   .transform((v) => v || null)
   .refine((v) => v == null || /^#[0-9A-Fa-f]{6}$/.test(v), 'Use a cor no formato #RRGGBB');
 
+/** Cor primária (e a padrão): formato e contraste (texto legível por cima, visível na base clara). */
+const corLegivel = cor.superRefine((v, ctx) => {
+  if (v == null) return;
+  const a = avaliarCor(v);
+  if (!a.ok) ctx.addIssue({ code: 'custom', message: a.motivo });
+}).transform((v) => (v == null ? null : avaliarCor(v).cor));
+
+/** Link https ou imagem enviada (/api/publico/imagens/:id). */
+const logo = vazioParaNull(500).refine(
+  (v) => v == null || identidadeService.ehImagemPropria(v) || (/^https:\/\/\S+$/.test(v) && URL.canParse(v)),
+  'Use um link que comece com https:// ou envie a imagem',
+);
+
 const camposLoja = {
   slug: z
     .string({ error: 'Informe o endereço (slug)' })
@@ -86,8 +101,10 @@ const camposLoja = {
       if (!n) ctx.addIssue({ code: 'custom', message: 'WhatsApp inválido (DDD + número)' });
       return n ?? '';
     }),
-  logoUrl: vazioParaNull(500).refine((v) => v == null || (/^https:\/\/\S+$/.test(v) && URL.canParse(v)), 'Use um link que comece com https://'),
-  corPrimaria: cor,
+  logoUrl: logo,
+  logoUrlPadrao: logo,
+  corPrimaria: corLegivel,
+  corPrimariaPadrao: corLegivel,
   corFundo: cor,
   descricao: vazioParaNull(500),
   ativa: z.boolean({ error: 'Ativa deve ser verdadeiro ou falso' }),
@@ -128,6 +145,13 @@ export async function editarLoja(req, res) {
 }
 
 /** Cria o usuário DONO da loja (o dono cria os atendentes na retaguarda). */
+/** Logo PADRÃO da loja (corpo = o arquivo PNG/JPEG/WebP). Sem personalização do dono, a atual acompanha. */
+export async function definirLogoPadrao(req, res) {
+  const { id } = validar(idSchema, req.params);
+  await identidadeService.definirLogoPadrao(id, req.body);
+  res.json({ loja: (await lojaService.listarParaPlataforma()).find((l) => l.id === id) });
+}
+
 export async function criarDono(req, res) {
   const { id } = validar(idSchema, req.params);
   await lojaService.buscar(id);

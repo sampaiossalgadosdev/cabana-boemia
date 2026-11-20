@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { assincrono } from '../lib/assincrono.js';
 import { autenticar } from '../middlewares/autenticar.js';
 import { exigirPapel } from '../middlewares/exigirPapel.js';
@@ -12,6 +12,9 @@ import * as c from '../controllers/plataforma.controller.js';
  * - Solicitações de exclusão de conta da página pública /excluir-conta (a
  *   plataforma é a controladora dos dados; atendidas à mão pelo ADMIN).
  */
+/** Corpo cru da imagem (até 500 KB; o tipo é conferido pelos bytes no service). */
+export const corpoImagem = () => express.raw({ type: () => true, limit: '520kb' });
+
 export function criarPlataformaRoutes() {
   const r = Router();
   r.use((req, res, next) => {
@@ -22,6 +25,7 @@ export function criarPlataformaRoutes() {
   r.get('/lojas', assincrono(c.listarLojas));
   r.post('/lojas', assincrono(c.criarLoja));
   r.patch('/lojas/:id', assincrono(c.editarLoja));
+  r.put('/lojas/:id/logo-padrao', corpoImagem(), assincrono(c.definirLogoPadrao));
   r.post('/lojas/:id/dono', assincrono(c.criarDono));
   r.get('/bairros', assincrono(c.listarBairros));
   r.post('/bairros', assincrono(c.criarBairro));

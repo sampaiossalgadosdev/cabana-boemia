@@ -226,6 +226,7 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
       slug: 'cabana-boemia',
       logoUrl: null,
       corPrimaria: '#C8102E',
+      corTexto: '#FFFFFF',
       corFundo: '#FBF3E8',
       whatsapp: '5543999990000',
       googleClientId: process.env.GOOGLE_CLIENT_ID,

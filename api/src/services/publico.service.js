@@ -5,6 +5,7 @@ import { horaViradaDe } from './diaOperacional.service.js';
 import * as publicoRepo from '../repositories/publico.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as lojaService from './loja.service.js';
+import { identidade } from './identidade.service.js';
 import * as bairroService from './bairro.service.js';
 import { calcularTurnoAtivo, calcularProximaAbertura } from './turno.service.js';
 
@@ -109,7 +110,8 @@ export async function config(lojaId) {
     // Identidade da loja (app multi-loja; o site atual ignora).
     slug: c.slug,
     logoUrl: c.logoUrl ?? null,
-    corPrimaria: c.corPrimaria ?? null,
+    corPrimaria: identidade(c).corPrimaria,
+    corTexto: identidade(c).corTexto,
     corFundo: c.corFundo ?? null,
     whatsapp: c.whatsapp,
     // null = desligado; { minimoCentavos } = frete grátis com subtotal >= mínimo.

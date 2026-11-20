@@ -61,7 +61,14 @@ describe('autenticação e usuários', { skip: semBancoDeTeste }, () => {
     assert.equal(typeof r.corpo.refreshToken, 'string');
     assert.deepEqual(
       { ...r.corpo.usuario, id: undefined },
-      { id: undefined, nome: DONO.nome, email: DONO.email, papel: 'DONO' },
+      {
+        id: undefined,
+        nome: DONO.nome,
+        email: DONO.email,
+        papel: 'DONO',
+        // Identidade da loja (PDV e retaguarda montam o tema por ela).
+        loja: { id: 1, slug: 'cabana-boemia', nome: 'Cabana Boemia', logoUrl: null, corPrimaria: '#C8102E', corTexto: '#FFFFFF' },
+      },
     );
     assert.equal(r.corpo.usuario.senhaHash, undefined);
   });

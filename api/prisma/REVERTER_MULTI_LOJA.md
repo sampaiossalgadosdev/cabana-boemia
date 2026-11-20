@@ -1,4 +1,4 @@
-# Reverter as migrations `papel_admin` e `multi_loja`
+# Reverter as migrations `papel_admin`, `multi_loja` e `bairros_da_cidade`
 
 As duas migrations (`20261119200000_papel_admin` e `20261119200100_multi_loja`) não mudam nenhum id e não reescrevem pedidos. Elas:
 
@@ -27,6 +27,40 @@ pg_restore --clean --if-exists --no-owner --dbname="$DATABASE_URL" antes-multi-l
 ```
 
 O que foi gravado depois do deploy (pedidos, caixas) se perde. Se houve movimento, use a opção 2.
+
+## Bairros da cidade (`20261119210000_bairros_da_cidade`)
+
+Reverta esta primeiro: ela é a mais recente, e as outras dependem dela já ter sido desfeita.
+
+Só vale enquanto cada bairro estiver na área de entrega de **uma loja só** (hoje, a Cabana). Os ids dos bairros são mantidos, então os endereços continuam válidos. Bairro da cidade sem área volta para a Cabana desativado e com taxa 0.
+
+```sql
+BEGIN;
+
+-- Bairro volta a ser de uma loja, com a taxa e o "ativo" da área de entrega dela.
+ALTER TABLE "Bairro" ADD COLUMN "lojaId" INTEGER, ADD COLUMN "taxaCentavos" INTEGER;
+UPDATE "Bairro" b SET "lojaId" = a."lojaId", "taxaCentavos" = a."taxaCentavos", "ativo" = (b."ativo" AND a."ativo")
+FROM "AreaEntrega" a WHERE a."bairroId" = b."id";
+-- Bairro da cidade sem área: fica na Cabana, desativado e sem taxa.
+UPDATE "Bairro" SET "lojaId" = (SELECT "id" FROM "Loja" WHERE "slug" = 'cabana-boemia'), "taxaCentavos" = 0, "ativo" = false
+WHERE "lojaId" IS NULL;
+ALTER TABLE "Bairro" ALTER COLUMN "lojaId" SET NOT NULL, ALTER COLUMN "taxaCentavos" SET NOT NULL;
+DROP INDEX "Bairro_nome_key";
+CREATE UNIQUE INDEX "Bairro_lojaId_nome_key" ON "Bairro"("lojaId", "nome");
+ALTER TABLE "Bairro" ADD CONSTRAINT "Bairro_lojaId_fkey" FOREIGN KEY ("lojaId") REFERENCES "Loja"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+DROP TABLE "AreaEntrega";
+DELETE FROM "_prisma_migrations" WHERE "migration_name" = '20261119210000_bairros_da_cidade';
+
+COMMIT;
+```
+
+Volte também o código para antes do commit dos bairros da cidade.
+
+Testado em 19/11/2026 numa cópia do banco de dev:
+
+- reverter deixou o banco igual ao schema da etapa 1 (`migrate diff` sem diferença);
+- reaplicar com `migrate deploy` também ficou sem diferença.
 
 ## Opção 2: SQL de volta, mantendo os dados novos
 

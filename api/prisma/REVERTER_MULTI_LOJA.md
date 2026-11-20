@@ -152,6 +152,20 @@ Ou rode `npx prisma migrate resolve --applied 20261119200000_papel_admin`.
 
 Por fim, volte o código para o commit anterior à branch `feat/multi-loja`.
 
+## Identidade da loja (`20261120120000_identidade_loja`)
+
+Só aditiva (colunas `corPrimariaPadrao`/`logoUrlPadrao` na `Loja` e a tabela `ImagemLoja`). Para voltar sem restaurar o backup:
+
+```sql
+ALTER TABLE "Loja" DROP CONSTRAINT IF EXISTS "Loja_corPrimariaPadrao_check";
+ALTER TABLE "Loja" DROP COLUMN "corPrimariaPadrao", DROP COLUMN "logoUrlPadrao";
+UPDATE "Loja" SET "logoUrl" = NULL WHERE "logoUrl" LIKE '/api/publico/imagens/%';
+DROP TABLE "ImagemLoja";
+DELETE FROM "_prisma_migrations" WHERE "migration_name" = '20261120120000_identidade_loja';
+```
+
+E voltar o código para antes dela (a API desta etapa lê as colunas novas).
+
 ## Testado
 
 Aplicação: numa cópia do banco de dev (`createdb -T restaurante restaurante_copia_multiloja`), com WhatsApp, frete grátis, tempo manual e virada alterados antes de migrar. Resultado:

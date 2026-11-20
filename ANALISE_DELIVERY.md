@@ -198,7 +198,7 @@ O levantamento original desta seção apontava um sistema **single-tenant de pon
 - Migrations: `papel_admin`, `multi_loja`, `bairros_da_cidade` e `nfce_reserva_impressao`. Como reverter: `api/prisma/REVERTER_MULTI_LOJA.md`.
 
 ### 6.2 Papéis e acesso
-- **ADMIN** (plataforma) não tem loja e passa onde o DONO passa. Nas rotas da equipe, informa a loja pelo cabeçalho `X-Loja`; no socket, por `auth.loja`. Sem informar, usa a Cabana.
+- **ADMIN** (plataforma) não tem loja e passa onde o DONO passa. Nas rotas da equipe, informa a loja pelo cabeçalho `X-Loja`; no socket, por `auth.loja`. Sem informar: 400 `LOJA_OBRIGATORIA`.
 - **DONO e ATENDENTE** ficam presos à loja do cadastro. Dado de outra loja responde 404, e informar outra loja dá 403.
 
 ### 6.3 API
@@ -210,23 +210,22 @@ O levantamento original desta seção apontava um sistema **single-tenant de pon
 | Plataforma (ADMIN) | `/plataforma/lojas` (listar, criar com turnos iniciais, editar; `POST /:id/dono`), `/plataforma/bairros`, `/plataforma/solicitacoes-exclusao`. |
 
 ### 6.4 Tempo real e impressão
-- **Socket.IO**: uma sala por loja, `equipe:<lojaId>`. A sala legada `equipe` continua só para a Cabana, por causa do PDV antigo instalado.
+- **Socket.IO**: uma sala por loja, `equipe:<lojaId>` (a sala legada `equipe` foi removida na etapa 4).
 - **Impressão**:
   - a fila é por loja;
   - o agente novo usa `POST /equipe/impressoes/reservar`, uma reserva atômica que impede dois PDVs de imprimirem o mesmo cupom;
-  - o PDV antigo segue com `GET /equipe/impressoes/pendentes`, sem os trabalhos reservados.
 - Isso resolve os riscos "uma sala para tudo" e "dois agentes duplicam cupons" (seção 9).
 
-### 6.5 O que ainda falta
-- **PDV novo**:
-  - mostrar a loja e, para o ADMIN, escolhê-la;
-  - usar `reservar` com o identificador do agente;
-  - campo da NFC-e;
-  - bairros da própria loja.
-  Depois dele instalado, tirar a sala legada `equipe`.
-- **App**: tela de escolha da loja (vitrine), sacola presa a uma loja, rotas por slug e tema vindo da loja (cores, logo).
-- **Telas da plataforma** na retaguarda: lojas e solicitações de exclusão. Os bairros da cidade já têm tela.
-- **Criar turno na retaguarda**: hoje os turnos de uma loja nova vêm da criação feita pelo ADMIN.
+### 6.5 Feito na etapa 4 (20/11/2026)
+- **PDV 0.2.0**: loja pelo login, escolha da loja pelo ADMIN, reserva de impressão com o id do computador, cupom com o nome da loja, bairros da área da própria loja e chave da NFC-e no pedido.
+- **Compatibilidade com o PDV antigo removida** (sala legada `equipe`, `GET /equipe/impressoes/pendentes`, ADMIN sem loja = Cabana).
+- **Retaguarda**: telas da plataforma (lojas, bairros da cidade, exclusão de contas), seletor de loja do ADMIN, criar/renomear/desativar turnos, "Perfil da loja".
+- **Identidade por loja**: cor primária com contraste conferido (`shared/src/cores.js`) e logo enviada (guardada no banco, `/api/publico/imagens/:id`), padrão definido pelo ADMIN; vem da API para retaguarda, PDV e app.
+- **Seed por loja** (JSON) e script da loja de teste.
+
+### 6.6 O que ainda falta
+- **App**: tela de escolha da loja (vitrine), sacola presa a uma loja, rotas por slug e aplicar o tema da loja (`corPrimaria`, `corTexto`, `logoUrl` já vêm da API).
+- **NFC-e na comanda do salão** (hoje só no detalhe do pedido do painel de delivery).
 - **Barramento de eventos em memória** (`lib/eventos.js`): com mais de uma instância da API, eventos de uma não chegam aos sockets da outra (segue na seção 9).
 - **Documentos legais**: o controlador dos dados e as obrigações de cada loja (termo com as lojas) continuam pendentes de revisão jurídica (`CLAUDE.md` › Autenticação do cliente).
 

@@ -31,6 +31,19 @@ npm run dist -w pdv      # instalador do PDV → pdv/dist/Cabana Boemia PDV Setu
 
 O instalador (`npm run dist -w pdv`, no Windows) instala só para o usuário, sem pedir administrador, cria atalho na área de trabalho e abre o PDV ao terminar; a partir daí ele abre sozinho com o Windows. Na primeira abertura pede o servidor (já vem preenchido com `https://cabana.managerpix.com.br`; editável, sem `/api`) e a impressora térmica (lista do Windows e largura do papel 80/58 mm). O log da impressão fica em `%APPDATA%\Cabana Boemia PDV\logs\impressao.log`. O instalador não é assinado: na primeira vez o Windows SmartScreen avisa "editor desconhecido" (Mais informações › Executar assim mesmo).
 
+### Atualizar o PDV da Cabana para a versão multi-loja (0.2.0)
+
+A API multi-loja **não atende mais o PDV antigo (0.1.0)**: sem a sala de tempo real antiga e sem a fila de impressão antiga, ele para de receber pedidos na hora e de imprimir. Por isso a atualização é **junto com o deploy**, de preferência com a loja fechada:
+
+1. **Backup do banco** de produção (ver `api/prisma/REVERTER_MULTI_LOJA.md`).
+2. Merge da branch `feat/multi-loja` na `main` e push: o Railway faz o deploy e roda as migrations.
+3. No Railway (`railway ssh`): `npm run seed -w api` (a Cabana ganha a logo e a cor padrão; nada do que o dono editou muda).
+4. No computador da Cabana: **feche o PDV** (Sair e fechar a janela), copie `pdv/dist/Cabana Boemia PDV Setup 0.2.0.exe` (pen drive ou link) e execute. Ele instala por cima da 0.1.0, no mesmo lugar: o servidor, a impressora, o login salvo e o "abrir com o Windows" continuam. O Windows pode avisar "editor desconhecido" (Mais informações › Executar assim mesmo).
+5. Abra o PDV e entre com o usuário da Cabana (dono ou atendente): a barra mostra a logo e o nome "Cabana Boemia". Confira: um pedido de teste chega no painel, o cupom sai na impressora e o "Caixa" abre normal.
+6. Só **um** computador por vez estava liberado para imprimir; agora a API reserva cada cupom para um computador, então um segundo PDV com impressora não duplica cupons.
+
+Se o login no PDV for de um **administrador** da plataforma, ele pede a loja ("Em qual loja?") e lembra a escolha no computador.
+
 Build de produção local (o mesmo que o Railway roda):
 
 ```bash

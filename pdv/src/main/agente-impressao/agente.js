@@ -27,7 +27,8 @@ export const TEMPOS_AGENTE = Object.freeze({
   retentativaMaxMs: 60_000,
 });
 
-const RESTAURANTE_PADRAO = 'Cabana Boemia';
+/** Topo do cupom até a API dizer o nome da loja (ex.: "Imprimir teste" antes da primeira busca). */
+const RESTAURANTE_PADRAO = 'PDV do Abatiá';
 
 /** Cupom de teste (botão "Imprimir teste"): mostra acentos, negrito, grande e o corte. */
 export function trabalhoDeTeste(agora = new Date()) {
@@ -392,6 +393,8 @@ export function criarAgente({
     desligar() {
       sessao = false;
       parar();
+      // A próxima loja (ADMIN trocando de loja) diz o nome dela na primeira busca.
+      restaurante = RESTAURANTE_PADRAO;
       publicar({ conexao: null, estado: 'desligado', mensagem: '' });
     },
     /** Configuração da impressora mudou. */

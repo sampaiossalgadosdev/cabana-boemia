@@ -12,19 +12,28 @@ import { limiteParaAdicionar } from '../logica/cardapio.js';
 import { formatarPreco } from '../logica/dinheiro.js';
 import { Botao, ImagemProduto, Quantidade } from '../componentes/basicos.js';
 import { useEstilos, useTema } from '../tema/tema.js';
+import { ComTemaDaLoja } from '../componentes/Loja.js';
 
 /**
  * Produto (modal): quantidade 1–20 (até o saldo, `maxSacola`) e observação até
  * 140 caracteres. Com `linha` (vindo da sacola), edita a linha da sacola.
  */
 export default function TelaProduto() {
+  return (
+    <ComTemaDaLoja>
+      <Produto />
+    </ComTemaDaLoja>
+  );
+}
+
+function Produto() {
   const { id, linha } = useLocalSearchParams();
   const s = useEstilos(criarEstilos);
   const tema = useTema();
   const { bottom, top } = useSafeAreaInsets();
   // iOS: o modal é um cartão abaixo da barra de status; Android: tela cheia (edge-to-edge).
   const recuoTopo = Platform.OS === 'ios' ? 0 : top;
-  const { produtosPorId, podePedir } = useCardapio();
+  const { produtosPorId, podePedir, slug, loja } = useCardapio();
   const carrinho = useCarrinho();
 
   const item = linha ? carrinho.itens.find((i) => i.id === linha) : null;
@@ -33,7 +42,8 @@ export default function TelaProduto() {
     produtosPorId.get(produtoId) ??
     (item ? { id: item.produtoId, nome: item.nome, precoCentavos: item.precoCentavos } : null);
 
-  const limite = item ? limiteDaLinha(item, carrinho.itens, produtosPorId.get(produtoId)) : limiteParaAdicionar(carrinho.itens, produto);
+  const itensDaLoja = carrinho.loja?.slug === slug ? carrinho.itens : [];
+  const limite = item ? limiteDaLinha(item, carrinho.itens, produtosPorId.get(produtoId)) : limiteParaAdicionar(itensDaLoja, produto);
   const [quantidade, setQuantidade] = useState(() => Math.max(1, Math.min(item?.quantidade ?? 1, limite || 1)));
   const [observacao, setObservacao] = useState(item?.observacao ?? '');
 
@@ -50,10 +60,16 @@ export default function TelaProduto() {
 
   const semEstoque = limite === 0;
   const podeConfirmar = item ? !semEstoque : podePedir && !semEstoque;
-  const confirmar = () => {
-    if (item) carrinho.editar(item.id, { quantidade, observacao });
-    else carrinho.adicionar(produto, quantidade, observacao);
-    fechar();
+  const confirmar = async () => {
+    if (item) {
+      carrinho.editar(item.id, { quantidade, observacao });
+      return fechar();
+    }
+    // A sacola é de uma loja só: com itens de outra, pergunta se pode esvaziar.
+    const daLoja = { slug, nome: loja?.nome || slug };
+    if (!(await carrinho.confirmarLoja(daLoja))) return undefined;
+    carrinho.adicionar(produto, quantidade, observacao, daLoja);
+    return fechar();
   };
 
   return (

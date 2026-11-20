@@ -50,21 +50,30 @@ export function LinhaFreteGratis({ subtotalCentavos, freteGratis }) {
   );
 }
 
-/** Barra da sacola acima das abas; some com a sacola vazia. Toque abre a sacola. */
+/**
+ * Barra da sacola acima das abas; some com a sacola vazia. Toque abre a
+ * sacola, já na loja dela (a sacola é sempre de uma loja só).
+ */
 export function BarraSacola() {
   const s = useEstilos(criarEstilos);
-  const { totalItens, totalCentavos } = useCarrinho();
-  const { dados } = useCardapio();
+  const { totalItens, totalCentavos, loja } = useCarrinho();
+  const { dados, slug, abrirLoja } = useCardapio();
   if (!totalItens) return null;
+  const daLojaAberta = loja?.slug === slug;
+  const abrir = () => {
+    if (loja && !daLojaAberta) abrirLoja(loja.slug);
+    router.push('/sacola');
+  };
   return (
     <View style={s.cartao}>
-      <LinhaFreteGratis subtotalCentavos={totalCentavos} freteGratis={dados?.freteGratis ?? null} />
+      {daLojaAberta && <LinhaFreteGratis subtotalCentavos={totalCentavos} freteGratis={dados?.freteGratis ?? null} />}
       <View style={s.linha}>
-        <Text style={s.resumo}>
+        <Text style={s.resumo} numberOfLines={2}>
           <Text style={s.forte}>{formatarPreco(totalCentavos)}</Text> / {rotuloItens(totalItens)}
+          {!daLojaAberta && loja ? ` · ${loja.nome}` : ''}
         </Text>
         <Pressable
-          onPress={() => router.push('/sacola')}
+          onPress={abrir}
           accessibilityRole="button"
           style={({ pressed }) => [s.botao, pressed && s.botaoPressionado]}
         >

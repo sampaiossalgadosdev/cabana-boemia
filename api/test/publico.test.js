@@ -218,11 +218,15 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
     );
   });
 
-  test('GET /publico/config: nome, whatsapp, client ID do Google e frete grátis (desligado)', async () => {
+  test('GET /publico/config: nome, identidade da loja, whatsapp, client ID do Google e frete grátis (desligado)', async () => {
     await prisma.loja.update({ where: { id: 1 }, data: { whatsapp: '5543999990000' } });
     const { corpo } = await get('/publico/config');
     assert.deepEqual(corpo, {
       nome: 'Cabana Boemia',
+      slug: 'cabana-boemia',
+      logoUrl: null,
+      corPrimaria: '#C8102E',
+      corFundo: '#FBF3E8',
       whatsapp: '5543999990000',
       googleClientId: process.env.GOOGLE_CLIENT_ID,
       freteGratis: null,

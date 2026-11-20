@@ -20,6 +20,8 @@ export function criarPublicoRoutes({ relogio } = {}) {
   const r = Router();
   r.use(cacheCurto);
   r.get('/lojas', assincrono(c.lojas));
+  // Lista da cidade (cadastro de endereço no Perfil do app, sem loja escolhida).
+  r.get('/bairros-da-cidade', assincrono(c.bairrosDaCidade));
   r.get('/lojas/:slug/cardapio', lojaDoSlug, assincrono(c.cardapio));
   r.get('/lojas/:slug/bairros', lojaDoSlug, assincrono(c.bairros));
   r.get('/lojas/:slug/config', lojaDoSlug, assincrono(c.config));

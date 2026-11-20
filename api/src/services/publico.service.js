@@ -103,6 +103,11 @@ export function bairros(lojaId) {
   return bairroService.listarOndeEntrega(lojaId);
 }
 
+/** Bairros ativos da cidade (`{ id, nome }`): endereço do cliente vale para qualquer loja. */
+export async function bairrosDaCidade() {
+  return (await bairroService.listarCidade()).filter((b) => b.ativo).map((b) => ({ id: b.id, nome: b.nome }));
+}
+
 export async function config(lojaId) {
   const c = await lojaService.buscar(lojaId);
   return {
@@ -113,6 +118,10 @@ export async function config(lojaId) {
     corPrimaria: identidade(c).corPrimaria,
     corTexto: identidade(c).corTexto,
     corFundo: c.corFundo ?? null,
+    // Identificação do fornecedor (Decreto 7.962/2013, art. 2º): o app mostra na página da loja.
+    razaoSocial: c.razaoSocial ?? null,
+    documento: c.documento ?? null,
+    endereco: c.endereco ?? null,
     whatsapp: c.whatsapp,
     // null = desligado; { minimoCentavos } = frete grátis com subtotal >= mínimo.
     freteGratis: freteGratisDaConfig(c),

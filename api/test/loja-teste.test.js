@@ -105,6 +105,28 @@ describe('loja de teste (script) × Cabana: isolamento e identidade', { skip: se
     );
   });
 
+  test('vitrine e rotas por loja: logo como URL da rota de imagem (nunca base64 no JSON); dados legais; bairros da cidade', async () => {
+    const { lojas } = (await api('GET', '/publico/lojas')).corpo;
+    const origem = new URL(base).origin;
+    for (const l of lojas) {
+      assert.match(l.logoUrl, /^\/api\/publico\/imagens\/\d+$/, l.slug);
+      const img = await fetch(`${origem}${l.logoUrl}`);
+      assert.equal(img.status, 200);
+      assert.match(img.headers.get('cache-control'), /max-age=31536000/);
+    }
+    const texto = JSON.stringify(lojas);
+    assert.ok(!texto.includes('data:image') && !texto.includes('base64'), 'nada de imagem embutida');
+    await prisma.loja.update({ where: { id: teste.id }, data: { razaoSocial: 'Lanchonete Teste LTDA', documento: '11222333000181', endereco: 'Rua A, 1, Abatiá-PR' } });
+    const cfg = (await api('GET', '/publico/lojas/lanchonete-teste/config')).corpo;
+    assert.equal(cfg.razaoSocial, 'Lanchonete Teste LTDA');
+    assert.equal(cfg.documento, '11222333000181');
+    assert.equal(cfg.endereco, 'Rua A, 1, Abatiá-PR');
+    assert.match(cfg.logoUrl, /^\/api\/publico\/imagens\/\d+$/);
+    const cidade = (await api('GET', '/publico/bairros-da-cidade')).corpo.bairros;
+    assert.deepEqual(cidade.map((b) => b.nome), ['Centro', 'Jardim Primavera']);
+    assert.deepEqual(Object.keys(cidade[0]).sort(), ['id', 'nome']);
+  });
+
   test('pedido da loja de teste não aparece no PDV nem na retaguarda da Cabana, e vice-versa', async () => {
     const cliente = await prisma.cliente.create({ data: { googleId: 'g-iso', nome: 'Cliente Iso', telefone: '43999990011' } });
     const centro = await prisma.bairro.findUnique({ where: { nome: 'Centro' } });

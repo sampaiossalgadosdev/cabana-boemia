@@ -31,6 +31,9 @@ export function criarPublicoController(relogio = () => new Date()) {
       });
       res.send(img.dados);
     },
+    async bairrosDaCidade(req, res) {
+      res.json({ bairros: await publicoService.bairrosDaCidade() });
+    },
     async config(req, res) {
       res.json(await publicoService.config(req.lojaId));
     },

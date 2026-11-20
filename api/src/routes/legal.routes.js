@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { documento, escapar, responderPagina } from '../lib/paginaPublica.js';
-import { CONTROLADOR, emailDoTitular, identificacaoDoControlador } from '../lib/controlador.js';
+import { CONTROLADOR, DOCUMENTOS_APP, emailDoTitular, identificacaoDoControlador } from '../lib/controlador.js';
 import { RETENCAO_MESES } from '../services/registroAcesso.service.js';
 
 /**
@@ -14,8 +14,11 @@ import { RETENCAO_MESES } from '../services/registroAcesso.service.js';
 export const CAMINHO_PRIVACIDADE_APP = '/privacidade-app';
 export const CAMINHO_TERMOS_APP = '/termos-app';
 
-/** Data de vigência dos dois textos. Mudou o texto: atualizar. */
-export const VIGENCIA = '19 de novembro de 2026';
+/**
+ * Data de vigência dos dois textos. Mudou o texto: atualizar `DOCUMENTOS_APP`
+ * (lib/controlador.js), versão e vigência: o app pede o aceite de novo.
+ */
+export const VIGENCIA = DOCUMENTOS_APP.vigencia;
 
 /** Canal do titular: o e-mail (quando configurado) e o formulário de /excluir-conta. */
 export function contatoHtml(email) {
@@ -53,8 +56,9 @@ export function paginaPrivacidade(email, c = CONTROLADOR) {
     <li><strong>Endereços de entrega</strong>: rua, número, complemento, ponto de referência e bairro.</li>
     <li><strong>Histórico de pedidos</strong>: itens, observações, valores, forma de pagamento, troco, data e hora, endereço e loja.</li>
     <li><strong>Registros de acesso</strong>: endereço IP e data e hora de quando você entra na conta, quando o app renova a sua sessão, quando envia um pedido e quando exclui a conta.</li>
+    <li><strong>Seus aceites e escolhas</strong>: a versão destes documentos que você aceitou e quando, e se você quer receber ofertas e novidades (com data e endereço IP de cada escolha).</li>
   </ul>
-  <p>Não coletamos localização do aparelho, contatos, fotos nem dados de cartão. O pagamento é feito na entrega, direto com a loja.</p>
+  <p>Não coletamos localização do aparelho, contatos, fotos nem dados de cartão, e o app não usa identificador de publicidade nem rastreia você em outros apps ou sites. O pagamento é feito na entrega, direto com a loja.</p>
 </section>
 <section>
   <h2>2. Para que usamos</h2>
@@ -64,53 +68,60 @@ export function paginaPrivacidade(email, c = CONTROLADOR) {
     <li>Mostrar o seu histórico e permitir repetir pedidos (execução do contrato).</li>
     <li>Cumprir obrigações legais, como a guarda de registros de acesso e de registros fiscais (obrigação legal).</li>
     <li>Proteger a plataforma contra fraude e abuso, por exemplo limitando tentativas de login (legítimo interesse).</li>
+    <li>Guardar a prova do seu aceite destes documentos e das suas escolhas de comunicação (obrigação legal e exercício de direitos).</li>
+    <li><strong>Somente se você autorizar</strong> (consentimento, opcional): enviar ofertas e novidades das lojas e do Delivery Abatiá. Você liga ou desliga isso quando quiser em <strong>Perfil › Comunicações</strong>; desligar não afeta seus pedidos.</li>
   </ul>
-  <p>Não usamos seus dados para publicidade e não os vendemos.</p>
+  <p>Não vendemos seus dados e não os usamos para publicidade direcionada.</p>
 </section>
 <section>
   <h2>3. Com quem compartilhamos</h2>
   <ul>
     <li><strong>A loja do seu pedido</strong> recebe somente o seu <strong>nome, telefone, endereço de entrega e os itens do pedido</strong> (com as observações e a forma de pagamento escolhida), com o <strong>único fim de preparar e entregar aquele pedido</strong>. A loja <strong>não pode usar esses dados para nenhuma outra finalidade</strong>, como propaganda ou cadastro próprio.</li>
     <li><strong>Google ou Apple</strong>, apenas para confirmar a sua identidade no login.</li>
-    <li><strong>Hospedagem</strong>: os dados ficam em servidores contratados da Railway (Railway Corporation), que podem estar fora do Brasil. A transferência segue o art. 33 da LGPD.</li>
+    <li><strong>Hospedagem</strong>: os dados ficam em servidores da Railway (Railway Corporation) nos <strong>Estados Unidos</strong> (região US East). Isso é uma <strong>transferência internacional de dados</strong>, feita para executar o contrato com você e com as garantias do art. 33 da LGPD (contrato com o provedor, que se obriga a proteger os dados, comunicação criptografada e acesso restrito).</li>
     <li><strong>Autoridades</strong>, quando houver obrigação legal ou ordem judicial.</li>
   </ul>
 </section>
 <section>
-  <h2>4. Por quanto tempo guardamos</h2>
+  <h2>4. Anúncios</h2>
+  <p>O início do app pode mostrar anúncios marcados como <strong>"Patrocinado"</strong>, de lojas ou de outros anunciantes. São os mesmos para todos: <strong>não usamos seus dados para escolher anúncios</strong> e <strong>nenhum dado seu é enviado aos anunciantes</strong>, nem registramos em quais anúncios você toca. Tocar num anúncio abre a loja no app ou o site do anunciante; fora do app vale a política de privacidade do site aberto. Não aceitamos anúncios dirigidos a crianças.</p>
+</section>
+<section>
+  <h2>5. Por quanto tempo guardamos</h2>
   <ul>
     <li><strong>Conta, telefone e endereços</strong>: enquanto a conta existir. Ao excluir, são apagados na hora (pelo app) ou em até 15 dias (pelo formulário).</li>
     <li><strong>Pedidos</strong>: valores, itens e datas pelo prazo exigido pela legislação fiscal e de defesa do consumidor. Se você excluir a conta, os pedidos ficam <strong>sem</strong> seu nome, telefone e endereço.</li>
     <li><strong>Registros de acesso</strong>: ${RETENCAO_MESES} meses, como exige o Marco Civil da Internet (Lei 12.965/2014, art. 15), mesmo depois da exclusão da conta. Passado esse prazo, são apagados automaticamente.</li>
+    <li><strong>Aceites e escolhas de comunicação</strong>: enquanto a conta existir; são apagados com ela.</li>
     <li><strong>Pedidos de exclusão feitos pelo formulário</strong>: até serem atendidos e pelo tempo necessário para comprovar o atendimento.</li>
   </ul>
 </section>
 <section>
-  <h2>5. Seus direitos</h2>
+  <h2>6. Seus direitos</h2>
   <p>Pela LGPD (art. 18), você pode pedir: confirmação de que tratamos seus dados; acesso a eles; correção de dados incompletos ou errados (nome, telefone e endereços também se corrigem no app, em Perfil); anonimização, bloqueio ou eliminação de dados desnecessários; portabilidade; informação sobre com quem compartilhamos; eliminação dos dados e revogação do consentimento, quando for o caso. Você também pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD).</p>
 </section>
 <section>
-  <h2>6. Como excluir sua conta</h2>
+  <h2>7. Como excluir sua conta</h2>
   <ul>
     <li>No app: <strong>Perfil › Excluir minha conta</strong>. A exclusão é imediata. Se um pedido seu ainda está sendo preparado ou entregue (feito nas últimas 3 horas), ela fica liberada quando ele for entregue ou 3 horas depois do pedido.</li>
     <li>Sem o app: pelo formulário em <a href="/excluir-conta">/excluir-conta</a>.</li>
   </ul>
 </section>
 <section>
-  <h2>7. Segurança</h2>
+  <h2>8. Segurança</h2>
   <p>A comunicação entre o app e os servidores é criptografada (HTTPS). A sessão fica guardada na área segura do aparelho (Keychain no iPhone, Keystore no Android). O acesso aos dados é restrito a quem precisa deles para operar a plataforma e as lojas.</p>
 </section>
 <section>
-  <h2>8. Crianças</h2>
+  <h2>9. Crianças</h2>
   <p>O app é destinado a maiores de 18 anos.</p>
 </section>
 <section>
-  <h2>9. Contato</h2>
+  <h2>10. Contato</h2>
   ${contatoHtml(email)}
 </section>
 <section>
-  <h2>10. Mudanças nesta política</h2>
-  <p>Se esta política mudar, a nova versão será publicada aqui com a nova data de vigência. Mudanças importantes serão avisadas no app.</p>
+  <h2>11. Mudanças nesta política</h2>
+  <p>Se esta política mudar, a nova versão será publicada aqui com a nova data de vigência, e o app pedirá que você leia e aceite a nova versão antes de continuar.</p>
 </section>`,
   });
 }
@@ -157,19 +168,23 @@ export function paginaTermos(email, c = CONTROLADOR) {
   <p>Não é permitido fazer pedidos falsos, usar dados de outra pessoa ou tentar burlar o funcionamento do app. Nesses casos a conta pode ser bloqueada.</p>
 </section>
 <section>
-  <h2>7. Disponibilidade</h2>
+  <h2>7. Anúncios e comunicações</h2>
+  <p>O app pode mostrar anúncios, sempre identificados como "Patrocinado". O anunciante é o responsável pelo que anuncia; a oferta de uma loja anunciada vale nas condições do cardápio dela no app. Ofertas e novidades por mensagem só são enviadas se você autorizar em Perfil › Comunicações, e você pode desligar quando quiser.</p>
+</section>
+<section>
+  <h2>8. Disponibilidade</h2>
   <p>O app pode ficar fora do ar para manutenção ou por falhas de rede. Sem conexão, o app mostra o último cardápio salvo, mas não envia pedidos.</p>
 </section>
 <section>
-  <h2>8. Mudanças nestes termos</h2>
-  <p>Se os termos mudarem, a nova versão será publicada aqui com a nova data de vigência.</p>
+  <h2>9. Mudanças nestes termos</h2>
+  <p>Se os termos mudarem, a nova versão será publicada aqui com a nova data de vigência, e o app pedirá o seu aceite antes de continuar. Se não concordar, você pode sair da conta ou excluí-la.</p>
 </section>
 <section>
-  <h2>9. Lei aplicável</h2>
+  <h2>10. Lei aplicável</h2>
   <p>Valem as leis brasileiras, em especial o Código de Defesa do Consumidor. Fica eleito o foro do domicílio do consumidor.</p>
 </section>
 <section>
-  <h2>10. Contato</h2>
+  <h2>11. Contato</h2>
   ${contatoHtml(email)}
 </section>`,
   });

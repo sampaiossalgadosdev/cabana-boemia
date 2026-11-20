@@ -40,6 +40,8 @@ export function criarClienteRoutes({
   r.get('/me', c.me);
   r.put('/me', assincrono(c.atualizarMe));
   r.delete('/me', assincrono(c.excluirConta));
+  r.post('/aceite', assincrono(c.aceitarTermos));
+  r.put('/marketing', assincrono(c.definirMarketing));
   r.get('/enderecos', assincrono(c.listarEnderecos));
   r.post('/enderecos', assincrono(c.criarEndereco));
   r.put('/enderecos/:id', assincrono(c.atualizarEndereco));

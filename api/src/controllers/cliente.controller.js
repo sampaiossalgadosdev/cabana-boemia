@@ -11,6 +11,8 @@ const googleSchema = z.object({
   credential: z.string().min(1, 'Informe o credential do Google').max(4096),
   // App: pede também o refresh token (sessão longa). O site não manda e recebe só o token.
   refresh: z.boolean().optional(),
+  // App: versão dos termos/política aceita na tela de entrada (o site não manda).
+  aceite: z.string().trim().max(20).optional(),
 });
 
 const appleSchema = z.object({
@@ -20,7 +22,11 @@ const appleSchema = z.object({
   // A Apple só manda o nome no primeiro login (pelo app, fora do token).
   nome: z.string().trim().max(100).optional(),
   refresh: z.boolean().optional(),
+  aceite: z.string().trim().max(20).optional(),
 });
+
+const aceiteSchema = z.object({ versao: z.string({ error: 'Informe a versão aceita' }).trim().min(1).max(20) });
+const marketingSchema = z.object({ aceito: z.boolean({ error: 'Informe se aceita receber ofertas' }) });
 
 const refreshSchema = z.object({ refreshToken: z.string().min(20).max(200) });
 
@@ -71,17 +77,17 @@ export function criarClienteController(
 ) {
   return {
     async entrarComGoogle(req, res) {
-      const { credential, refresh } = validar(googleSchema, req.body);
+      const { credential, refresh, aceite } = validar(googleSchema, req.body);
       const identidade = await verificarIdTokenGoogle(credential);
-      const r = await clienteService.entrarComGoogle(identidade, { comRefresh: refresh === true });
+      const r = await clienteService.entrarComGoogle(identidade, { comRefresh: refresh === true, aceite, ip: req.ip });
       await registrarAcesso({ clienteId: r.cliente.id, ip: req.ip, evento: 'LOGIN' });
       res.json(r);
     },
 
     async entrarComApple(req, res) {
-      const { identityToken, nonce, nome, refresh } = validar(appleSchema, req.body);
+      const { identityToken, nonce, nome, refresh, aceite } = validar(appleSchema, req.body);
       const identidade = await verificarIdentityTokenApple(identityToken, { nonce });
-      const r = await clienteService.entrarComApple(identidade, { nome, comRefresh: refresh === true });
+      const r = await clienteService.entrarComApple(identidade, { nome, comRefresh: refresh === true, aceite, ip: req.ip });
       await registrarAcesso({ clienteId: r.cliente.id, ip: req.ip, evento: 'LOGIN' });
       res.json(r);
     },
@@ -118,6 +124,18 @@ export function criarClienteController(
     async atualizarMe(req, res) {
       const dados = validar(perfilSchema, req.body);
       res.json({ cliente: await clienteService.atualizarPerfil(req.cliente.id, dados) });
+    },
+
+    /** Aceite dos termos/política do app (versão atual). */
+    async aceitarTermos(req, res) {
+      const { versao } = validar(aceiteSchema, req.body ?? {});
+      res.json({ cliente: await clienteService.aceitarTermos(req.cliente.id, { versao, ip: req.ip, agora: relogio() }) });
+    },
+
+    /** Consentimento de marketing (opcional, revogável). */
+    async definirMarketing(req, res) {
+      const { aceito } = validar(marketingSchema, req.body ?? {});
+      res.json({ cliente: await clienteService.definirMarketing(req.cliente.id, { aceito, ip: req.ip, agora: relogio() }) });
     },
 
     async listarEnderecos(req, res) {

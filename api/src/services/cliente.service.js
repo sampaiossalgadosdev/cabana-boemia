@@ -3,6 +3,8 @@ import { ErroHttp } from '../lib/erros.js';
 import { gerarTokenCliente, gerarRefreshTokenCliente, hashRefreshTokenCliente } from '../lib/tokens.js';
 import * as clienteRepo from '../repositories/cliente.repository.js';
 import * as refreshRepo from '../repositories/refreshTokenCliente.repository.js';
+import { DOCUMENTOS_APP, precisaAceite } from '../lib/controlador.js';
+import { normalizarIp } from './registroAcesso.service.js';
 
 const NOME_MAX = 100;
 
@@ -22,7 +24,47 @@ export function clientePublico(c) {
     email: c.email,
     telefone: c.telefone,
     precisaTelefone: !c.telefone,
+    // App: termos/política aceitos (versão atual?) e marketing (opcional). O site ignora.
+    termosVersao: c.termosVersao ?? null,
+    precisaAceite: precisaAceite(c.termosVersao ?? null),
+    marketing: Boolean(c.marketing),
   };
+}
+
+const versaoDesatualizada = () =>
+  new ErroHttp(409, 'Os termos foram atualizados. Leia a versão nova e aceite de novo.', {
+    codigo: 'VERSAO_DESATUALIZADA',
+    detalhes: { versao: DOCUMENTOS_APP.versao },
+  });
+
+/**
+ * Aceite dos termos de uso e da política de privacidade do app. Só vale a
+ * versão atual (o app mostra a versão que leu: outra = 409 VERSAO_DESATUALIZADA).
+ * Repetir o aceite da mesma versão não grava de novo.
+ */
+export async function aceitarTermos(clienteId, { versao, ip, agora = new Date() }) {
+  if (versao !== DOCUMENTOS_APP.versao) throw versaoDesatualizada();
+  const atual = await clienteRepo.buscarPorId(clienteId);
+  if (!atual) throw new ErroHttp(404, 'Conta não encontrada', { codigo: 'NAO_ENCONTRADO' });
+  if (atual.termosVersao === versao) return clientePublico(atual);
+  return clientePublico(await clienteRepo.registrarAceite(clienteId, { versao, ip: normalizarIp(ip), agora }));
+}
+
+/** Marketing opcional (Perfil › Comunicações). Mesma escolha de antes = nada gravado. */
+export async function definirMarketing(clienteId, { aceito, ip, agora = new Date() }) {
+  const atual = await clienteRepo.buscarPorId(clienteId);
+  if (!atual) throw new ErroHttp(404, 'Conta não encontrada', { codigo: 'NAO_ENCONTRADO' });
+  if (atual.marketing === aceito) return clientePublico(atual);
+  return clientePublico(await clienteRepo.registrarMarketing(clienteId, { aceito, ip: normalizarIp(ip), agora }));
+}
+
+/**
+ * Login do app com o aceite marcado na tela de entrada (`aceite` = versão lida).
+ * Versão antiga é ignorada aqui (o app pede o aceite de novo, `precisaAceite`).
+ */
+async function aceiteNoLogin(resposta, aceite, ip) {
+  if (!aceite || aceite !== DOCUMENTOS_APP.versao || !resposta.cliente.precisaAceite) return resposta;
+  return { ...resposta, cliente: await aceitarTermos(resposta.cliente.id, { versao: aceite, ip }) };
 }
 
 const nomeInicial = (nome, email) => (nome?.trim() || email?.split('@')[0] || 'Cliente').slice(0, NOME_MAX);
@@ -47,12 +89,12 @@ async function sessao(cliente, comRefresh, db = prisma) {
  * Cliente novo nasce com nome/email do Google; existente só tem o email
  * atualizado (o nome pode ter sido editado por ele e não é sobrescrito).
  */
-export async function entrarComGoogle({ googleId, email, nome }, { comRefresh = false } = {}) {
+export async function entrarComGoogle({ googleId, email, nome }, { comRefresh = false, aceite, ip } = {}) {
   const cliente = await clienteRepo.upsertPorGoogleId(googleId, {
     criar: { nome: nomeInicial(nome, email), email },
     atualizar: email ? { email } : {},
   });
-  return sessao(cliente, comRefresh);
+  return aceiteNoLogin(await sessao(cliente, comRefresh), aceite, ip);
 }
 
 /**
@@ -61,12 +103,12 @@ export async function entrarComGoogle({ googleId, email, nome }, { comRefresh = 
  * de retransmissão da Apple (privaterelay.appleid.com). Conta separada da do
  * Google, mesmo com o mesmo e-mail (não há fusão de contas).
  */
-export async function entrarComApple({ appleId, email }, { nome, comRefresh = false } = {}) {
+export async function entrarComApple({ appleId, email }, { nome, comRefresh = false, aceite, ip } = {}) {
   const cliente = await clienteRepo.upsertPorAppleId(appleId, {
     criar: { nome: nomeInicial(nome, email), email },
     atualizar: email ? { email } : {},
   });
-  return sessao(cliente, comRefresh);
+  return aceiteNoLogin(await sessao(cliente, comRefresh), aceite, ip);
 }
 
 const refreshInvalido = () =>

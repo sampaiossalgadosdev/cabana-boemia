@@ -13,10 +13,10 @@ function cacheCurto(req, res, next) {
  * Rotas públicas, sem autenticação.
  * - /lojas e /lojas/:slug/(cardapio|bairros|config): app e lojas novas.
  * - /cardapio, /bairros, /config (antigas): sempre a loja padrão (Cabana), para o site atual.
- * @param {{ relogio?: () => Date }} [opcoes]
+ * @param {{ relogio?: () => Date, emailTitular?: string }} [opcoes]
  */
-export function criarPublicoRoutes({ relogio } = {}) {
-  const c = criarPublicoController(relogio);
+export function criarPublicoRoutes({ relogio, emailTitular } = {}) {
+  const c = criarPublicoController(relogio, { emailTitular });
   const r = Router();
   r.use(cacheCurto);
   r.get('/lojas', assincrono(c.lojas));
@@ -27,6 +27,11 @@ export function criarPublicoRoutes({ relogio } = {}) {
   r.get('/lojas/:slug/config', lojaDoSlug, assincrono(c.config));
   // Logo enviada pela retaguarda: cada envio é outro id, então o cache é longo.
   r.get('/imagens/:id', assincrono(c.imagem));
+  // Carrossel "Patrocinado" do Início do app (o que está no ar agora) e a imagem de cada anúncio.
+  r.get('/anuncios', assincrono(c.anuncios));
+  r.get('/anuncios/imagens/:id', assincrono(c.imagemAnuncio));
+  // Dados da plataforma (tela "Sobre" do app) e a versão dos termos/política (aceite).
+  r.get('/app', c.app);
   r.get('/cardapio', lojaDoSite, assincrono(c.cardapio));
   r.get('/bairros', lojaDoSite, assincrono(c.bairros));
   r.get('/config', lojaDoSite, assincrono(c.config));

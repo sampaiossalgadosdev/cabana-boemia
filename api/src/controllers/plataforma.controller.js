@@ -7,6 +7,8 @@ import * as lojaService from '../services/loja.service.js';
 import * as usuarioService from '../services/usuario.service.js';
 import { normalizarWhatsapp } from '../services/configuracao.service.js';
 import * as identidadeService from '../services/identidade.service.js';
+import * as anuncioService from '../services/anuncio.service.js';
+import { normalizarCpfCnpj } from '../lib/documento.js';
 import { avaliarCor } from '@restaurante/shared/cores';
 
 const idSchema = z.object({ id: z.coerce.number().int().positive() });
@@ -156,4 +158,66 @@ export async function criarDono(req, res) {
   const { id } = validar(idSchema, req.params);
   await lojaService.buscar(id);
   res.status(201).json({ usuario: await usuarioService.criarDono({ ...validar(donoSchema, req.body ?? {}), lojaId: id }) });
+}
+
+// ───────── Anúncios (carrossel "Patrocinado" do app) ─────────
+
+const dataHora = (rotulo) =>
+  z.iso.datetime({ offset: true, error: `${rotulo}: data e hora inválidas` }).transform((v) => new Date(v));
+
+const camposAnuncio = {
+  anuncianteNome: z.string({ error: 'Informe o anunciante' }).trim().min(1, 'Informe o anunciante').max(150),
+  anuncianteDocumento: z.string({ error: 'Informe o CPF ou CNPJ do anunciante' }).transform((v, ctx) => {
+    const d = normalizarCpfCnpj(v);
+    if (!d) ctx.addIssue({ code: 'custom', message: 'CPF ou CNPJ inválido' });
+    return d ?? '';
+  }),
+  imagemId: z.number({ error: 'Envie a imagem' }).int().positive(),
+  destino: z.enum(['LOJA', 'LINK'], { error: 'Escolha o destino: loja do app ou link' }),
+  destinoLojaId: z.number().int().positive().nullish(),
+  destinoUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .nullish()
+    .transform((v) => v || null)
+    .refine((v) => v == null || (/^https:\/\/\S+$/.test(v) && URL.canParse(v)), 'Use um link que comece com https://'),
+  inicio: dataHora('Início'),
+  fim: dataHora('Fim'),
+  valorPagoCentavos: z.number({ error: 'Informe o valor pago' }).int().min(0, 'Valor inválido').max(100_000_000),
+  ativo: z.boolean({ error: 'Ativo deve ser verdadeiro ou falso' }),
+  ordem: z.number({ error: 'Ordem inválida' }).int().min(0).max(9999),
+};
+
+const anuncioCriarSchema = z.object({
+  ...camposAnuncio,
+  ativo: camposAnuncio.ativo.default(true),
+  ordem: camposAnuncio.ordem.default(0),
+  // Declaração obrigatória (CDC art. 37 § 2º; Resolução Conanda 163/2014).
+  naoDirigidoACriancas: z.literal(true, { error: 'Confirme que o anúncio não é dirigido a crianças' }),
+});
+
+const anuncioAlterarSchema = z
+  .object(Object.fromEntries(Object.entries(camposAnuncio).map(([k, v]) => [k, v.optional()])))
+  .refine((d) => Object.values(d).some((v) => v !== undefined), 'Nada para alterar');
+
+/** Anúncios (só ADMIN). Sem excluir: desativar tira do ar e mantém o registro. */
+export function criarAnunciosController(relogio = () => new Date()) {
+  return {
+    async listar(req, res) {
+      res.json({ anuncios: await anuncioService.listarParaPlataforma(relogio()) });
+    },
+    async enviarImagem(req, res) {
+      res.status(201).json(await anuncioService.enviarImagem(req.body, relogio()));
+    },
+    async criar(req, res) {
+      const dados = validar(anuncioCriarSchema, req.body ?? {});
+      res.status(201).json({ anuncio: await anuncioService.criar(dados, req.usuario.id, relogio()) });
+    },
+    async alterar(req, res) {
+      const { id } = validar(idSchema, req.params);
+      const dados = Object.fromEntries(Object.entries(validar(anuncioAlterarSchema, req.body ?? {})).filter(([, v]) => v !== undefined));
+      res.json({ anuncio: await anuncioService.alterar(id, dados, relogio()) });
+    },
+  };
 }

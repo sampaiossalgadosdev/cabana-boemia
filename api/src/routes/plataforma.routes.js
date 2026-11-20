@@ -9,13 +9,16 @@ import * as c from '../controllers/plataforma.controller.js';
  * - Lojas: listar, criar (com turnos iniciais opcionais), editar e criar o DONO de cada uma.
  * - Bairros da cidade: a lista única que todas as lojas usam (o DONO só escolhe
  *   os da área de entrega dele, com a taxa, em /retaguarda/bairros).
+ * - Anúncios do carrossel "Patrocinado" do app (registro da veiculação; sem excluir).
  * - Solicitações de exclusão de conta da página pública /excluir-conta (a
  *   plataforma é a controladora dos dados; atendidas à mão pelo ADMIN).
  */
 /** Corpo cru da imagem (até 500 KB; o tipo é conferido pelos bytes no service). */
 export const corpoImagem = () => express.raw({ type: () => true, limit: '520kb' });
 
-export function criarPlataformaRoutes() {
+/** @param {{ relogio?: () => Date }} [opcoes] */
+export function criarPlataformaRoutes({ relogio } = {}) {
+  const anuncios = c.criarAnunciosController(relogio);
   const r = Router();
   r.use((req, res, next) => {
     res.set('Cache-Control', 'no-store');
@@ -30,6 +33,10 @@ export function criarPlataformaRoutes() {
   r.get('/bairros', assincrono(c.listarBairros));
   r.post('/bairros', assincrono(c.criarBairro));
   r.patch('/bairros/:id', assincrono(c.alterarBairro));
+  r.get('/anuncios', assincrono(anuncios.listar));
+  r.post('/anuncios/imagens', corpoImagem(), assincrono(anuncios.enviarImagem));
+  r.post('/anuncios', assincrono(anuncios.criar));
+  r.patch('/anuncios/:id', assincrono(anuncios.alterar));
   r.get('/solicitacoes-exclusao', assincrono(c.listarSolicitacoesExclusao));
   r.patch('/solicitacoes-exclusao/:id/atendida', assincrono(c.marcarSolicitacaoAtendida));
   return r;

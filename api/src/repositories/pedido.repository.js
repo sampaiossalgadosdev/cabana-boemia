@@ -102,10 +102,6 @@ export async function proximoNumeroDoDia(lojaId, dia, db = prisma) {
   return ultimo;
 }
 
-/** Bairro da loja (de outra loja = null). */
-export function buscarBairro(lojaId, id, db = prisma) {
-  return db.bairro.findFirst({ where: { id, lojaId } });
-}
 
 export function criarPedido(dados, db = prisma) {
   return db.pedido.create({ data: dados, select: { id: true } });

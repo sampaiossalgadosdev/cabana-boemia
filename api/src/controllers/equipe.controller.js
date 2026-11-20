@@ -257,7 +257,7 @@ export function criarEquipeController(relogio = () => new Date()) {
 
     async buscarClientes(req, res) {
       const { busca } = validar(buscaSchema, req.query);
-      res.json({ clientes: await equipeService.buscarClientes(busca) });
+      res.json({ clientes: await equipeService.buscarClientes(req.lojaId, busca) });
     },
 
     async criarCliente(req, res) {
@@ -266,7 +266,7 @@ export function criarEquipeController(relogio = () => new Date()) {
 
     async atualizarCliente(req, res) {
       const { id } = validar(idSchema, req.params);
-      res.json({ cliente: await equipeService.atualizarCliente(id, validar(clienteEdicaoSchema, req.body ?? {})) });
+      res.json({ cliente: await equipeService.atualizarCliente(req.lojaId, id, validar(clienteEdicaoSchema, req.body ?? {})) });
     },
 
     async adicionarEndereco(req, res) {

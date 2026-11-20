@@ -20,9 +20,6 @@ export function criarRetaguardaRoutes({ relogio } = {}) {
   });
   r.use(autenticar, exigirPapel('DONO'), lojaDaEquipe);
   r.get('/caixas', assincrono(c.caixas));
-  // Pedidos de exclusão de conta feitos pela página /excluir-conta (tela na retaguarda: pendente).
-  r.get('/solicitacoes-exclusao', assincrono(c.listarSolicitacoesExclusao));
-  r.patch('/solicitacoes-exclusao/:id/atendida', assincrono(c.marcarSolicitacaoAtendida));
   r.get('/relatorios/dia', assincrono(c.relatorioDia));
   r.post('/relatorios/dia/imprimir', assincrono(c.imprimirRelatorioDia));
 
@@ -43,7 +40,9 @@ export function criarRetaguardaRoutes({ relogio } = {}) {
   r.get('/turnos', assincrono(c.listarTurnos));
   r.put('/turnos/:id/horarios', assincrono(c.definirHorarios));
 
+  // Área de entrega da loja (bairros da lista da cidade + taxa); `:id` = id do bairro.
   r.get('/bairros', assincrono(c.listarBairros));
+  r.get('/bairros/cidade', assincrono(c.bairrosDaCidade));
   r.post('/bairros', assincrono(c.criarBairro));
   r.patch('/bairros/:id', assincrono(c.alterarBairro));
 

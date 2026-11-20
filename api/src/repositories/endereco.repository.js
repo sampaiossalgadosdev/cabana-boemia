@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { SELECT_BAIRRO_ENDERECO } from '../services/bairro.service.js';
 
 const SELECT = {
   id: true,
@@ -7,7 +8,7 @@ const SELECT = {
   complemento: true,
   referencia: true,
   principal: true,
-  bairro: { select: { id: true, nome: true, taxaCentavos: true, ativo: true } },
+  bairro: SELECT_BAIRRO_ENDERECO, // bairro da cidade + áreas (o service mostra pela loja)
 };
 
 export function listarDoCliente(clienteId, db = prisma) {
@@ -55,6 +56,7 @@ export function maisRecente(clienteId, db = prisma) {
   });
 }
 
+/** Bairro da cidade (vale para qualquer loja). */
 export function buscarBairro(id, db = prisma) {
   return db.bairro.findUnique({ where: { id } });
 }

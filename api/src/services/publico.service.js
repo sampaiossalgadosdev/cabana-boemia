@@ -5,6 +5,7 @@ import { horaViradaDe } from './diaOperacional.service.js';
 import * as publicoRepo from '../repositories/publico.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as lojaService from './loja.service.js';
+import * as bairroService from './bairro.service.js';
 import { calcularTurnoAtivo, calcularProximaAbertura } from './turno.service.js';
 
 /** Máximo por linha de pedido (itemPedidoSchema) e na sacola do site. */
@@ -96,8 +97,9 @@ export async function cardapio(lojaId, agora = new Date()) {
   return { ...base, categorias };
 }
 
+/** Onde a loja entrega agora (área ativa, bairro ativo na cidade): `{ id, nome, taxaCentavos }`. */
 export function bairros(lojaId) {
-  return publicoRepo.listarBairrosAtivos(lojaId);
+  return bairroService.listarOndeEntrega(lojaId);
 }
 
 export async function config(lojaId) {

@@ -12,6 +12,7 @@ import * as lojaService from './loja.service.js';
 import * as equipeRepo from '../repositories/equipe.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoService from './endereco.service.js';
+import { bairroParaLoja } from './bairro.service.js';
 import { OPCOES_TRANSACAO, pedidoDaEquipe, STATUS_ABERTOS, ehDaLoja } from './pedido.service.js';
 import { exigirCaixaAberto } from './caixa.service.js';
 import { calcularTempoEstimado, manualDeHoje, saldoDisponivel, temSaldo } from './publico.service.js';
@@ -110,10 +111,11 @@ export async function definirTempoEstimado(lojaId, minutos, agora = new Date()) 
 export const BUSCA_LIMITE = 10;
 
 /**
- * Cliente com endereços (principal primeiro) e a taxa de cada bairro.
+ * Cliente com endereços (principal primeiro) e o bairro de cada um visto pela
+ * loja (taxa dela; `ativo` = a loja entrega lá).
  * `doSite`: cadastro feito pelo login do Google (nome e e-mail são do cliente).
  */
-function clienteDaEquipe(c) {
+function clienteDaEquipe(c, lojaId) {
   return {
     id: c.id,
     nome: c.nome,
@@ -131,15 +133,15 @@ function clienteDaEquipe(c) {
       cidade: e.cidade ?? null,
       estado: e.estado ?? null,
       principal: e.principal,
-      bairro: e.bairro,
+      bairro: bairroParaLoja(e.bairro, lojaId),
     })),
   };
 }
 
-const clienteJaExiste = (existente) =>
+const clienteJaExiste = (existente, lojaId) =>
   new ErroHttp(409, `Já existe cliente com este telefone: ${existente.nome}`, {
     codigo: 'CLIENTE_JA_EXISTE',
-    detalhes: { cliente: clienteDaEquipe(existente) },
+    detalhes: { cliente: clienteDaEquipe(existente, lojaId) },
   });
 
 const clienteNaoEncontrado = () => new ErroHttp(404, 'Cliente não encontrado', { codigo: 'NAO_ENCONTRADO' });
@@ -149,13 +151,13 @@ const clienteNaoEncontrado = () => new ErroHttp(404, 'Cliente não encontrado', 
  * coluna nomeBusca), ou por trecho do telefone (a partir de 3 dígitos).
  * @param {string} busca já com trim e pelo menos 2 caracteres
  */
-export async function buscarClientes(busca) {
+export async function buscarClientes(lojaId, busca) {
   const digitos = busca.replace(/\D/g, '');
   const clientes = await equipeRepo.buscarClientes(
     { termo: paraBusca(busca), digitos: digitos.length >= 3 ? digitos : null },
     BUSCA_LIMITE,
   );
-  return clientes.map(clienteDaEquipe);
+  return clientes.map((c) => clienteDaEquipe(c, lojaId));
 }
 
 /**
@@ -165,18 +167,15 @@ export async function buscarClientes(busca) {
  */
 export async function criarCliente(lojaId, { nome, telefone, email = null, observacao = null, endereco = null }) {
   const existente = await equipeRepo.buscarClientePorTelefone(telefone);
-  if (existente) throw clienteJaExiste(existente);
+  if (existente) throw clienteJaExiste(existente, lojaId);
   const id = await prisma.$transaction(async (tx) => {
-    if (endereco) {
-      // O cadastro do cliente é único entre lojas; o bairro do endereço é o da loja que lança.
-      const bairro = await pedidoRepo.buscarBairro(lojaId, endereco.bairroId, tx);
-      if (!bairro?.ativo) throw new ErroHttp(422, 'Não entregamos neste bairro', { codigo: 'BAIRRO_INVALIDO' });
-    }
+    // Cadastro único entre lojas: o endereço aponta para um bairro da cidade.
+    if (endereco) await enderecoService.garantirBairroAtivo(endereco.bairroId, tx);
     const cliente = await equipeRepo.criarCliente({ nome, telefone, email, observacao }, tx);
     if (endereco) await tx.endereco.create({ data: { ...endereco, clienteId: cliente.id, principal: true } });
     return cliente.id;
   });
-  return clienteDaEquipe(await equipeRepo.buscarClientePorId(id));
+  return clienteDaEquipe(await equipeRepo.buscarClientePorId(id), lojaId);
 }
 
 /**
@@ -184,7 +183,7 @@ export async function criarCliente(lojaId, { nome, telefone, email = null, obser
  * cliente e não mudam aqui; o telefone só é preenchido se estiver vazio; a
  * observação (anotação da equipe) muda sempre. Telefone de outro cliente = 409.
  */
-export async function atualizarCliente(id, { nome, telefone, email = null, observacao = null }) {
+export async function atualizarCliente(lojaId, id, { nome, telefone, email = null, observacao = null }) {
   const atual = await equipeRepo.buscarClientePorId(id);
   if (!atual) throw clienteNaoEncontrado();
   const dados = { observacao };
@@ -192,24 +191,24 @@ export async function atualizarCliente(id, { nome, telefone, email = null, obser
   else if (!atual.telefone) dados.telefone = telefone;
   if (dados.telefone && dados.telefone !== atual.telefone) {
     const outro = await equipeRepo.buscarClientePorTelefone(dados.telefone, undefined, id);
-    if (outro) throw clienteJaExiste(outro);
+    if (outro) throw clienteJaExiste(outro, lojaId);
   }
   await equipeRepo.atualizarCliente(id, dados);
-  return clienteDaEquipe(await equipeRepo.buscarClientePorId(id));
+  return clienteDaEquipe(await equipeRepo.buscarClientePorId(id), lojaId);
 }
 
 /** Endereço novo para cliente existente (vira o principal: é para onde vai agora). */
 export async function adicionarEndereco(lojaId, clienteId, endereco) {
   if (!(await equipeRepo.buscarClientePorId(clienteId))) throw clienteNaoEncontrado();
   await enderecoService.criar(clienteId, { ...endereco, principal: true }, { lojaId });
-  return clienteDaEquipe(await equipeRepo.buscarClientePorId(clienteId));
+  return clienteDaEquipe(await equipeRepo.buscarClientePorId(clienteId), lojaId);
 }
 
 /** Corrige um endereço do cliente (de outro cliente = 404); vira o principal, como o novo. */
 export async function atualizarEndereco(lojaId, clienteId, enderecoId, endereco) {
   if (!(await equipeRepo.buscarClientePorId(clienteId))) throw clienteNaoEncontrado();
   await enderecoService.atualizar(clienteId, enderecoId, { ...endereco, principal: true }, { lojaId });
-  return clienteDaEquipe(await equipeRepo.buscarClientePorId(clienteId));
+  return clienteDaEquipe(await equipeRepo.buscarClientePorId(clienteId), lojaId);
 }
 
 // ───────── Cardápio do PDV ─────────

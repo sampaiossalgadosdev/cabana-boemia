@@ -32,10 +32,4 @@ export function listarProdutosDoSite(lojaId, turnoId, { somenteDisponiveisHoje =
   });
 }
 
-export function listarBairrosAtivos(lojaId, db = prisma) {
-  return db.bairro.findMany({
-    where: { lojaId, ativo: true },
-    select: { id: true, nome: true, taxaCentavos: true },
-    orderBy: { nome: 'asc' },
-  });
-}
+

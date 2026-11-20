@@ -22,6 +22,7 @@ import * as lojaRepo from '../repositories/loja.repository.js';
 import { calcularTurnoAtivo } from './turno.service.js';
 import { calcularTempoEstimado } from './publico.service.js';
 import { garantirTelefone } from './cliente.service.js';
+import { taxaDaLoja } from './bairro.service.js';
 
 export const CANAIS = ['SITE', 'WHATSAPP', 'SALAO'];
 export const FORMAS_PAGAMENTO = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'];
@@ -507,17 +508,15 @@ async function criarNaTransacao(tx, d) {
     });
   }
 
-  // 3. Taxa de entrega pelo bairro (do banco), que precisa ser atendido pela loja.
+  // 3. Taxa de entrega: a da área de entrega da loja para o bairro do endereço
+  //    (bairro da cidade). A loja não entrega lá = 422 BAIRRO_FORA_DA_AREA.
+  const config = await lojaRepo.buscarPorId(d.lojaId, tx);
   let bairro = null;
-  if (d.endereco) {
-    bairro = await pedidoRepo.buscarBairro(d.lojaId, d.endereco.bairroId, tx);
-    if (!bairro?.ativo) throw new ErroHttp(422, 'Não entregamos neste bairro', { codigo: 'BAIRRO_INVALIDO' });
-  }
+  if (d.endereco) bairro = await taxaDaLoja(d.lojaId, d.endereco.bairroId, { lojaNome: config?.nome }, tx);
 
   // 4. Preços e totais recalculados; pagamento conferido contra o total do servidor.
   //    Frete grátis (configuração da loja): subtotal dos itens >= mínimo zera a
   //    taxa. Site sempre; WhatsApp só com `freteGratisWhatsapp` (padrão ligado). O site nunca manda taxa.
-  const config = await lojaRepo.buscarPorId(d.lojaId, tx);
   const freteGratis = freteGratisDaConfig(config, { canal: d.canal });
   const doItens = calcularValores(d.itens, produtosPorId);
   const taxa = bairro ? taxaDeEntrega(bairro.taxaCentavos, doItens.subtotalCentavos, freteGratis) : 0;

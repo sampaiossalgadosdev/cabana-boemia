@@ -97,10 +97,20 @@ export const api = {
     listar: () => get('/retaguarda/turnos'),
     definirHorarios: (id, horarios) => put(`/retaguarda/turnos/${id}/horarios`, { horarios }),
   },
+  // Área de entrega da loja (`id` = id do bairro da cidade).
   bairros: {
     listar: () => get('/retaguarda/bairros'),
+    daCidade: () => get('/retaguarda/bairros/cidade'),
     criar: (dados) => post('/retaguarda/bairros', dados),
     alterar: (id, dados) => patch(`/retaguarda/bairros/${id}`, dados),
+  },
+  // Só ADMIN (plataforma).
+  plataforma: {
+    bairros: {
+      listar: () => get('/plataforma/bairros'),
+      criar: (dados) => post('/plataforma/bairros', dados),
+      alterar: (id, dados) => patch(`/plataforma/bairros/${id}`, dados),
+    },
   },
   estoque: {
     obter: () => get('/retaguarda/estoque'),

@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { SELECT_BAIRRO_ENDERECO } from '../services/bairro.service.js';
 
 const SELECT_ENDERECO = {
   id: true,
@@ -10,7 +11,7 @@ const SELECT_ENDERECO = {
   cidade: true,
   estado: true,
   principal: true,
-  bairro: { select: { id: true, nome: true, taxaCentavos: true, ativo: true } },
+  bairro: SELECT_BAIRRO_ENDERECO, // bairro da cidade + áreas (o service mostra pela loja)
 };
 
 export const SELECT_CLIENTE = {

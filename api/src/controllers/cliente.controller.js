@@ -108,7 +108,7 @@ export function criarClienteController(
     },
 
     async listarEnderecos(req, res) {
-      res.json({ enderecos: await enderecoService.listar(req.cliente.id) });
+      res.json({ enderecos: await enderecoService.listar(req.cliente.id, { lojaId: req.lojaId }) });
     },
 
     async criarEndereco(req, res) {

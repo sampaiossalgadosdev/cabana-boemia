@@ -10,7 +10,6 @@ import * as estoqueService from '../services/estoque.service.js';
 import * as configuracaoService from '../services/configuracao.service.js';
 import * as turnoService from '../services/turno.service.js';
 import * as relatorioService from '../services/relatorio.service.js';
-import * as solicitacaoRepo from '../repositories/solicitacaoExclusao.repository.js';
 
 // ───────── Schemas ─────────
 
@@ -38,13 +37,14 @@ const categoriaAlterarSchema = z
   .object({ nome: nome(60).optional(), ordem: ordem.optional(), ativo: ativo.optional() })
   .superRefine(naoVazio);
 
+/** Área de entrega: um bairro da lista da cidade + a taxa da loja (o nome é do ADMIN). */
 const bairroCriarSchema = z.object({
-  nome: nome(80),
+  bairroId: z.number({ error: 'Escolha o bairro' }).int().positive('Escolha o bairro'),
   taxaCentavos: centavos('Taxa inválida'),
   ativo: ativo.default(true),
 });
 const bairroAlterarSchema = z
-  .object({ nome: nome(80).optional(), taxaCentavos: centavos('Taxa inválida').optional(), ativo: ativo.optional() })
+  .object({ taxaCentavos: centavos('Taxa inválida').optional(), ativo: ativo.optional() })
   .superRefine(naoVazio);
 
 const idsUnicos = (lista, ctx, campo) => {
@@ -200,19 +200,6 @@ const id = (req) => validar(idSchema, req.params).id;
 /** @param {() => Date} [relogio] fonte do "agora" (injetável nos testes) */
 export function criarRetaguardaController(relogio = () => new Date()) {
   return {
-    /** Pedidos de exclusão de conta da página pública /excluir-conta. */
-    async listarSolicitacoesExclusao(req, res) {
-      res.json(await solicitacaoRepo.listar());
-    },
-
-    async marcarSolicitacaoAtendida(req, res) {
-      const { id } = validar(idSchema, req.params);
-      if (!(await solicitacaoRepo.marcarAtendida(id))) {
-        throw new ErroHttp(404, 'Solicitação não encontrada ou já atendida', { codigo: 'NAO_ENCONTRADO' });
-      }
-      res.status(204).end();
-    },
-
     /** Caixas abertos no dia local, com esperado, contado, diferença e totais por forma. */
     async caixas(req, res) {
       const { data } = validar(caixasSchema, req.query);
@@ -275,6 +262,10 @@ export function criarRetaguardaController(relogio = () => new Date()) {
     // Bairros
     async listarBairros(req, res) {
       res.json({ bairros: await bairroService.listar(req.lojaId) });
+    },
+    /** Bairros da cidade que a loja ainda pode acrescentar à área de entrega. */
+    async bairrosDaCidade(req, res) {
+      res.json({ bairros: await bairroService.disponiveisParaLoja(req.lojaId) });
     },
     async criarBairro(req, res) {
       res.status(201).json({ bairro: await bairroService.criar(req.lojaId, validar(bairroCriarSchema, req.body)) });

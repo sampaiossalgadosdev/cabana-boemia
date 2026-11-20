@@ -161,7 +161,7 @@ function Estrutura({ usuario, aoSair }) {
 
       <main className="conteudo">
         <div className="pagina">
-          <Tela ir={ir} />
+          <Tela ir={ir} usuario={usuario} />
         </div>
       </main>
     </div>

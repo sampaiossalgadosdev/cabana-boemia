@@ -147,7 +147,7 @@ export default function Perfil() {
     <View style={s.links}>
       <Botao titulo="Política de privacidade" variante="texto" onPress={() => Linking.openURL(URL_PRIVACIDADE)} />
       <Botao titulo="Termos de uso" variante="texto" onPress={() => Linking.openURL(URL_TERMOS)} />
-      <Botao titulo="Sobre o Delivery Abatiá" variante="texto" onPress={() => router.push('/sobre')} />
+      <Botao titulo="Sobre o Delivery do Batiá" variante="texto" onPress={() => router.push('/sobre')} />
     </View>
   );
 
@@ -247,7 +247,7 @@ export default function Perfil() {
           <Text style={s.tituloCartao}>Comunicações</Text>
           <View style={s.linhaSwitch}>
             <Text style={[s.valor, { flex: 1 }]} nativeID="rotuloMarketing">
-              Quero receber ofertas e novidades das lojas e do Delivery Abatiá
+              Quero receber ofertas e novidades das lojas e do Delivery do Batiá
             </Text>
             <Switch
               value={Boolean(cliente.marketing)}

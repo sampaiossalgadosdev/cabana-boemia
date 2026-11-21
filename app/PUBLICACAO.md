@@ -1,4 +1,4 @@
-# Publicar o app Delivery Abatiá (Google Play e App Store)
+# Publicar o app Delivery do Batiá (Google Play e App Store)
 
 Passo a passo de build, envio, versão e dos formulários de privacidade das lojas. O login (Google Cloud, Apple, chaves) está em [`CONFIGURACAO_LOGIN.md`](CONFIGURACAO_LOGIN.md); faça aquele antes do primeiro envio.
 
@@ -40,7 +40,7 @@ GOOGLE_IOS_URL_SCHEME=com.googleusercontent.apps.XXXX npx eas-cli@latest build -
 
 ### Google Play
 
-1. **O primeiro AAB vai à mão** (o Google exige): Play Console › Delivery Abatiá › Testes › Teste interno (ou fechado) › Criar versão › enviar o `.aab` baixado do EAS. Aceite o **Play App Signing** (o Google guarda a chave final; a do EAS vira chave de upload).
+1. **O primeiro AAB vai à mão** (o Google exige): Play Console › Delivery do Batiá › Testes › Teste interno (ou fechado) › Criar versão › enviar o `.aab` baixado do EAS. Aceite o **Play App Signing** (o Google guarda a chave final; a do EAS vira chave de upload).
 2. Depois do primeiro, pelo EAS:
    ```bash
    npx eas-cli@latest submit -p android --latest
@@ -128,7 +128,7 @@ App Store Connect › App › Privacidade do app:
 
 ### Google Play
 
-**Nome do app** (até 30): `Delivery Abatiá`
+**Nome do app** (até 30): `Delivery do Batiá`
 
 **Descrição curta** (até 80):
 
@@ -136,7 +136,7 @@ App Store Connect › App › Privacidade do app:
 
 **Descrição completa** (até 4000):
 
-> O Delivery Abatiá reúne as lanchonetes e restaurantes de Abatiá-PR num app só. Veja o cardápio de cada loja, monte sua sacola e receba em casa. O pagamento é feito na entrega, direto com a loja: Pix, dinheiro ou cartão.
+> O Delivery do Batiá reúne as lanchonetes e restaurantes de Abatiá-PR num app só. Veja o cardápio de cada loja, monte sua sacola e receba em casa. O pagamento é feito na entrega, direto com a loja: Pix, dinheiro ou cartão.
 >
 > COMO FUNCIONA
 > • Escolha a loja: o início mostra quem está aberto agora e quando cada uma abre.
@@ -165,7 +165,7 @@ App Store Connect › App › Privacidade do app:
 
 ### App Store
 
-- **Nome** (30): `Delivery Abatiá`
+- **Nome** (30): `Delivery do Batiá`
 - **Subtítulo** (30): `Lojas de Abatiá na sua casa`
 - **Palavras-chave** (100): `delivery,abatiá,lanche,pizza,marmita,restaurante,lanchonete,pedido,entrega,comida`
 - **Texto promocional** (170): `Peça das lanchonetes e restaurantes de Abatiá-PR e pague na entrega, com Pix, dinheiro ou cartão.`

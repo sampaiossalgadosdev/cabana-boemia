@@ -66,10 +66,10 @@ export const temaCabana = {
 };
 
 /**
- * Tema padrão do app (vitrine, abas, login): Delivery Abatiá, com as cores do
+ * Tema padrão do app (vitrine, abas, login): Delivery do Batiá, com as cores do
  * ícone/splash provisórios (as mesmas da Cabana) e sem logo (mostra o nome).
  */
-export const temaPadrao = { ...temaCabana, id: 'delivery-abatia', nome: 'Delivery Abatiá', logo: null };
+export const temaPadrao = { ...temaCabana, id: 'delivery-abatia', nome: 'Delivery do Batiá', logo: null };
 
 /**
  * Tema de uma loja (página da loja, produto, sacola e checkout): cor primária

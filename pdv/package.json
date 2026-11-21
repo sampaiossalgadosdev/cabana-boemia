@@ -1,10 +1,10 @@
 {
   "name": "@restaurante/pdv",
-  "productName": "PDV do Abatiá",
+  "productName": "PDV do Batiá",
   "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "PDV do balcão das lojas do Delivery Abatiá",
+  "description": "PDV do balcão das lojas do Delivery do Batiá",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -29,5 +29,5 @@
     "koffi": "3.3.8",
     "socket.io-client": "4.8.4"
   },
-  "author": "Delivery Abatiá"
+  "author": "Delivery do Batiá"
 }

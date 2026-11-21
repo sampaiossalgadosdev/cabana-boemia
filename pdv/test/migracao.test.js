@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { MARCA_IMPORTACAO, PASTA_DO_PDV_ANTIGO, importarDoPdvAntigo } from '../src/main/migracao.js';
+import { MARCA_IMPORTACAO, PASTA_DE_DADOS, PASTA_DO_PDV_ANTIGO, importarDoPdvAntigo } from '../src/main/migracao.js';
 
 const pasta = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pdv-migracao-'));
 
@@ -67,6 +67,18 @@ describe('importar a configuração do programa antigo ("Cabana Boemia PDV")', (
     assert.equal(r.importou, false);
     assert.equal(r.motivo, 'erro');
     assert.ok(!fs.existsSync(path.join(nova, 'config.json')));
+  });
+
+  test('pasta de dados fixa em "PDV do Abatiá", definida antes de qualquer uso do userData', () => {
+    assert.equal(PASTA_DE_DADOS, 'PDV do Abatiá');
+    const main = fs.readFileSync(new URL('../src/main/index.js', import.meta.url), 'utf8');
+    const fixa = main.indexOf("app.setPath('userData', path.join(app.getPath('appData'), PASTA_DE_DADOS))");
+    assert.ok(fixa > 0, 'o main fixa o userData');
+    assert.ok(fixa < main.indexOf("getPath('userData')"), 'antes da importação');
+    assert.ok(fixa < main.indexOf('requestSingleInstanceLock'), 'antes da instância única');
+    // O nome exibido mudou; a pasta, não.
+    const pacote = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    assert.equal(pacote.productName, 'PDV do Batiá');
   });
 
   test('instalador: tira o "abrir com o Windows" do antigo ao instalar e o do novo ao desinstalar', () => {

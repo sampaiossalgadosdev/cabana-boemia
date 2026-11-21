@@ -29,7 +29,7 @@ export function TelaConfiguracao({ apiUrl, sugestao = '', aoSalvar, aoVoltar }) 
       <form className="cartao-login" onSubmit={salvar}>
         <Logo className="cartao-login__logo" />
         <h1 className="cartao-login__titulo">Servidor do PDV</h1>
-        <p className="cartao-login__texto">Endereço do servidor do Delivery Abatiá. Confira e salve.</p>
+        <p className="cartao-login__texto">Endereço do servidor do Delivery do Batiá. Confira e salve.</p>
         <label className="campo">
           <span>Endereço do servidor</span>
           <input type="url" required autoFocus placeholder="https://cabana.managerpix.com.br" value={url}

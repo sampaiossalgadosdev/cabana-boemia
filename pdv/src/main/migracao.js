@@ -1,5 +1,5 @@
 /**
- * Primeiro uso do "PDV do Abatiá" num computador que tinha o programa antigo
+ * Primeiro uso do "PDV do Batiá" num computador que tinha o programa antigo
  * "Cabana Boemia PDV": importa a configuração dele para a Cabana não perder nada.
  * Sem electron aqui (testável com node:test); roda no topo do main, ANTES de o
  * Chromium iniciar (a chave da sessão cifrada é lida do "Local State" na partida).
@@ -17,6 +17,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+/**
+ * Pasta de dados deste PDV (em %APPDATA%), FIXA: é a do tempo em que o programa
+ * se chamava "PDV do Abatiá". O Electron montaria o userData com o nome do
+ * programa (productName, hoje "PDV do Batiá"); trocar o nome mudaria a pasta e o
+ * PDV perderia servidor, login (sessao.bin + "Local State"), impressora e o id do
+ * agente de impressão. Nunca mude este valor.
+ */
+export const PASTA_DE_DADOS = 'PDV do Abatiá';
 /** Nome da pasta de dados do programa antigo (em %APPDATA%). */
 export const PASTA_DO_PDV_ANTIGO = 'Cabana Boemia PDV';
 /** Arquivos importados, na ordem; só config.json é obrigatório. */

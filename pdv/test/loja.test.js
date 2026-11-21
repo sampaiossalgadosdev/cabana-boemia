@@ -64,13 +64,13 @@ describe('loja do PDV', () => {
     assert.equal((await loja.definirIdentidade({ nome: 'Zé', logoUrl: null })).logoDataUrl, null);
   });
 
-  test('tema: cor da loja; sem loja = Delivery Abatiá', () => {
+  test('tema: cor da loja; sem loja = Delivery do Batiá', () => {
     const t = temaDaLoja({ nome: 'Lanchonete do Zé', corPrimaria: '#3B82F6', logoDataUrl: 'data:x' });
     assert.equal(t.variaveis['--cor-primaria'], '#3B82F6');
     assert.equal(t.variaveis['--cor-primaria-texto'], '#111111', 'cor clara: texto escuro');
     assert.equal(t.titulo, 'Lanchonete do Zé · PDV');
     assert.equal(t.logo, 'data:x');
-    assert.equal(temaDaLoja(null).nome, 'Delivery Abatiá');
+    assert.equal(temaDaLoja(null).nome, 'Delivery do Batiá');
     assert.equal(temaDaLoja(null).logo, null);
   });
 

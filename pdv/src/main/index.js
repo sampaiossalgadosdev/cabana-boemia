@@ -16,7 +16,12 @@ import { criarImpressoraArquivo, criarImpressoraWindows } from './agente-impress
 import { carregarSpooler } from './agente-impressao/winspool.js';
 import { criarRegistro } from './registro.js';
 import { criarEstadoLoja } from './loja.js';
-import { PASTA_DO_PDV_ANTIGO, importarDoPdvAntigo } from './migracao.js';
+import { PASTA_DE_DADOS, PASTA_DO_PDV_ANTIGO, importarDoPdvAntigo } from './migracao.js';
+
+// Pasta de dados fixa (%APPDATA%\PDV do Abatiá), independente do nome exibido:
+// tem que vir antes de qualquer leitura do userData, da trava de instância
+// única e do Chromium iniciar (que lê o "Local State" daqui).
+app.setPath('userData', path.join(app.getPath('appData'), PASTA_DE_DADOS));
 
 const DEV = !app.isPackaged;
 /** Servidor de produção: já vem preenchido (editável) na primeira execução do app instalado. */
@@ -181,7 +186,7 @@ function criarJanela() {
     minWidth: 1024,
     minHeight: 640,
     show: false,
-    title: 'PDV do Abatiá',
+    title: 'PDV do Batiá',
     backgroundColor: '#FBF3E8',
     autoHideMenuBar: true,
     webPreferences: {

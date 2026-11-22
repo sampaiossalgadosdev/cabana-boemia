@@ -185,6 +185,11 @@ model Cliente {
   nomeBusca       String
   email           String?
   telefone        String?
+  /// Telefone confirmado por código (login com celular). Mudar o telefone desfaz.
+  /// Único entre os verificados: índice parcial "Cliente_telefone_verificado_key"
+  /// (só na migration telefone_verificado; o Prisma não declara índice parcial).
+  telefoneVerificado   Boolean   @default(false)
+  telefoneVerificadoEm DateTime?
   observacao      String?   @db.VarChar(300) // anotação da equipe (PDV)
   /// Versão dos termos/política do app aceita por último (null = nunca aceitou; o site não usa).
   termosVersao    String?   @db.VarChar(20)

@@ -34,3 +34,10 @@ export function dadosDaPlataforma(resposta) {
 
 /** Logado e sem o aceite da versão atual dos termos/política: o app pede antes de continuar. */
 export const precisaAceitar = (status, cliente) => status === 'logado' && Boolean(cliente?.precisaAceite);
+
+/**
+ * Logado sem nome (entrou só pelo celular): o app pede o nome antes de
+ * continuar, depois do aceite (que vem primeiro, por cima).
+ */
+export const precisaPedirNome = (status, cliente) =>
+  status === 'logado' && Boolean(cliente?.precisaNome) && !cliente?.precisaAceite;

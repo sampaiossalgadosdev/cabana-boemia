@@ -6,6 +6,7 @@ import { appleDisponivel } from '../login/provedores.js';
 import { URL_PRIVACIDADE, URL_TERMOS } from '../lib/links.js';
 import { useEstilos, useTema } from '../tema/tema.js';
 import { TextoErro, Titulo } from './formulario.js';
+import { EntrarComCelular } from './EntrarComCelular.js';
 
 function BotaoApple({ onPress, desabilitado }) {
   // Botão oficial (exigência das diretrizes da Apple); carregado só no iOS.
@@ -57,7 +58,7 @@ export function CaixaAceite({ marcada, onMudar }) {
 }
 
 /**
- * Login (checkout, Pedidos, Perfil): Google em todos; Apple só no iOS.
+ * Login (checkout, Pedidos, Perfil): Google e celular em todos; Apple só no iOS.
  * Os botões só funcionam com o aceite dos termos e da política marcado (a
  * versão aceita vai junto no login e fica registrada). Erros do login viram
  * texto na tela; cancelar não mostra nada.
@@ -70,16 +71,22 @@ export function EntrarCom({ titulo, texto }) {
   const [ocupado, setOcupado] = useState(null); // 'google' | 'apple'
   const [erro, setErro] = useState('');
   const [aceito, setAceito] = useState(false);
+  const [celular, setCelular] = useState(false); // fluxo "Entrar com celular" aberto
+
+  const avisoAceite = 'Para continuar, marque que leu e aceita os Termos de uso e a Política de privacidade.';
+  /** Aceite marcado? Senão mostra o aviso (o celular também exige, antes de pedir o código). */
+  const podeContinuar = () => {
+    if (aceito) return true;
+    setErro(avisoAceite);
+    return false;
+  };
 
   useEffect(() => {
     appleDisponivel().then(setApple);
   }, []);
 
   const entrar = async (qual) => {
-    if (!aceito) {
-      setErro('Para continuar, marque que leu e aceita os Termos de uso e a Política de privacidade.');
-      return;
-    }
+    if (!podeContinuar()) return;
     setErro('');
     setOcupado(qual);
     try {
@@ -101,17 +108,41 @@ export function EntrarCom({ titulo, texto }) {
           if (v) setErro('');
         }}
       />
-      <Pressable
-        onPress={() => entrar('google')}
-        disabled={Boolean(ocupado)}
-        accessibilityRole="button"
-        accessibilityState={{ busy: ocupado === 'google', disabled: !aceito }}
-        style={({ pressed }) => [s.google, pressed && s.googlePressionado, (ocupado || !aceito) && s.ocupado]}
-      >
-        <Ionicons name="logo-google" size={20} color={tema.cores.texto} />
-        <Text style={s.googleTexto}>{ocupado === 'google' ? 'Entrando…' : 'Continuar com Google'}</Text>
-      </Pressable>
-      {apple && <BotaoApple onPress={() => entrar('apple')} desabilitado={Boolean(ocupado)} />}
+      {celular ? (
+        <EntrarComCelular
+          podeContinuar={podeContinuar}
+          onVoltar={() => {
+            setCelular(false);
+            setErro('');
+          }}
+        />
+      ) : (
+        <>
+          <Pressable
+            onPress={() => entrar('google')}
+            disabled={Boolean(ocupado)}
+            accessibilityRole="button"
+            accessibilityState={{ busy: ocupado === 'google', disabled: !aceito }}
+            style={({ pressed }) => [s.google, pressed && s.googlePressionado, (ocupado || !aceito) && s.ocupado]}
+          >
+            <Ionicons name="logo-google" size={20} color={tema.cores.texto} />
+            <Text style={s.googleTexto}>{ocupado === 'google' ? 'Entrando…' : 'Continuar com Google'}</Text>
+          </Pressable>
+          {apple && <BotaoApple onPress={() => entrar('apple')} desabilitado={Boolean(ocupado)} />}
+          <Pressable
+            onPress={() => {
+              setErro('');
+              setCelular(true);
+            }}
+            disabled={Boolean(ocupado)}
+            accessibilityRole="button"
+            style={({ pressed }) => [s.google, s.celular, pressed && s.googlePressionado, (ocupado || !aceito) && s.ocupado]}
+          >
+            <Ionicons name="phone-portrait-outline" size={20} color={tema.cores.texto} />
+            <Text style={s.googleTexto}>Entrar com celular</Text>
+          </Pressable>
+        </>
+      )}
       <TextoErro>{erro}</TextoErro>
     </View>
   );
@@ -132,6 +163,7 @@ const criarEstilos = (t) =>
       backgroundColor: t.cores.superficie,
       marginTop: 8,
     },
+    celular: { marginTop: 0 },
     googlePressionado: { backgroundColor: t.cores.placeholder },
     ocupado: { opacity: 0.6 },
     googleTexto: { fontSize: t.fontes.tamanho.medio, fontWeight: t.fontes.peso.medio, color: t.cores.texto },

@@ -12,6 +12,7 @@ import { ClienteProvider } from '../estado/Cliente.js';
 import { UltimoPedidoProvider } from '../estado/UltimoPedido.js';
 import { TelaSemInternet } from '../componentes/TelaSemInternet.js';
 import { AceiteTermos } from '../componentes/AceiteTermos.js';
+import { PedirNome } from '../componentes/PedirNome.js';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -57,6 +58,7 @@ function Navegacao() {
         <Stack.Screen name="sobre" options={{ title: 'Sobre' }} />
       </Stack>
       <AceiteTermos />
+      <PedirNome />
     </>
   );
 }

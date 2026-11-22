@@ -199,7 +199,7 @@ export default function Perfil() {
           <Text style={s.tituloCartao}>Seus dados</Text>
           <Text style={s.rotulo}>Nome</Text>
           <Text style={s.valor}>{cliente.nome}</Text>
-          <Text style={s.rotulo}>{provedor === 'apple' ? 'E-mail (Apple)' : 'E-mail (Google)'}</Text>
+          <Text style={s.rotulo}>{provedor === 'apple' ? 'E-mail (Apple)' : provedor === 'google' ? 'E-mail (Google)' : 'E-mail'}</Text>
           <Text style={s.valor}>{cliente.email ?? '—'}</Text>
           <Text style={s.rotulo}>Telefone</Text>
           <Text style={s.valor}>{formatarTelefone(cliente.telefone)}</Text>

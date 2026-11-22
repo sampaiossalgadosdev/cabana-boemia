@@ -13,3 +13,6 @@ process.env.JWT_CLIENTE_SECRET = 'teste-cliente-secret-com-pelo-menos-32-caracte
 process.env.GOOGLE_CLIENT_ID = 'cliente-teste.apps.googleusercontent.com';
 process.env.BCRYPT_CUSTO = '4';
 process.env.PRISMA_HIDE_UPDATE_MESSAGE = '1';
+// Login com celular: cada teste passa o próprio verificador (o .env de dev pode ter PHONE_VERIFIER=test).
+process.env.PHONE_VERIFIER = '';
+process.env.PHONE_TEST_NUMBERS = '';

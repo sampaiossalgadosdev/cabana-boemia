@@ -5,7 +5,7 @@ import { prisma } from './lib/prisma.js';
 import { problemasNosSegredos } from './lib/tokens.js';
 import { credenciaisApple } from './lib/apple.js';
 import { emailDoTitular } from './lib/controlador.js';
-import { problemasNoVerificador } from './lib/verificadorTelefone.js';
+import { ehProducao, problemasNoVerificador } from './lib/verificadorTelefone.js';
 import { iniciarLimpezaDiaria } from './services/registroAcesso.service.js';
 
 // Falha cedo: sem segredos válidos a API subiria e só quebraria no primeiro login.
@@ -28,7 +28,15 @@ if (problemasTelefone.length) {
   process.exit(1);
 }
 if ((process.env.PHONE_VERIFIER ?? '').trim() === 'test') {
-  console.warn('Aviso: login com celular no modo TESTE (PHONE_VERIFIER=test): só os números de PHONE_TEST_NUMBERS, sem SMS.');
+  if (ehProducao()) {
+    console.warn(
+      '*** ATENÇÃO: login com celular no modo TESTE EM PRODUÇÃO (PHONE_TEST_EM_PRODUCAO=sim). Quem souber um número ' +
+        'e o código de PHONE_TEST_NUMBERS entra naquela conta. Apague PHONE_VERIFIER, PHONE_TEST_NUMBERS e ' +
+        'PHONE_TEST_EM_PRODUCAO antes de abrir o app ao público. ***',
+    );
+  } else {
+    console.warn('Aviso: login com celular no modo TESTE (PHONE_VERIFIER=test): só os números de PHONE_TEST_NUMBERS, sem SMS.');
+  }
 }
 
 if (!process.env.GOOGLE_CLIENT_ID) {

@@ -13,7 +13,9 @@ import { ErroHttp } from './erros.js';
  * PHONE_VERIFIER escolhe a implementação:
  *   vazio/ausente → desligado (todo envio responde "indisponível");
  *   "test"        → números e códigos fixos de PHONE_TEST_NUMBERS, sem SMS.
- *                   PROIBIDO em produção: a API não sobe (problemasNoVerificador).
+ *                   Em produção a API NÃO sobe, a menos que PHONE_TEST_EM_PRODUCAO=sim
+ *                   (liberação explícita para a fase de testes no Railway; apagar
+ *                   antes de abrir o app ao público).
  */
 
 export const VERIFICADORES = ['test'];
@@ -52,9 +54,12 @@ export function lerNumerosDeTeste(texto = '') {
   return { numeros, problemas };
 }
 
+/** Liberação explícita do verificador de teste em produção (fase de testes). Só "sim" vale. */
+export const testeLiberadoEmProducao = (env = process.env) => (env.PHONE_TEST_EM_PRODUCAO ?? '').trim().toLowerCase() === 'sim';
+
 /**
  * Motivos para a API não subir por causa do verificador (lista vazia = ok).
- * A trava principal: PHONE_VERIFIER=test em produção.
+ * A trava principal: PHONE_VERIFIER=test em produção sem PHONE_TEST_EM_PRODUCAO=sim.
  */
 export function problemasNoVerificador(env = process.env) {
   const qual = (env.PHONE_VERIFIER ?? '').trim();
@@ -62,8 +67,11 @@ export function problemasNoVerificador(env = process.env) {
   if (!VERIFICADORES.includes(qual)) {
     return [`PHONE_VERIFIER="${qual}" não existe (use: ${VERIFICADORES.join(', ')}; vazio = login com celular desligado)`];
   }
-  if (qual === 'test' && ehProducao(env)) {
-    return ['PHONE_VERIFIER=test é só para desenvolvimento: em produção qualquer um entraria com os números de teste. Apague a variável.'];
+  if (qual === 'test' && ehProducao(env) && !testeLiberadoEmProducao(env)) {
+    return [
+      'PHONE_VERIFIER=test é só para desenvolvimento: em produção qualquer um entraria com os números de teste. ' +
+        'Apague a variável (ou, só na fase de testes, libere de propósito com PHONE_TEST_EM_PRODUCAO=sim).',
+    ];
   }
   const { numeros, problemas } = lerNumerosDeTeste(env.PHONE_TEST_NUMBERS);
   if (problemas.length) return problemas;

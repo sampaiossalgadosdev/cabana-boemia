@@ -54,6 +54,13 @@ test('trava: PHONE_VERIFIER=test é recusado em produção (NODE_ENV ou ambiente
   assert.match(problemasNoVerificador({ ...teste, NODE_ENV: 'production' })[0], /só para desenvolvimento/);
   assert.match(problemasNoVerificador({ ...teste, RAILWAY_ENVIRONMENT_NAME: 'production' })[0], /só para desenvolvimento/);
   assert.deepEqual(problemasNoVerificador({ NODE_ENV: 'production' }), [], 'produção sem verificador: sobe (login com celular desligado)');
+  // liberação explícita da fase de testes: só "sim" vale
+  assert.deepEqual(problemasNoVerificador({ ...teste, NODE_ENV: 'production', PHONE_TEST_EM_PRODUCAO: 'sim' }), []);
+  assert.deepEqual(problemasNoVerificador({ ...teste, RAILWAY_ENVIRONMENT_NAME: 'production', PHONE_TEST_EM_PRODUCAO: ' SIM ' }), []);
+  for (const v of ['', 'true', '1', 'nao']) {
+    assert.equal(problemasNoVerificador({ ...teste, NODE_ENV: 'production', PHONE_TEST_EM_PRODUCAO: v }).length, 1, v);
+  }
+  assert.equal(criarVerificadorTelefone({ ...teste, NODE_ENV: 'production', PHONE_TEST_EM_PRODUCAO: 'sim' }).nome, 'test');
   assert.match(problemasNoVerificador({ PHONE_VERIFIER: 'firebase' })[0], /não existe/);
   assert.match(problemasNoVerificador({ PHONE_VERIFIER: 'test' })[0], /sem números/);
   assert.equal(ehProducao({ NODE_ENV: 'development' }), false);
@@ -98,6 +105,43 @@ test('server.js não sobe em produção com PHONE_VERIFIER=test: sai com código
     assert.doesNotMatch(saida, /API ouvindo/);
   }
 });
+
+test('server.js sobe em produção com PHONE_VERIFIER=test só com PHONE_TEST_EM_PRODUCAO=sim, e avisa', async () => {
+  const { codigo, saida } = await rodarServidorAteOuvir({
+    NODE_ENV: 'production',
+    PHONE_VERIFIER: 'test',
+    PHONE_TEST_NUMBERS: LISTA,
+    PHONE_TEST_EM_PRODUCAO: 'sim',
+  });
+  assert.notEqual(codigo, 1, saida);
+  assert.match(saida, /modo TESTE EM PRODUÇÃO/);
+  assert.match(saida, /API ouvindo/);
+});
+
+/** Roda o server.js até ele dizer que está ouvindo (ou sair) e encerra. */
+function rodarServidorAteOuvir(envExtra) {
+  const env = { ...process.env, PORT: '0', ...envExtra };
+  return new Promise((resolve) => {
+    const filho = spawn(process.execPath, [path.join(raizApi, 'src', 'server.js')], { env });
+    let saida = '';
+    let codigo = null;
+    const fim = () => {
+      clearTimeout(timer);
+      filho.kill();
+    };
+    const ler = (d) => {
+      saida += d;
+      if (/API ouvindo/.test(saida)) fim();
+    };
+    filho.stdout.on('data', ler);
+    filho.stderr.on('data', ler);
+    const timer = setTimeout(fim, 15_000);
+    filho.on('exit', (c) => {
+      codigo = c;
+      resolve({ codigo, saida });
+    });
+  });
+}
 
 // ───────────── Com banco: rotas ─────────────
 

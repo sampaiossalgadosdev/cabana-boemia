@@ -15,6 +15,7 @@ import * as enderecoService from './endereco.service.js';
 import { bairroParaLoja } from './bairro.service.js';
 import { OPCOES_TRANSACAO, pedidoDaEquipe, STATUS_ABERTOS, ehDaLoja } from './pedido.service.js';
 import { exigirCaixaAberto } from './caixa.service.js';
+import { desfazVerificacaoSeMudou } from './cliente.service.js';
 import { calcularTempoEstimado, manualDeHoje, saldoDisponivel, temSaldo } from './publico.service.js';
 
 export { saldoDisponivel };
@@ -197,7 +198,8 @@ export async function atualizarCliente(lojaId, id, { nome, telefone, email = nul
     const outro = await equipeRepo.buscarClientePorTelefone(dados.telefone, undefined, id);
     if (outro) throw clienteJaExiste(outro, lojaId);
   }
-  await equipeRepo.atualizarCliente(id, dados);
+  // Telefone trocado pelo PDV: o novo não foi confirmado por código.
+  await equipeRepo.atualizarCliente(id, { ...dados, ...desfazVerificacaoSeMudou(atual, dados.telefone) });
   return clienteDaEquipe(await equipeRepo.buscarClientePorId(id), lojaId);
 }
 

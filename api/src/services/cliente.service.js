@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma.js';
-import { ErroHttp } from '../lib/erros.js';
+import { ErroHttp, ehDuplicado } from '../lib/erros.js';
 import { gerarTokenCliente, gerarRefreshTokenCliente, hashRefreshTokenCliente } from '../lib/tokens.js';
 import * as clienteRepo from '../repositories/cliente.repository.js';
 import * as refreshRepo from '../repositories/refreshTokenCliente.repository.js';
@@ -24,6 +24,10 @@ export function clientePublico(c) {
     email: c.email,
     telefone: c.telefone,
     precisaTelefone: !c.telefone,
+    // Login com celular: telefone confirmado por código; quem entrou só pelo
+    // celular ainda não tem nome (o app pede logo depois do login).
+    telefoneVerificado: Boolean(c.telefoneVerificado),
+    precisaNome: !c.nome?.trim(),
     // App: termos/política aceitos (versão atual?) e marketing (opcional). O site ignora.
     termosVersao: c.termosVersao ?? null,
     precisaAceite: precisaAceite(c.termosVersao ?? null),
@@ -111,6 +115,37 @@ export async function entrarComApple({ appleId, email }, { nome, comRefresh = fa
   return aceiteNoLogin(await sessao(cliente, comRefresh), aceite, ip);
 }
 
+/**
+ * Login com celular (o código já foi conferido pelo verificador).
+ * `telefone` = 11 dígitos, como o banco guarda. Conta de quem tem o telefone:
+ * a que já o verificou; senão a mais antiga com esse telefone (cadastro do
+ * PDV ou do site), que passa a ter o telefone verificado; senão uma conta
+ * nova, sem nome (o app pede), com o telefone verificado. Mesma sessão do
+ * Google/Apple (refresh rotativo no app) e o mesmo aceite no login.
+ */
+export async function entrarComTelefone(telefone, { comRefresh = false, aceite, ip, agora = new Date() } = {}) {
+  const achar = async () => {
+    const existente = await clienteRepo.buscarParaLoginPorTelefone(telefone);
+    if (!existente) return clienteRepo.criarComTelefoneVerificado(telefone, agora);
+    if (existente.telefoneVerificado) return existente;
+    return clienteRepo.marcarTelefoneVerificado(existente.id, agora);
+  };
+  let cliente;
+  try {
+    cliente = await achar();
+  } catch (err) {
+    // Dois logins do mesmo número ao mesmo tempo: o índice único deixou só um
+    // verificar; o outro entra na conta que venceu.
+    if (!ehDuplicado(err)) throw err;
+    cliente = await achar();
+  }
+  return aceiteNoLogin(await sessao(cliente, comRefresh), aceite, ip);
+}
+
+/** Trocou o telefone: o novo ainda não foi confirmado por código. */
+export const desfazVerificacaoSeMudou = (atual, telefoneNovo) =>
+  telefoneNovo !== undefined && telefoneNovo !== atual?.telefone ? { telefoneVerificado: false, telefoneVerificadoEm: null } : {};
+
 const refreshInvalido = () =>
   new ErroHttp(401, 'Sessão expirada. Entre de novo.', { codigo: 'REFRESH_INVALIDO' });
 const refreshReutilizado = () =>
@@ -146,13 +181,23 @@ export async function sair(refreshToken) {
 }
 
 export async function atualizarPerfil(clienteId, { nome, telefone }) {
-  return clientePublico(await clienteRepo.atualizar(clienteId, { nome, telefone }));
+  const atual = await clienteRepo.buscarPorId(clienteId);
+  if (!atual) throw new ErroHttp(404, 'Conta não encontrada', { codigo: 'NAO_ENCONTRADO' });
+  return clientePublico(
+    await clienteRepo.atualizar(clienteId, { nome, telefone, ...desfazVerificacaoSeMudou(atual, telefone) }),
+  );
 }
 
-/** Regra do checkout: sem telefone não faz pedido. Usar antes de criar pedido do site. */
+/**
+ * Regra do checkout: sem telefone (ou sem nome, de quem entrou só pelo
+ * celular) não faz pedido: a loja precisa dos dois. Usar antes de criar pedido do site.
+ */
 export function garantirTelefone(cliente) {
   if (!cliente?.telefone) {
     throw new ErroHttp(422, 'Informe seu telefone para continuar', { codigo: 'TELEFONE_OBRIGATORIO' });
+  }
+  if (!cliente.nome?.trim()) {
+    throw new ErroHttp(422, 'Informe seu nome para continuar', { codigo: 'NOME_OBRIGATORIO' });
   }
 }
 

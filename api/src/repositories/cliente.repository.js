@@ -22,6 +22,26 @@ export function upsertPorAppleId(appleId, { criar, atualizar }, db = prisma) {
   });
 }
 
+/**
+ * Conta para o login com celular: a que já verificou o telefone (no máximo
+ * uma, pelo índice único parcial); senão a mais antiga com esse telefone.
+ */
+export function buscarParaLoginPorTelefone(telefone, db = prisma) {
+  return db.cliente.findFirst({
+    where: { telefone },
+    orderBy: [{ telefoneVerificado: 'desc' }, { id: 'asc' }],
+  });
+}
+
+/** Conta nova do login com celular: sem nome ainda (o app pede logo depois). */
+export function criarComTelefoneVerificado(telefone, agora, db = prisma) {
+  return db.cliente.create({ data: { nome: '', telefone, telefoneVerificado: true, telefoneVerificadoEm: agora } });
+}
+
+export function marcarTelefoneVerificado(id, agora, db = prisma) {
+  return db.cliente.update({ where: { id }, data: { telefoneVerificado: true, telefoneVerificadoEm: agora } });
+}
+
 export function atualizar(id, dados, db = prisma) {
   return db.cliente.update({ where: { id }, data: dados });
 }

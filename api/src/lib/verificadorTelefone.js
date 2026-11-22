@@ -101,7 +101,7 @@ export const verificadorDesligado = {
     throw indisponivel();
   },
   async conferirCodigo() {
-    return false;
+    throw indisponivel();
   },
 };
 

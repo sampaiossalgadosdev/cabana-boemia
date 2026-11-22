@@ -147,7 +147,7 @@ export default function Perfil() {
     <View style={s.links}>
       <Botao titulo="Política de privacidade" variante="texto" onPress={() => Linking.openURL(URL_PRIVACIDADE)} />
       <Botao titulo="Termos de uso" variante="texto" onPress={() => Linking.openURL(URL_TERMOS)} />
-      <Botao titulo="Sobre o Delivery Abatiá" variante="texto" onPress={() => router.push('/sobre')} />
+      <Botao titulo="Sobre o Delivery do Batiá" variante="texto" onPress={() => router.push('/sobre')} />
     </View>
   );
 
@@ -199,7 +199,7 @@ export default function Perfil() {
           <Text style={s.tituloCartao}>Seus dados</Text>
           <Text style={s.rotulo}>Nome</Text>
           <Text style={s.valor}>{cliente.nome}</Text>
-          <Text style={s.rotulo}>{provedor === 'apple' ? 'E-mail (Apple)' : 'E-mail (Google)'}</Text>
+          <Text style={s.rotulo}>{provedor === 'apple' ? 'E-mail (Apple)' : provedor === 'google' ? 'E-mail (Google)' : 'E-mail'}</Text>
           <Text style={s.valor}>{cliente.email ?? '—'}</Text>
           <Text style={s.rotulo}>Telefone</Text>
           <Text style={s.valor}>{formatarTelefone(cliente.telefone)}</Text>
@@ -247,7 +247,7 @@ export default function Perfil() {
           <Text style={s.tituloCartao}>Comunicações</Text>
           <View style={s.linhaSwitch}>
             <Text style={[s.valor, { flex: 1 }]} nativeID="rotuloMarketing">
-              Quero receber ofertas e novidades das lojas e do Delivery Abatiá
+              Quero receber ofertas e novidades das lojas e do Delivery do Batiá
             </Text>
             <Switch
               value={Boolean(cliente.marketing)}

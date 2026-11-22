@@ -28,7 +28,7 @@ export const TEMPOS_AGENTE = Object.freeze({
 });
 
 /** Topo do cupom até a API dizer o nome da loja (ex.: "Imprimir teste" antes da primeira busca). */
-const RESTAURANTE_PADRAO = 'PDV do Abatiá';
+const RESTAURANTE_PADRAO = 'PDV do Batiá';
 
 /** Cupom de teste (botão "Imprimir teste"): mostra acentos, negrito, grande e o corte. */
 export function trabalhoDeTeste(agora = new Date()) {

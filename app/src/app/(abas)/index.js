@@ -67,7 +67,7 @@ function BarraSacolaDaLoja() {
   );
 }
 
-/** Início: as lojas do Delivery Abatiá (logo, nome, aberta/fechada, próxima abertura), com busca. */
+/** Início: as lojas do Delivery do Batiá (logo, nome, aberta/fechada, próxima abertura), com busca. */
 export default function Vitrine() {
   const s = useEstilos(criarEstilos);
   const tema = useTema();
@@ -81,7 +81,7 @@ export default function Vitrine() {
   const topo = (
     <View style={[s.topo, { paddingTop: top + 12 }]}>
       <Text style={s.titulo} accessibilityRole="header">
-        Delivery Abatiá
+        Delivery do Batiá
       </Text>
       <View style={s.busca}>
         <Ionicons name="search" size={18} color={tema.cores.textoSuave} />

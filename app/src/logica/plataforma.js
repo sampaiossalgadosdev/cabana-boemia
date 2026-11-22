@@ -5,7 +5,7 @@
 
 /** Usado quando a API não responde (os links legais continuam funcionando). */
 export const PLATAFORMA_PADRAO = Object.freeze({
-  plataforma: { nome: 'Delivery Abatiá', responsavel: null, documento: null, cidade: 'Abatiá-PR', identificacao: null },
+  plataforma: { nome: 'Delivery do Batiá', responsavel: null, documento: null, cidade: 'Abatiá-PR', identificacao: null },
   contato: { email: null, formulario: '/excluir-conta' },
   documentos: { versao: null, vigencia: null, privacidade: '/privacidade-app', termos: '/termos-app', excluirConta: '/excluir-conta' },
 });
@@ -34,3 +34,10 @@ export function dadosDaPlataforma(resposta) {
 
 /** Logado e sem o aceite da versão atual dos termos/política: o app pede antes de continuar. */
 export const precisaAceitar = (status, cliente) => status === 'logado' && Boolean(cliente?.precisaAceite);
+
+/**
+ * Logado sem nome (entrou só pelo celular): o app pede o nome antes de
+ * continuar, depois do aceite (que vem primeiro, por cima).
+ */
+export const precisaPedirNome = (status, cliente) =>
+  status === 'logado' && Boolean(cliente?.precisaNome) && !cliente?.precisaAceite;

@@ -5,6 +5,7 @@ import { prisma } from './lib/prisma.js';
 import { problemasNosSegredos } from './lib/tokens.js';
 import { credenciaisApple } from './lib/apple.js';
 import { emailDoTitular } from './lib/controlador.js';
+import { ehProducao, problemasNoVerificador } from './lib/verificadorTelefone.js';
 import { iniciarLimpezaDiaria } from './services/registroAcesso.service.js';
 
 // Falha cedo: sem segredos válidos a API subiria e só quebraria no primeiro login.
@@ -16,6 +17,26 @@ if (problemas.length) {
     `Gere um valor com: node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`,
   );
   process.exit(1);
+}
+
+// Login com celular: verificador de TESTE em produção deixaria qualquer um entrar
+// com os números da lista. Não sobe (nem com outro valor inválido).
+const problemasTelefone = problemasNoVerificador();
+if (problemasTelefone.length) {
+  console.error('A API não vai iniciar (login com celular):');
+  for (const p of problemasTelefone) console.error(`  - ${p}`);
+  process.exit(1);
+}
+if ((process.env.PHONE_VERIFIER ?? '').trim() === 'test') {
+  if (ehProducao()) {
+    console.warn(
+      '*** ATENÇÃO: login com celular no modo TESTE EM PRODUÇÃO (PHONE_TEST_EM_PRODUCAO=sim). Quem souber um número ' +
+        'e o código de PHONE_TEST_NUMBERS entra naquela conta. Apague PHONE_VERIFIER, PHONE_TEST_NUMBERS e ' +
+        'PHONE_TEST_EM_PRODUCAO antes de abrir o app ao público. ***',
+    );
+  } else {
+    console.warn('Aviso: login com celular no modo TESTE (PHONE_VERIFIER=test): só os números de PHONE_TEST_NUMBERS, sem SMS.');
+  }
 }
 
 if (!process.env.GOOGLE_CLIENT_ID) {

@@ -10,6 +10,7 @@ const ClienteContext = createContext(null);
 /**
  * Sessão do cliente no app (o ClienteContext do site, com refresh):
  * - token (7 dias) + refreshToken (60 dias, rotativo) no cofre do aparelho;
+ *   provedor 'google' | 'apple' | 'telefone' (login com celular);
  * - ao abrir e ao voltar para o app, renova se o token vence em menos de um
  *   dia; um 401 numa chamada renova uma vez e repete;
  * - renovação "single-flight": a API trata refresh reapresentado como roubo;
@@ -147,6 +148,18 @@ export function ClienteProvider({ children }) {
     return concluirLogin(await api.entrarComApple({ identityToken, nonce, nome, aceite }), 'apple');
   }, [concluirLogin]);
 
+  /** Login com celular, passo 1: pede o código (verificador de teste: nada chega por SMS). */
+  const enviarCodigoTelefone = useCallback((telefone) => api.enviarCodigoTelefone(telefone), []);
+
+  /** Login com celular, passo 2: confere o código e entra (mesma sessão e mesmo aceite do Google). */
+  const entrarComTelefone = useCallback(
+    async (telefone, codigo) => {
+      const aceite = await versaoAceita();
+      return concluirLogin(await api.entrarComTelefone({ telefone, codigo, aceite }), 'telefone');
+    },
+    [concluirLogin],
+  );
+
   /** Aceite da versão atual (tela de aceite). 409 VERSAO_DESATUALIZADA: busca a versão nova e tenta de novo. */
   const aceitarTermos = useCallback(async () => {
     let versao = (await obterDadosDoApp()).documentos.versao;
@@ -209,6 +222,8 @@ export function ClienteProvider({ children }) {
       chamar,
       entrarComGoogle,
       entrarComApple,
+      enviarCodigoTelefone,
+      entrarComTelefone,
       sair,
       atualizarPerfil,
       excluirConta,
@@ -216,7 +231,7 @@ export function ClienteProvider({ children }) {
       definirMarketing,
       tentarDeNovo: abrir,
     }),
-    [status, cliente, chamar, entrarComGoogle, entrarComApple, sair, atualizarPerfil, excluirConta, aceitarTermos, definirMarketing, abrir],
+    [status, cliente, chamar, entrarComGoogle, entrarComApple, enviarCodigoTelefone, entrarComTelefone, sair, atualizarPerfil, excluirConta, aceitarTermos, definirMarketing, abrir],
   );
 
   return <ClienteContext.Provider value={valor}>{children}</ClienteContext.Provider>;

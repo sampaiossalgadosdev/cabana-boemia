@@ -164,6 +164,16 @@ export const entrarComApple = ({ identityToken, nonce, nome, aceite }) =>
     corpo: { identityToken, nonce, refresh: true, ...(nome ? { nome } : {}), ...(aceite ? { aceite } : {}) },
   });
 
+/**
+ * POST /cliente/auth/telefone/enviar { telefone } → { enviado, telefone, reenviarEmSegundos }.
+ * Erros: 400 TELEFONE_INVALIDO, 503 SMS_INDISPONIVEL, 429 AGUARDE_REENVIO | MUITOS_ENVIOS | MUITAS_TENTATIVAS (detalhes.segundos).
+ */
+export const enviarCodigoTelefone = (telefone) => requisitar('POST', '/cliente/auth/telefone/enviar', { corpo: { telefone } });
+
+/** POST /cliente/auth/telefone/entrar → { token, refreshToken, cliente } (401 CODIGO_INVALIDO; mesma sessão do Google). */
+export const entrarComTelefone = ({ telefone, codigo, aceite }) =>
+  requisitar('POST', '/cliente/auth/telefone/entrar', { corpo: { telefone, codigo, refresh: true, ...(aceite ? { aceite } : {}) } });
+
 /** POST /cliente/aceite { versao } → { cliente } (409 VERSAO_DESATUALIZADA se a versão mudou) */
 export const aceitarTermos = (token, versao) => requisitar('POST', '/cliente/aceite', { token, corpo: { versao } });
 

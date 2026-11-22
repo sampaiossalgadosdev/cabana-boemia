@@ -23,9 +23,9 @@ footer{max-width:720px;margin:0 auto;padding:0 16px 32px;color:#5E5249;font-size
 export function documento({ titulo, corpo, rodape = '' }) {
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapar(titulo)} · Delivery Abatiá</title>
+<title>${escapar(titulo)} · Delivery do Batiá</title>
 <style>${ESTILO}</style></head><body>
-<header><h1>${escapar(titulo)} · Delivery Abatiá</h1></header>
+<header><h1>${escapar(titulo)} · Delivery do Batiá</h1></header>
 <main>${corpo}</main>
 ${rodape ? `<footer>${rodape}</footer>` : ''}
 </body></html>`;

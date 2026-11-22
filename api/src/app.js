@@ -29,6 +29,7 @@ export const PREFIXO_API = '/api';
  *   `relogio`: fonte do "agora" das rotas públicas (injetável nos testes).
  *   `verificarIdTokenGoogle` / `verificarIdentityTokenApple` / `revogarApple`: trocam o Google e a
  *   Apple nos testes (chave própria, sem rede). `limiteAuthCliente`: rate limit de /cliente/auth/*.
+ *   `verificadorTelefone` / `limitesTelefone`: login com celular (verificador e limites; testes).
  *   `limiteSolicitacoes`: envios por hora do formulário de /excluir-conta.
  *   `emailTitular`: e-mail do canal do titular nas páginas legais (padrão: CONTATO_TITULAR_EMAIL).
  *   `distSite` / `distRetaguarda`: builds servidos em / e /admin (testes usam pastas próprias).
@@ -41,6 +42,8 @@ export function criarApp({
   verificarIdTokenGoogle,
   verificarIdentityTokenApple,
   revogarApple,
+  verificadorTelefone,
+  limitesTelefone,
   limiteAuthCliente,
   limiteSolicitacoes,
   emailTitular,
@@ -74,7 +77,17 @@ export function criarApp({
 
   app.use(
     PREFIXO_API,
-    criarRotas({ limiteLogin, relogio, verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple, limiteAuthCliente, emailTitular }),
+    criarRotas({
+      limiteLogin,
+      relogio,
+      verificarIdTokenGoogle,
+      verificarIdentityTokenApple,
+      revogarApple,
+      verificadorTelefone,
+      limitesTelefone,
+      limiteAuthCliente,
+      emailTitular,
+    }),
   );
   // Páginas públicas do app (exclusão de conta, privacidade e termos; links do Play Console
   // e do app): antes do site, que pegaria qualquer caminho.

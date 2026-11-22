@@ -116,7 +116,10 @@ describe('cliente do site: login Google, perfil e endereços', { skip: semBancoD
       email: 'maria@gmail.com',
       telefone: null,
       precisaTelefone: true,
-      // campos do app (o site ignora): termos ainda não aceitos, marketing desligado
+      // campos do app (o site ignora): telefone não verificado, nome do Google,
+      // termos ainda não aceitos, marketing desligado
+      telefoneVerificado: false,
+      precisaNome: false,
       termosVersao: null,
       precisaAceite: true,
       marketing: false,

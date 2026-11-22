@@ -15,8 +15,8 @@ const ARQUIVO = path.join(raizApi, '.env.railway');
 const ARQUIVO_DEV = path.join(raizApi, '.env');
 const semArquivo = existsSync(ARQUIVO) ? false : 'api/.env.railway não existe nesta máquina';
 const SEGREDOS = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'JWT_CLIENTE_SECRET'];
-// Lidas pelo código, mas não precisam estar no arquivo: o Railway injeta PORT.
-const OPCIONAIS_EM_PRODUCAO = new Set(['PORT']);
+// Lidas pelo código, mas não precisam estar no arquivo: o Railway injeta PORT e RAILWAY_ENVIRONMENT_NAME.
+const OPCIONAIS_EM_PRODUCAO = new Set(['PORT', 'RAILWAY_ENVIRONMENT_NAME']);
 
 describe('api/.env.railway (produção)', { skip: semArquivo }, () => {
   const prod = () => lerEnv(readFileSync(ARQUIVO, 'utf8'));

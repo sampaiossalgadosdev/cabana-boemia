@@ -3,7 +3,8 @@ import { assincrono } from '../lib/assincrono.js';
 import { criarVerificadorGoogle } from '../lib/google.js';
 import { criarVerificadorApple, criarRevogadorApple } from '../lib/apple.js';
 import { autenticarCliente, exigirTelefoneCliente } from '../middlewares/autenticarCliente.js';
-import { criarLimitadorAuthCliente } from '../middlewares/limitarLogin.js';
+import { criarLimitadorAuthCliente, criarLimitadoresTelefone } from '../middlewares/limitarLogin.js';
+import { criarVerificadorTelefone, telefoneE164 } from '../lib/verificadorTelefone.js';
 import { criarClienteController } from '../controllers/cliente.controller.js';
 import { lojaDoSite } from '../middlewares/loja.js';
 
@@ -16,22 +17,34 @@ function semCache(req, res, next) {
 /**
  * Rotas do cliente (site e app; JWT de cliente, separado do da equipe).
  * @param {{ verificarIdTokenGoogle?: Function, verificarIdentityTokenApple?: Function,
- *           revogarApple?: Function, limiteAuthCliente?: number, relogio?: () => Date }} [opcoes]
+ *           revogarApple?: Function, limiteAuthCliente?: number, relogio?: () => Date,
+ *           verificadorTelefone?: object, limitesTelefone?: object }} [opcoes]
+ *   `verificadorTelefone`: login com celular (padrão: o de PHONE_VERIFIER);
+ *   `limitesTelefone`: janelas e limites (ver criarLimitadoresTelefone; os testes encurtam).
  */
 export function criarClienteRoutes({
   verificarIdTokenGoogle = criarVerificadorGoogle(),
   verificarIdentityTokenApple = criarVerificadorApple(),
   revogarApple = criarRevogadorApple(),
+  verificadorTelefone = criarVerificadorTelefone(),
+  limitesTelefone,
   limiteAuthCliente,
   relogio,
 } = {}) {
-  const c = criarClienteController({ verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple }, relogio);
+  const c = criarClienteController(
+    { verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple, verificadorTelefone },
+    relogio,
+  );
   const r = Router();
   r.use(semCache);
 
   const limitar = criarLimitadorAuthCliente({ limite: limiteAuthCliente });
   r.post('/auth/google', limitar, assincrono(c.entrarComGoogle));
   r.post('/auth/apple', limitar, assincrono(c.entrarComApple));
+  // Login com celular (código de 6 dígitos): limites por IP e por número.
+  const tel = criarLimitadoresTelefone(telefoneE164, limitesTelefone);
+  r.post('/auth/telefone/enviar', tel.porIp, tel.reenvio, tel.porHora, assincrono(c.enviarCodigoTelefone));
+  r.post('/auth/telefone/entrar', limitar, tel.errosCodigo, assincrono(c.entrarComTelefone));
   r.post('/auth/renovar', limitar, assincrono(c.renovar));
   r.post('/auth/sair', limitar, assincrono(c.sair));
 

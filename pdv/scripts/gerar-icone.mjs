@@ -1,8 +1,8 @@
 /**
- * Ícone do "PDV do Abatiá" (instalador, atalho, barra de tarefas): o PDV é um
+ * Ícone do "PDV do Batiá" (instalador, atalho, barra de tarefas): o PDV é um
  * só para todas as lojas, então o ícone é da plataforma, não de uma loja.
- * Quadrado de cantos arredondados no vermelho do Delivery Abatiá, "PDV" em
- * creme e "Abatiá" em dourado (as cores do ícone provisório do app).
+ * Quadrado de cantos arredondados no vermelho do Delivery do Batiá, "PDV" em
+ * creme e "Batiá" em dourado (as cores do ícone provisório do app).
  * Usa o System.Drawing do Windows (o instalador só é gerado no Windows).
  * Saída: recursos/icon.png, 512×512 (gerado, fora do git; o electron-builder faz o .ico).
  */
@@ -50,8 +50,8 @@ $fonteGrande = New-Object System.Drawing.Font('Segoe UI', 150, [System.Drawing.F
 $fontePequena = New-Object System.Drawing.Font('Segoe UI', 74, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
 $g.DrawString('PDV', $fonteGrande, (New-Object System.Drawing.SolidBrush $creme), (New-Object System.Drawing.RectangleF 0, 70, $lado, 220), $centro)
 $g.FillRectangle((New-Object System.Drawing.SolidBrush $dourado), 136, 300, 240, 8)
-$abatia = 'Abati' + [char]0x00E1
-$g.DrawString($abatia, $fontePequena, (New-Object System.Drawing.SolidBrush $creme), (New-Object System.Drawing.RectangleF 0, 318, $lado, 110), $centro)
+$batia = 'Bati' + [char]0x00E1
+$g.DrawString($batia, $fontePequena, (New-Object System.Drawing.SolidBrush $creme), (New-Object System.Drawing.RectangleF 0, 318, $lado, 110), $centro)
 $bmp.Save($env:SAIDA, [System.Drawing.Imaging.ImageFormat]::Png)
 $g.Dispose(); $bmp.Dispose()
 `;

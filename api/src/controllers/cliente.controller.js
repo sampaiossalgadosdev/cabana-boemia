@@ -6,6 +6,8 @@ import * as enderecoService from '../services/endereco.service.js';
 import * as pedidoService from '../services/pedido.service.js';
 import { registrarAcesso } from '../services/registroAcesso.service.js';
 import { buscarAtivaPorSlug } from '../services/loja.service.js';
+import { ErroHttp } from '../lib/erros.js';
+import { telefoneE164 } from '../lib/verificadorTelefone.js';
 
 const googleSchema = z.object({
   credential: z.string().min(1, 'Informe o credential do Google').max(4096),
@@ -24,6 +26,26 @@ const appleSchema = z.object({
   refresh: z.boolean().optional(),
   aceite: z.string().trim().max(20).optional(),
 });
+
+// Login com celular: o número vai como o cliente digitou; a API normaliza.
+const celularSchema = z.object({ telefone: z.string({ error: 'Informe o celular' }).max(30) });
+const entrarTelefoneSchema = celularSchema.extend({
+  codigo: z.string({ error: 'Informe o código' }).trim().regex(/^\d{6}$/, 'O código tem 6 números'),
+  refresh: z.boolean().optional(),
+  aceite: z.string().trim().max(20).optional(),
+});
+
+/** Celular do Brasil → "+55" + DDD + 9 dígitos; outro formato = 400 TELEFONE_INVALIDO. */
+function celularDoCorpo(body) {
+  const { telefone } = validar(celularSchema, body ?? {});
+  const e164 = telefoneE164(telefone);
+  if (!e164) {
+    throw new ErroHttp(400, 'Número inválido. Informe um celular com DDD, ex.: (43) 99999-0000', {
+      codigo: 'TELEFONE_INVALIDO',
+    });
+  }
+  return e164;
+}
 
 const aceiteSchema = z.object({ versao: z.string({ error: 'Informe a versão aceita' }).trim().min(1).max(20) });
 const marketingSchema = z.object({ aceito: z.boolean({ error: 'Informe se aceita receber ofertas' }) });
@@ -68,11 +90,12 @@ const ultimoSchema = z.object({ lojaSlug: slugLoja.optional() });
 const lojaDoPedido = async (lojaSlug, padrao) => (lojaSlug ? (await buscarAtivaPorSlug(lojaSlug)).id : padrao);
 
 /**
- * @param {{ verificarIdTokenGoogle: Function, verificarIdentityTokenApple: Function, revogarApple: Function }} deps
+ * @param {{ verificarIdTokenGoogle: Function, verificarIdentityTokenApple: Function, revogarApple: Function,
+ *           verificadorTelefone: { enviarCodigo: Function, conferirCodigo: Function } }} deps
  * @param {() => Date} [relogio] "agora" do pedido (injetável nos testes)
  */
 export function criarClienteController(
-  { verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple },
+  { verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple, verificadorTelefone },
   relogio = () => new Date(),
 ) {
   return {
@@ -88,6 +111,30 @@ export function criarClienteController(
       const { identityToken, nonce, nome, refresh, aceite } = validar(appleSchema, req.body);
       const identidade = await verificarIdentityTokenApple(identityToken, { nonce });
       const r = await clienteService.entrarComApple(identidade, { nome, comRefresh: refresh === true, aceite, ip: req.ip });
+      await registrarAcesso({ clienteId: r.cliente.id, ip: req.ip, evento: 'LOGIN' });
+      res.json(r);
+    },
+
+    /** Login com celular, passo 1: manda o código (verificador de teste: nada é enviado). */
+    async enviarCodigoTelefone(req, res) {
+      const telefone = celularDoCorpo(req.body);
+      await verificadorTelefone.enviarCodigo(telefone);
+      res.json({ enviado: true, telefone, reenviarEmSegundos: 60 });
+    },
+
+    /** Login com celular, passo 2: confere o código e entra (ou cria a conta). */
+    async entrarComTelefone(req, res) {
+      const telefone = celularDoCorpo(req.body);
+      const { codigo, refresh, aceite } = validar(entrarTelefoneSchema, req.body);
+      if (!(await verificadorTelefone.conferirCodigo(telefone, codigo))) {
+        throw new ErroHttp(401, 'Código errado. Confira os 6 números e tente de novo.', { codigo: 'CODIGO_INVALIDO' });
+      }
+      const r = await clienteService.entrarComTelefone(telefone.slice(3), {
+        comRefresh: refresh === true,
+        aceite,
+        ip: req.ip,
+        agora: relogio(),
+      });
       await registrarAcesso({ clienteId: r.cliente.id, ip: req.ip, evento: 'LOGIN' });
       res.json(r);
     },

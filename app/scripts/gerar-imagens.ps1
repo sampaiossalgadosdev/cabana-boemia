@@ -1,6 +1,6 @@
 # (Arquivo sem acentos no codigo: o PowerShell 5.1 le .ps1 sem BOM como ANSI.)
 # Icone, icone adaptativo do Android, splash e imagens da ficha das lojas do
-# app "Delivery Abatia". Rodar no Windows e versionar os PNGs:
+# app "Delivery do Batia". Rodar no Windows e versionar os PNGs:
 #   powershell -ExecutionPolicy Bypass -File app/scripts/gerar-imagens.ps1
 #
 # ARTE FINAL: se app/assets/marca/ tiver os arquivos abaixo, eles sao copiados
@@ -25,7 +25,7 @@ $creme = [System.Drawing.ColorTranslator]::FromHtml('#FBF3E8')
 $dourado = [System.Drawing.ColorTranslator]::FromHtml('#C9A646')
 $branco = [System.Drawing.Color]::White
 $transparente = [System.Drawing.Color]::Transparent
-$nomeAbatia = 'Abati' + [char]0x00E1
+$nomeBatia = 'do Bati' + [char]0x00E1
 
 function Novo($largura, $altura, $fundo) {
   $bmp = New-Object System.Drawing.Bitmap $largura, $altura, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
@@ -141,7 +141,7 @@ Gerar 'splash.png' (Join-Path $assets 'splash.png') {
   $b, $g = Novo 1024 1024 $transparente
   Sacola $g 512 380 440 $creme $dourado $vermelho
   Texto $g 'Delivery' 128 ([System.Drawing.FontStyle]::Bold) $creme 0 640 1024 150 'Center'
-  Texto $g $nomeAbatia 96 ([System.Drawing.FontStyle]::Regular) $dourado 0 780 1024 120 'Center'
+  Texto $g $nomeBatia 96 ([System.Drawing.FontStyle]::Regular) $dourado 0 780 1024 120 'Center'
   Salvar $b $g $arq
 }
 # Ficha do Google Play: icone 512 e imagem de destaque 1024x500.
@@ -157,7 +157,7 @@ Gerar 'destaque-play-1024x500.png' (Join-Path $loja 'destaque-play-1024x500.png'
   $g.FillRectangle((New-Object System.Drawing.SolidBrush $vermelhoEscuro), 0, 440, 1024, 60)
   Sacola $g 250 235 300 $creme $dourado $vermelho
   Texto $g 'Delivery' 104 ([System.Drawing.FontStyle]::Bold) $creme 430 120 580 130 'Near'
-  Texto $g $nomeAbatia 80 ([System.Drawing.FontStyle]::Regular) $dourado 434 235 580 110 'Near'
+  Texto $g $nomeBatia 80 ([System.Drawing.FontStyle]::Regular) $dourado 434 235 580 110 'Near'
   Texto $g ('As lojas da cidade num app s' + [char]0x00F3) 34 ([System.Drawing.FontStyle]::Regular) $creme 438 340 580 60 'Near'
   Salvar $b $g $arq
 }

@@ -4,7 +4,7 @@ import { TEMA_PADRAO } from '@restaurante/shared/cores';
 import { faviconDaInicial, temaDaLoja } from '../src/lib/tema.js';
 import { problemaDoArquivo } from '../src/lib/imagem.js';
 
-test('tema da loja: cor e logo da loja; sem loja = Táqui Delivery', () => {
+test('tema da loja: cor e logo da loja; sem loja = Taaki Delivery', () => {
   const t = temaDaLoja({ nome: 'Lanchonete do Zé', logoUrl: '/api/publico/imagens/3', corPrimaria: '#1D4ED8' });
   assert.equal(t.nome, 'Lanchonete do Zé');
   assert.equal(t.logoUrl, '/api/publico/imagens/3');

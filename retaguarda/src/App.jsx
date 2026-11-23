@@ -100,7 +100,7 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sem loja (login, plataforma): tema padrão do Táqui Delivery.
+  // Sem loja (login, plataforma): tema padrão do Taaki Delivery.
   useEffect(() => {
     if (!usuario) aplicarTema(null);
   }, [usuario]);

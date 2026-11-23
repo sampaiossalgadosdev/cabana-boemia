@@ -20,7 +20,7 @@ import { DOCUMENTOS_APP } from '../src/lib/controlador.js';
  * POST /cliente/auth/telefone/enviar e /entrar, limites, conta existente e
  * a regra "telefone verificado é único". Números fictícios.
  */
-const LISTA = '+5543999990001:123456, +5543999990002:654321,+5543999990003:111111,+5543999990004:222222,+5543999990005:333333';
+const LISTA = '+5543999990001:123456, +5543999990002:654321,+5543999990003:111111,+5543999990004:222222,+5543999990005:333333,+5543999990006:555555';
 
 // ───────────── Sem banco: regras puras ─────────────
 
@@ -37,7 +37,7 @@ test('telefoneE164: só celular do Brasil, sempre +55 + DDD + 9 dígitos', () =>
 test('PHONE_TEST_NUMBERS: lê os pares e aponta entradas inválidas', () => {
   const { numeros, problemas } = lerNumerosDeTeste(LISTA);
   assert.deepEqual(problemas, []);
-  assert.equal(numeros.size, 5);
+  assert.equal(numeros.size, 6);
   assert.equal(numeros.get('+5543999990002'), '654321');
 
   assert.match(lerNumerosDeTeste('43999990001:123456').problemas[0], /não é um celular/, 'sem +55');
@@ -311,21 +311,53 @@ describe('login com celular: /cliente/auth/telefone/*', { skip: semBancoDeTeste 
     assert.equal((await entrar('43999990003', '111111', {}, url)).status, 200, 'outro número segue');
   });
 
-  test('telefone já existente (cadastro do PDV): entra na mesma conta, que passa a verificada', async () => {
+  test('telefone só em contas NÃO verificadas (Google, PDV): cria conta nova e não toca nas antigas', async () => {
     const pdv = await prisma.cliente.create({ data: { nome: 'Carlos do Balcão', telefone: '43999990005' } });
-    // outro cadastro com o mesmo telefone, mais novo (ex.: site), não verificado
-    const site = await prisma.cliente.create({ data: { nome: 'Carlos Google', googleId: 'g-carlos', telefone: '43999990005' } });
+    const google = await prisma.cliente.create({
+      data: { nome: 'Carlos Google', googleId: 'g-carlos', email: 'carlos@exemplo.com', telefone: '43999990005' },
+    });
+    await prisma.endereco.create({
+      data: { clienteId: google.id, rua: 'Rua Secreta', numero: '1', bairroId: (await prisma.bairro.upsert({ where: { nome: 'Bairro do Teste' }, update: {}, create: { nome: 'Bairro do Teste' } })).id, principal: true },
+    });
+    const antes = await prisma.cliente.findMany({ where: { id: { in: [pdv.id, google.id] } }, orderBy: { id: 'asc' } });
 
     const r = await entrar('43999990005', '333333');
     assert.equal(r.status, 200);
-    assert.equal(r.corpo.cliente.id, pdv.id, 'a mais antiga com o telefone');
-    assert.equal(r.corpo.cliente.nome, 'Carlos do Balcão');
-    assert.equal(r.corpo.cliente.precisaNome, false);
-    assert.equal(r.corpo.cliente.telefoneVerificado, true);
-    assert.equal((await prisma.cliente.findUnique({ where: { id: site.id } })).telefoneVerificado, false);
+    const novo = r.corpo.cliente;
+    assert.notEqual(novo.id, google.id, 'não entra na conta Google');
+    assert.notEqual(novo.id, pdv.id, 'nem no cadastro do PDV');
+    assert.equal(novo.nome, '', 'conta nova, sem nome');
+    assert.equal(novo.precisaNome, true);
+    assert.equal(novo.telefoneVerificado, true);
+    assert.equal(novo.email, null, 'nada da conta Google vaza');
 
-    // de novo: a verificada, sempre a mesma
-    assert.equal((await entrar('43999990005', '333333')).corpo.cliente.id, pdv.id);
+    // o token novo não enxerga os endereços da conta Google
+    const ends = await api('GET', '/cliente/enderecos', { token: r.corpo.token });
+    assert.equal(ends.status, 200);
+    assert.deepEqual(ends.corpo.enderecos, []);
+
+    // contas antigas intactas (continuam não verificadas)
+    const depois = await prisma.cliente.findMany({ where: { id: { in: [pdv.id, google.id] } }, orderBy: { id: 'asc' } });
+    assert.deepEqual(depois, antes);
+
+    // de novo: a mesma conta nova (agora a verificada), sem criar outra
+    assert.equal((await entrar('43999990005', '333333')).corpo.cliente.id, novo.id);
+    assert.equal(await prisma.cliente.count({ where: { telefone: '43999990005' } }), 3);
+  });
+
+  test('conta com o telefone verificado: o login pelo celular entra nela', async () => {
+    // um cadastro mais antigo, não verificado, com o mesmo telefone não muda nada
+    const antigo = await prisma.cliente.create({ data: { nome: 'Outro do PDV', telefone: '43999990006' } });
+    const verificada = await prisma.cliente.create({
+      data: { nome: 'Dona Verificada', telefone: '43999990006', telefoneVerificado: true, telefoneVerificadoEm: new Date() },
+    });
+    assert.ok(antigo.id < verificada.id);
+    const r = await entrar('43999990006', '555555');
+    assert.equal(r.status, 200);
+    assert.equal(r.corpo.cliente.id, verificada.id);
+    assert.equal(r.corpo.cliente.nome, 'Dona Verificada');
+    assert.equal(r.corpo.cliente.precisaNome, false);
+    assert.equal(await prisma.cliente.count({ where: { telefone: '43999990006', telefoneVerificado: true } }), 1);
   });
 
   test('telefone verificado é único no banco; não verificado pode repetir', async () => {

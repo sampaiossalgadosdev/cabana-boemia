@@ -1,4 +1,4 @@
-# Publicar o app Táqui Delivery (Google Play e App Store)
+# Publicar o app Taaki Delivery (Google Play e App Store)
 
 Passo a passo de build, envio, versão e dos formulários de privacidade das lojas. O login (Google Cloud, Apple, chaves) está em [`CONFIGURACAO_LOGIN.md`](CONFIGURACAO_LOGIN.md); faça aquele antes do primeiro envio.
 
@@ -40,7 +40,7 @@ GOOGLE_IOS_URL_SCHEME=com.googleusercontent.apps.XXXX npx eas-cli@latest build -
 
 ### Google Play
 
-1. **O primeiro AAB vai à mão** (o Google exige): Play Console › Táqui Delivery › Testes › Teste interno (ou fechado) › Criar versão › enviar o `.aab` baixado do EAS. Aceite o **Play App Signing** (o Google guarda a chave final; a do EAS vira chave de upload).
+1. **O primeiro AAB vai à mão** (o Google exige): Play Console › Taaki Delivery › Testes › Teste interno (ou fechado) › Criar versão › enviar o `.aab` baixado do EAS. Aceite o **Play App Signing** (o Google guarda a chave final; a do EAS vira chave de upload).
 2. Depois do primeiro, pelo EAS:
    ```bash
    npx eas-cli@latest submit -p android --latest
@@ -128,9 +128,9 @@ App Store Connect › App › Privacidade do app:
 
 ### Google Play
 
-**Nome do app** (até 30): `Táqui Delivery`
+**Nome do app** (até 30): `Taaki Delivery`
 
-Embaixo do ícone do celular aparece só **"Táqui"** (`name` do `app.config.js`).
+Embaixo do ícone do celular aparece só **"Taaki"** (`name` do `app.config.js`).
 
 **Descrição curta** (até 80):
 
@@ -138,7 +138,7 @@ Embaixo do ícone do celular aparece só **"Táqui"** (`name` do `app.config.js`
 
 **Descrição completa** (até 4000):
 
-> O Táqui Delivery reúne os comércios de Abatiá e das cidades vizinhas num app só: restaurantes, lanchonetes, pizzarias, bebidas e outras lojas da região. Veja o cardápio de cada loja, monte sua sacola e receba em casa. O pagamento é feito na entrega, direto com a loja.
+> O Taaki Delivery reúne os comércios de Abatiá e das cidades vizinhas num app só: restaurantes, lanchonetes, pizzarias, bebidas e outras lojas da região. Veja o cardápio de cada loja, monte sua sacola e receba em casa. O pagamento é feito na entrega, direto com a loja.
 >
 > COMO FUNCIONA
 > • Escolha a loja: o início mostra quem está aberto agora e quando cada uma abre.
@@ -167,7 +167,7 @@ Embaixo do ícone do celular aparece só **"Táqui"** (`name` do `app.config.js`
 
 ### App Store
 
-- **Nome** (30): `Táqui Delivery`
+- **Nome** (30): `Taaki Delivery`
 - **Subtítulo** (30): `Abatiá e região na sua casa`
 - **Palavras-chave** (100): `delivery,abatiá,região,lanche,pizza,marmita,bebida,restaurante,lanchonete,pedido,entrega,comida`
 - **Texto promocional** (170): `Peça comida, bebida e mais dos comércios de Abatiá e região e pague na entrega, direto com a loja.`

@@ -1,4 +1,4 @@
-# Login no app Táqui Delivery: Google, Apple e lojas
+# Login no app Taaki Delivery: Google, Apple e lojas
 
 Passo a passo do que configurar **fora do código** para o login funcionar no Android e no iOS, e para publicar nas lojas. O código já está pronto; sem estes passos o botão "Continuar com Google" mostra "Login com Google ainda não configurado para esta versão do app".
 
@@ -6,7 +6,7 @@ Dados fixos do app:
 
 | Item | Valor |
 |---|---|
-| Nome | Táqui Delivery |
+| Nome | Taaki Delivery |
 | Pacote Android / Bundle ID iOS | `br.com.deliveryabatia.app` |
 | Projeto EAS | `@sampaio040826/delivery-abatia` (ID `77cc3648-5ee3-4448-a147-6c213d3a69ea`) |
 | API | `https://cabana.managerpix.com.br` |
@@ -22,7 +22,7 @@ Dados fixos do app:
 
 O cliente OAuth **Android** não aparece no código. Ele existe para o Google autorizar o app pelo par **pacote + SHA-1 do certificado** que assinou o APK/AAB. Sem um cliente Android com o SHA-1 certo, o Google responde `DEVELOPER_ERROR`.
 
-Use o **mesmo projeto do Google Cloud** do site ("Cabana Boemia"): o cliente Android precisa estar no mesmo projeto do cliente web. Na tela de consentimento aparece o nome do Branding ("Cabana Boemia"). Quando o app virar multi-loja, vale criar um projeto "Táqui Delivery" e migrar os clientes.
+Use o **mesmo projeto do Google Cloud** do site ("Cabana Boemia"): o cliente Android precisa estar no mesmo projeto do cliente web. Na tela de consentimento aparece o nome do Branding ("Cabana Boemia"). Quando o app virar multi-loja, vale criar um projeto "Taaki Delivery" e migrar os clientes.
 
 ## 1. Google Cloud: cliente OAuth Android (build do EAS)
 
@@ -32,7 +32,7 @@ Use o **mesmo projeto do Google Cloud** do site ("Cabana Boemia"): o cliente And
    Os perfis development, preview e production usam o mesmo keystore, então um SHA-1 cobre todos os builds do EAS.
 2. [Google Cloud Console](https://console.cloud.google.com/) › projeto **Cabana Boemia** › **Google Auth Platform** › **Clientes** › **Criar cliente**:
    - Tipo: **Android**
-   - Nome: `App Táqui Delivery (Android, EAS)`
+   - Nome: `App Taaki Delivery (Android, EAS)`
    - Nome do pacote: `br.com.deliveryabatia.app`
    - Impressão digital SHA-1: a do passo 1
 3. Salve. Não há segredo nem nada para copiar para o app. Opcional: acrescente o ID desse cliente em `GOOGLE_CLIENT_IDS` no Railway (não atrapalha e cobre o caso de o token vir com esse `aud`).
@@ -42,15 +42,15 @@ Use o **mesmo projeto do Google Cloud** do site ("Cabana Boemia"): o cliente And
 
 Quem instala pela Play Store recebe o app **reassinado pelo Google** com outra chave. É preciso um segundo cliente Android:
 
-1. Play Console › app **Táqui Delivery** › **Testar e lançar** › **Configuração** › **Integridade do app** › **Assinatura do app**.
+1. Play Console › app **Taaki Delivery** › **Testar e lançar** › **Configuração** › **Integridade do app** › **Assinatura do app**.
 2. Copie o SHA-1 de **"Certificado da chave de assinatura do app"**. O da "chave de upload" é o do EAS, já cadastrado no passo 1.
-3. Google Cloud › Clientes › Criar cliente › Android: nome `App Táqui Delivery (Android, Play)`, mesmo pacote, esse SHA-1.
+3. Google Cloud › Clientes › Criar cliente › Android: nome `App Taaki Delivery (Android, Play)`, mesmo pacote, esse SHA-1.
 
 Sem isso o login funciona no APK de preview e **falha só na versão baixada da Play Store**.
 
 ## 3. Google Cloud: cliente OAuth iOS
 
-1. Google Cloud › Clientes › Criar cliente › **iOS**: nome `App Táqui Delivery (iOS)`, ID do pacote `br.com.deliveryabatia.app` (o Team ID e o App Store ID são opcionais).
+1. Google Cloud › Clientes › Criar cliente › **iOS**: nome `App Taaki Delivery (iOS)`, ID do pacote `br.com.deliveryabatia.app` (o Team ID e o App Store ID são opcionais).
 2. Anote o **ID do cliente** e o **Esquema de URL do iOS** (`com.googleusercontent.apps.<...>`).
 3. No EAS, crie as variáveis dos builds iOS (expo.dev › projeto › **Environment variables**, ambientes preview e production; ou `npx eas-cli@latest env:create`):
    - `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` = o ID do cliente iOS
@@ -83,7 +83,7 @@ A App Store exige "Entrar com Apple" quando o app oferece login com Google. O bo
 
 ## 6. Play Console: teste fechado
 
-1. Crie o app: nome "Táqui Delivery", idioma padrão Português (Brasil), App, Gratuito.
+1. Crie o app: nome "Taaki Delivery", idioma padrão Português (Brasil), App, Gratuito.
 2. **Política do app** (Painel › Configurar o app):
    - Política de privacidade: `https://cabana.managerpix.com.br/privacidade-app` (em nome da plataforma). **Rascunho: precisa de revisão jurídica antes da produção** (ver CLAUDE.md).
    - **Exclusão de conta**: marque que o app permite criar conta e informe o link `https://cabana.managerpix.com.br/excluir-conta`. Dentro do app: Perfil › Excluir minha conta.

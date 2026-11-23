@@ -78,7 +78,7 @@ describe('importar a configuração do programa antigo ("Cabana Boemia PDV")', (
     assert.ok(fixa < main.indexOf('requestSingleInstanceLock'), 'antes da instância única');
     // O nome exibido mudou; a pasta, não.
     const pacote = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-    assert.equal(pacote.productName, 'Táqui PDV');
+    assert.equal(pacote.productName, 'Taaki PDV');
   });
 
   test('instalador: tira o "abrir com o Windows" do antigo ao instalar e o do novo ao desinstalar', () => {

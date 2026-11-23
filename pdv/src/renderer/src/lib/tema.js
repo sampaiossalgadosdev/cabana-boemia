@@ -2,7 +2,7 @@
  * Tema do PDV pela loja (lógica pura, testada): a cor primária da loja nos
  * destaques (barra, botões, abas, assistente do novo pedido), a base clara
  * continua para a leitura. Sem loja (login, ADMIN escolhendo) ou cor ilegível:
- * o tema padrão do Táqui Delivery. A regra de contraste é a do shared.
+ * o tema padrão do Taaki Delivery. A regra de contraste é a do shared.
  */
 import { TEMA_PADRAO, variaveisDoTema } from '@restaurante/shared/cores';
 
@@ -12,7 +12,7 @@ export function temaDaLoja(loja) {
     nome: loja?.nome ?? TEMA_PADRAO.nome,
     logo: loja?.logoDataUrl ?? null,
     variaveis: variaveisDoTema(loja?.corPrimaria ?? null),
-    titulo: loja ? `${loja.nome} · PDV` : 'Táqui PDV',
+    titulo: loja ? `${loja.nome} · PDV` : 'Taaki PDV',
   };
 }
 

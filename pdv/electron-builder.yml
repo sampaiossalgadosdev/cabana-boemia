@@ -2,7 +2,7 @@
 # Antes era "Cabana Boemia PDV" (br.com.cabanaboemia.pdv): o app novo importa a configuração
 # dele no primeiro uso (src/main/migracao.js) e desliga o "abrir com o Windows" antigo.
 appId: br.com.deliveryabatia.pdv
-productName: Táqui PDV
+productName: Taaki PDV
 # Nome do arquivo sem acento nem espaço (mais fácil de mandar por WhatsApp/pen drive).
 artifactName: Taqui-PDV-Setup-${version}.${ext}
 directories:
@@ -28,9 +28,9 @@ nsis:
   perMachine: false
   createDesktopShortcut: always
   createStartMenuShortcut: true
-  shortcutName: Táqui PDV
+  shortcutName: Taaki PDV
   # Abre ao terminar: na primeira abertura o app se registra para abrir com o Windows.
   runAfterFinish: true
-  uninstallDisplayName: Táqui PDV
+  uninstallDisplayName: Taaki PDV
   # Instalar tira o "abrir com o Windows" do programa antigo; desinstalar tira o deste (recursos/installer.nsh).
   include: recursos/installer.nsh

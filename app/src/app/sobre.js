@@ -50,7 +50,7 @@ export default function Sobre() {
   return (
     <ScrollView style={s.tela} contentContainerStyle={s.conteudo}>
       <Text style={s.marca} accessibilityRole="header">
-        Delivery do Batiá
+        Táqui Delivery
       </Text>
       <Text style={s.nota}>Pedidos das lojas de Abatiá-PR.{versao ? ` Versão ${versao}.` : ''}</Text>
 

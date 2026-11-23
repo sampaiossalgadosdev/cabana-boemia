@@ -1,4 +1,4 @@
-// Configuração do app "Delivery do Batiá" (Expo), multi-loja: vitrine de lojas,
+// Configuração do app "Táqui Delivery" (Expo), multi-loja: vitrine de lojas,
 // página de cada loja no tema dela (cor e logo da API). Pastas android/ e ios/
 // são geradas pelo prebuild (CNG) e não vão para o git: tudo nativo se configura aqui.
 
@@ -14,7 +14,8 @@ const EAS_PROJECT_ID = '77cc3648-5ee3-4448-a147-6c213d3a69ea';
 
 /** @type {import("expo/config").ExpoConfig} */
 export default {
-  name: 'Delivery do Batiá',
+  // Nome curto, embaixo do ícone. Nos textos o produto é "Táqui Delivery".
+  name: 'Táqui',
   slug: 'delivery-abatia',
   scheme: 'deliveryabatia',
   version: '0.3.0',

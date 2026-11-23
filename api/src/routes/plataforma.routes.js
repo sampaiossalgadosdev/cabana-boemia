@@ -5,7 +5,7 @@ import { exigirPapel } from '../middlewares/exigirPapel.js';
 import * as c from '../controllers/plataforma.controller.js';
 
 /**
- * Rotas da plataforma (Delivery do Batiá): só ADMIN (o DONO leva 403), nunca em cache.
+ * Rotas da plataforma (Táqui Delivery): só ADMIN (o DONO leva 403), nunca em cache.
  * - Lojas: listar, criar (com turnos iniciais opcionais), editar e criar o DONO de cada uma.
  * - Bairros da cidade: a lista única que todas as lojas usam (o DONO só escolhe
  *   os da área de entrega dele, com a taxa, em /retaguarda/bairros).

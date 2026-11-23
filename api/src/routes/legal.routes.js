@@ -4,7 +4,7 @@ import { CONTROLADOR, DOCUMENTOS_APP, emailDoTitular, identificacaoDoControlador
 import { RETENCAO_MESES } from '../services/registroAcesso.service.js';
 
 /**
- * Política de privacidade e termos de uso do APP Delivery do Batiá, em nome da
+ * Política de privacidade e termos de uso do APP Táqui Delivery, em nome da
  * plataforma (controladora dos dados; ver lib/controlador.js). Páginas
  * públicas da API, fora do site (o site continua com /privacidade e /termos da
  * Cabana Boemia). São os links do app, do Play Console e da App Store.
@@ -45,7 +45,7 @@ export function paginaPrivacidade(email, c = CONTROLADOR) {
     rodape: rodape('<a href="/termos-app">Termos de uso</a>'),
     corpo: `
 <section>
-  <p>Esta política explica como o <strong>Delivery do Batiá</strong>, plataforma de pedidos das lojas de Abatiá-PR, trata os seus dados pessoais no app Delivery do Batiá. O Delivery do Batiá é o <strong>controlador</strong> desses dados, nos termos da Lei Geral de Proteção de Dados (Lei 13.709/2018, LGPD).</p>
+  <p>Esta política explica como o <strong>Táqui Delivery</strong>, plataforma de pedidos das lojas de Abatiá-PR, trata os seus dados pessoais no app Táqui Delivery. O Táqui Delivery é o <strong>controlador</strong> desses dados, nos termos da Lei Geral de Proteção de Dados (Lei 13.709/2018, LGPD).</p>
   ${controladorHtml(c)}
 </section>
 <section>
@@ -69,7 +69,7 @@ export function paginaPrivacidade(email, c = CONTROLADOR) {
     <li>Cumprir obrigações legais, como a guarda de registros de acesso e de registros fiscais (obrigação legal).</li>
     <li>Proteger a plataforma contra fraude e abuso, por exemplo limitando tentativas de login (legítimo interesse).</li>
     <li>Guardar a prova do seu aceite destes documentos e das suas escolhas de comunicação (obrigação legal e exercício de direitos).</li>
-    <li><strong>Somente se você autorizar</strong> (consentimento, opcional): enviar ofertas e novidades das lojas e do Delivery do Batiá. Você liga ou desliga isso quando quiser em <strong>Perfil › Comunicações</strong>; desligar não afeta seus pedidos.</li>
+    <li><strong>Somente se você autorizar</strong> (consentimento, opcional): enviar ofertas e novidades das lojas e do Táqui Delivery. Você liga ou desliga isso quando quiser em <strong>Perfil › Comunicações</strong>; desligar não afeta seus pedidos.</li>
   </ul>
   <p>Não vendemos seus dados e não os usamos para publicidade direcionada.</p>
 </section>
@@ -132,12 +132,12 @@ export function paginaTermos(email, c = CONTROLADOR) {
     rodape: rodape('<a href="/privacidade-app">Política de privacidade</a>'),
     corpo: `
 <section>
-  <p>Estes termos valem para o uso do app <strong>Delivery do Batiá</strong>, plataforma que reúne o cardápio de lojas de Abatiá-PR e envia os seus pedidos a elas. Ao usar o app, você concorda com estes termos e com a <a href="/privacidade-app">política de privacidade</a>.</p>
+  <p>Estes termos valem para o uso do app <strong>Táqui Delivery</strong>, plataforma que reúne o cardápio de lojas de Abatiá-PR e envia os seus pedidos a elas. Ao usar o app, você concorda com estes termos e com a <a href="/privacidade-app">política de privacidade</a>.</p>
   <p>Responsável pela plataforma: <strong>${escapar(identificacaoDoControlador(c))}</strong>.</p>
 </section>
 <section>
   <h2>1. O que é a plataforma</h2>
-  <p>O Delivery do Batiá intermedeia o pedido entre você e a loja. <strong>Cada loja é responsável</strong> pelos produtos, preços, preparo, entrega, troca e emissão de documentos fiscais dos pedidos feitos a ela. A loja recebe só os dados necessários para preparar e entregar o pedido e não pode usá-los para outra finalidade.</p>
+  <p>O Táqui Delivery intermedeia o pedido entre você e a loja. <strong>Cada loja é responsável</strong> pelos produtos, preços, preparo, entrega, troca e emissão de documentos fiscais dos pedidos feitos a ela. A loja recebe só os dados necessários para preparar e entregar o pedido e não pode usá-los para outra finalidade.</p>
 </section>
 <section>
   <h2>2. Conta</h2>

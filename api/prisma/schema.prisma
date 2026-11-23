@@ -14,7 +14,7 @@ datasource db {
 // ───────────── Enums ─────────────
 
 enum Papel {
-  ADMIN // plataforma (Delivery do Batiá): acima do DONO, sem loja
+  ADMIN // plataforma (Táqui Delivery): acima do DONO, sem loja
   DONO
   ATENDENTE
 }

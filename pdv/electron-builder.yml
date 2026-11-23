@@ -1,10 +1,10 @@
-# Instalador Windows do PDV (um só para todas as lojas): npm run dist -w pdv → pdv/dist/Taqui-PDV-Setup-<versão>.exe
+# Instalador Windows do PDV (um só para todas as lojas): npm run dist -w pdv → pdv/dist/Taaki-PDV-Setup-<versão>.exe
 # Antes era "Cabana Boemia PDV" (br.com.cabanaboemia.pdv): o app novo importa a configuração
 # dele no primeiro uso (src/main/migracao.js) e desliga o "abrir com o Windows" antigo.
 appId: br.com.deliveryabatia.pdv
 productName: Taaki PDV
 # Nome do arquivo sem acento nem espaço (mais fácil de mandar por WhatsApp/pen drive).
-artifactName: Taqui-PDV-Setup-${version}.${ext}
+artifactName: Taaki-PDV-Setup-${version}.${ext}
 directories:
   output: dist
   # recursos/icon.png é gerado por scripts/gerar-icone.mjs antes do build (ícone da plataforma, não de uma loja).

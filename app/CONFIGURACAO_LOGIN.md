@@ -65,7 +65,7 @@ A App Store exige "Entrar com Apple" quando o app oferece login com Google. O bo
 2. developer.apple.com › Certificates, Identifiers & Profiles › **Identifiers** › App ID `br.com.taaki.app` com a capability **Sign In with Apple** marcada. No primeiro `eas build -p ios`, o EAS cria o App ID e liga a capability sozinho, porque o `app.config.js` tem `usesAppleSignIn: true`. Confira depois.
 3. A API confere o identity token com as chaves públicas da Apple e aceita `aud` = `br.com.taaki.app` (padrão; `APPLE_BUNDLE_IDS` muda isso). **Nada mais é preciso para o login funcionar.**
 4. **Para revogar o login na Apple ao excluir a conta** (exigência da App Store), crie uma chave:
-   - **Keys** › "+" › nome `Taqui Delivery SIWA` › marque **Sign in with Apple** › Configure › App ID primário `br.com.taaki.app` › Register.
+   - **Keys** › "+" › nome `Taaki Delivery SIWA` › marque **Sign in with Apple** › Configure › App ID primário `br.com.taaki.app` › Register.
    - Baixe o `.p8`. **Ele só pode ser baixado uma vez**: guarde fora do repositório.
    - Anote o **Key ID**. O **Team ID** fica em Membership details.
    - Railway: `APPLE_TEAM_ID`, `APPLE_KEY_ID` e `APPLE_PRIVATE_KEY` (o conteúdo do `.p8` numa linha só, trocando cada quebra de linha por `\n`).

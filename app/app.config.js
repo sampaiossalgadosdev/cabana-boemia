@@ -42,7 +42,7 @@ export default {
     adaptiveIcon: {
       foregroundImage: './assets/icone-android-frente.png',
       monochromeImage: './assets/icone-android-monocromatico.png',
-      backgroundColor: '#C8102E',
+      backgroundColor: '#0A1428',
     },
     // Só o que o app usa: rede (fetch) e estado da rede (NetInfo).
     permissions: ['android.permission.INTERNET', 'android.permission.ACCESS_NETWORK_STATE'],
@@ -60,7 +60,7 @@ export default {
         image: './assets/splash.png',
         imageWidth: 240,
         resizeMode: 'contain',
-        backgroundColor: '#C8102E',
+        backgroundColor: '#0A1428',
       },
     ],
     [

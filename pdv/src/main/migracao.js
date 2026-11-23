@@ -20,7 +20,7 @@ import path from 'node:path';
 /**
  * Pasta de dados deste PDV (em %APPDATA%), FIXA: é a do tempo em que o programa
  * se chamava "PDV do Abatiá". O Electron montaria o userData com o nome do
- * programa (productName, hoje "Taaki PDV"; antes "Taaki PDV" e "PDV do Batiá"); trocar o nome mudaria a pasta e o
+ * programa (productName, hoje "Taaki PDV"; antes "Táqui PDV" e "PDV do Batiá"); trocar o nome mudaria a pasta e o
  * PDV perderia servidor, login (sessao.bin + "Local State"), impressora e o id do
  * agente de impressão. Nunca mude este valor.
  */

@@ -67,7 +67,7 @@ export function IdentificacaoLoja({ config }) {
           {linha}
         </Text>
       ))}
-      <Text style={s.linha}>Pedido feito pelo app Táqui Delivery, entregue e cobrado pela loja.</Text>
+      <Text style={s.linha}>Pedido feito pelo app Taaki Delivery, entregue e cobrado pela loja.</Text>
     </View>
   );
 }

@@ -5,7 +5,7 @@
 
 /** Usado quando a API não responde (os links legais continuam funcionando). */
 export const PLATAFORMA_PADRAO = Object.freeze({
-  plataforma: { nome: 'Táqui Delivery', responsavel: null, documento: null, cidade: 'Abatiá-PR', identificacao: null },
+  plataforma: { nome: 'Taaki Delivery', responsavel: null, documento: null, cidade: 'Abatiá-PR', identificacao: null },
   contato: { email: null, formulario: '/excluir-conta' },
   documentos: { versao: null, vigencia: null, privacidade: '/privacidade-app', termos: '/termos-app', excluirConta: '/excluir-conta' },
 });

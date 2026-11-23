@@ -29,7 +29,7 @@ test('anúncios para mostrar: imagem com a base da API, sem os inválidos; etiqu
 test('dados da plataforma: resposta da API conferida; sem resposta = padrão com os links legais', () => {
   assert.deepEqual(dadosDaPlataforma(null), PLATAFORMA_PADRAO);
   const d = dadosDaPlataforma({
-    plataforma: { nome: 'Táqui Delivery', responsavel: 'Fulano', documento: null, cidade: 'Abatiá-PR', identificacao: 'Fulano, Abatiá-PR' },
+    plataforma: { nome: 'Taaki Delivery', responsavel: 'Fulano', documento: null, cidade: 'Abatiá-PR', identificacao: 'Fulano, Abatiá-PR' },
     contato: { email: 'contato@exemplo.com', formulario: '/excluir-conta' },
     documentos: { versao: '2026-11-20', vigencia: '20 de novembro de 2026', privacidade: '/privacidade-app', termos: 'javascript:x', excluirConta: '/excluir-conta' },
   });

@@ -1,6 +1,6 @@
 # Cabana Boemia — Sistema de pedidos
 
-Monorepo npm workspaces: `api` (Express + Prisma + Socket.IO), `site` (cliente), `retaguarda` (dono), `pdv` (Electron, balcão), `app` (Táqui Delivery, Expo, Android/iOS; em desenvolvimento) e `shared`.
+Monorepo npm workspaces: `api` (Express + Prisma + Socket.IO), `site` (cliente), `retaguarda` (dono), `pdv` (Electron, balcão), `app` (Taaki Delivery, Expo, Android/iOS; em desenvolvimento) e `shared`.
 
 Em produção é **um serviço só** no Railway (mais o PostgreSQL), em **https://cabana.managerpix.com.br** (CNAME no Registro.br apontando para o Railway; o domínio do Railway, https://cabana-boemia-production.up.railway.app, continua ativo e serve o mesmo sistema). A API serve tudo:
 
@@ -21,21 +21,21 @@ npm run dev:api          # API em http://localhost:3000 (lê api/.env)
 npm run dev:site         # http://localhost:5173 (repassa /api para a 3000)
 npm run dev:retaguarda   # http://localhost:5174/admin/
 npm run dev:pdv
-npm run dev:app          # app Táqui Delivery (Expo; abrir no Expo Go pelo QR)
+npm run dev:app          # app Taaki Delivery (Expo; abrir no Expo Go pelo QR)
 npm test                 # todos os workspaces
 npm run seed:demo        # dados de demonstração do dia (roteiro em DEMO.md)
 npm run dist -w pdv      # instalador do PDV → pdv/dist/Taqui-PDV-Setup-<versão>.exe
 ```
 
-App Táqui Delivery: login (Google Cloud, Apple) em `app/CONFIGURACAO_LOGIN.md`; build, envio às lojas, regra do `versionCode` e formulários de privacidade em `app/PUBLICACAO.md`.
+App Taaki Delivery: login (Google Cloud, Apple) em `app/CONFIGURACAO_LOGIN.md`; build, envio às lojas, regra do `versionCode` e formulários de privacidade em `app/PUBLICACAO.md`.
 
-### Táqui PDV (balcão)
+### Taaki PDV (balcão)
 
-Um PDV só para **todas as lojas**: o programa se chama **Táqui PDV** (antes "PDV do Batiá", "PDV do Abatiá" e, no começo, "Cabana Boemia PDV"). A loja vem do login: dono e atendente entram na loja deles; o administrador da plataforma escolhe a loja ("Em qual loja?") e o computador lembra a escolha.
+Um PDV só para **todas as lojas**: o programa se chama **Taaki PDV** (antes "Táqui PDV", "PDV do Batiá", "PDV do Abatiá" e, no começo, "Cabana Boemia PDV"). A loja vem do login: dono e atendente entram na loja deles; o administrador da plataforma escolhe a loja ("Em qual loja?") e o computador lembra a escolha.
 
-O instalador (`npm run dist -w pdv`, no Windows → `pdv/dist/Taqui-PDV-Setup-<versão>.exe`) instala só para o usuário do Windows, sem pedir administrador, cria atalho "Táqui PDV" na área de trabalho e no menu Iniciar e abre o PDV ao terminar; a partir daí ele abre sozinho com o Windows. O instalador não é assinado: na primeira vez o Windows SmartScreen avisa "editor desconhecido" (Mais informações › Executar assim mesmo). O log da impressão fica em `%APPDATA%\PDV do Abatiá\logs\impressao.log` (a pasta de dados mantém o nome de antes das trocas de nome, de propósito: ver `CLAUDE.md` › PDV › Nome).
+O instalador (`npm run dist -w pdv`, no Windows → `pdv/dist/Taqui-PDV-Setup-<versão>.exe`) instala só para o usuário do Windows, sem pedir administrador, cria atalho "Taaki PDV" na área de trabalho e no menu Iniciar e abre o PDV ao terminar; a partir daí ele abre sozinho com o Windows. O instalador não é assinado: na primeira vez o Windows SmartScreen avisa "editor desconhecido" (Mais informações › Executar assim mesmo). O log da impressão fica em `%APPDATA%\PDV do Abatiá\logs\impressao.log` (a pasta de dados mantém o nome de antes das trocas de nome, de propósito: ver `CLAUDE.md` › PDV › Nome).
 
-Atualizar um PDV que se chama "PDV do Abatiá" ou "PDV do Batiá" para o "Táqui PDV": é o mesmo programa para o Windows (mesmo `appId`), então o instalador novo atualiza por cima. Servidor, login, impressora e fila de impressão continuam, porque a pasta de dados não muda. Depois de instalar, confira se ficou um atalho só ("Táqui PDV") na área de trabalho e apague um "PDV do Abatiá"/"PDV do Batiá" que tenha sobrado (a atualização por cima com nome novo ainda não foi testada numa instalação real).
+Atualizar um PDV que se chama "PDV do Abatiá", "PDV do Batiá" ou "Táqui PDV" para o "Taaki PDV": é o mesmo programa para o Windows (mesmo `appId`), então o instalador novo atualiza por cima. Servidor, login, impressora e fila de impressão continuam, porque a pasta de dados não muda. Depois de instalar, confira se ficou um atalho só ("Taaki PDV") na área de trabalho e apague um "PDV do Abatiá"/"PDV do Batiá"/"Táqui PDV" que tenha sobrado (a atualização por cima com nome novo ainda não foi testada numa instalação real).
 
 #### Instalar numa loja nova
 

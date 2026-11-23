@@ -54,7 +54,7 @@ GOOGLE_IOS_URL_SCHEME=com.googleusercontent.apps.XXXX npx eas-cli@latest build -
 npx eas-cli@latest submit -p ios --latest
 ```
 
-O EAS pede o login da Apple (ou uma chave da App Store Connect API) e cria o app na App Store Connect se ainda não existir (`br.com.deliveryabatia.app`). O build cai no TestFlight; a revisão é pedida na App Store Connect.
+O EAS pede o login da Apple (ou uma chave da App Store Connect API) e cria o app na App Store Connect se ainda não existir (`br.com.taaki.app`). O build cai no TestFlight; a revisão é pedida na App Store Connect.
 
 ## 4. Google Play › Segurança dos dados (rascunho)
 

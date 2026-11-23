@@ -2,7 +2,8 @@
 // página de cada loja no tema dela (cor e logo da API). Pastas android/ e ios/
 // são geradas pelo prebuild (CNG) e não vão para o git: tudo nativo se configura aqui.
 
-const ID_APP = 'br.com.deliveryabatia.app';
+// Pacote Android / bundle iOS: PERMANENTE depois da publicação (não mudar).
+const ID_APP = 'br.com.taaki.app';
 
 // Login com Google no iOS: esquema de URL = o "iOS URL scheme" do cliente OAuth iOS
 // (com.googleusercontent.apps.<...>). O plugin do Google Sign-In só mexe no iOS

@@ -15,7 +15,7 @@ const URL_REVOGAR = 'https://appleid.apple.com/auth/revoke';
 const CACHE_CHAVES_MS = 60 * 60 * 1000;
 
 /** Bundle id do app (público). APPLE_BUNDLE_IDS sobrescreve (lista separada por vírgula). */
-export const BUNDLE_ID_PADRAO = 'br.com.deliveryabatia.app';
+export const BUNDLE_ID_PADRAO = 'br.com.taaki.app';
 
 /** @returns {string[]} */
 export function audiencesApple(env = process.env) {

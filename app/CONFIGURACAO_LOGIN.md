@@ -7,7 +7,7 @@ Dados fixos do app:
 | Item | Valor |
 |---|---|
 | Nome | Taaki Delivery |
-| Pacote Android / Bundle ID iOS | `br.com.deliveryabatia.app` |
+| Pacote Android / Bundle ID iOS | `br.com.taaki.app` |
 | Projeto EAS | `@sampaio040826/delivery-abatia` (ID `77cc3648-5ee3-4448-a147-6c213d3a69ea`) |
 | API | `https://cabana.managerpix.com.br` |
 | Exclusão de conta (web) | `https://cabana.managerpix.com.br/excluir-conta` |
@@ -26,14 +26,14 @@ Use o **mesmo projeto do Google Cloud** do site ("Cabana Boemia"): o cliente And
 
 ## 1. Google Cloud: cliente OAuth Android (build do EAS)
 
-1. Pegue o **SHA-1 do keystore do EAS**. O keystore foi criado pelo EAS no primeiro build e fica guardado na Expo:
-   - pelo site: expo.dev › projeto `delivery-abatia` › **Credentials** › Android › `br.com.deliveryabatia.app` › Keystore › **SHA-1 Fingerprint**; ou
+1. Pegue o **SHA-1 do keystore do EAS**. O EAS guarda um keystore **por pacote**: com a troca para `br.com.taaki.app` (2026-11-23) o primeiro build cria um keystore novo, com **SHA-1 novo** (o do pacote antigo `br.com.deliveryabatia.app` não serve mais; os clientes OAuth Android antigos podem ser apagados). Ele fica guardado na Expo:
+   - pelo site: expo.dev › projeto `delivery-abatia` › **Credentials** › Android › `br.com.taaki.app` › Keystore › **SHA-1 Fingerprint**; ou
    - pelo terminal, na pasta `app/`: `npx eas-cli@latest credentials -p android` › perfil `preview` (ou `production`) › mostra o SHA-1.
    Os perfis development, preview e production usam o mesmo keystore, então um SHA-1 cobre todos os builds do EAS.
 2. [Google Cloud Console](https://console.cloud.google.com/) › projeto **Cabana Boemia** › **Google Auth Platform** › **Clientes** › **Criar cliente**:
    - Tipo: **Android**
    - Nome: `App Taaki Delivery (Android, EAS)`
-   - Nome do pacote: `br.com.deliveryabatia.app`
+   - Nome do pacote: `br.com.taaki.app`
    - Impressão digital SHA-1: a do passo 1
 3. Salve. Não há segredo nem nada para copiar para o app. Opcional: acrescente o ID desse cliente em `GOOGLE_CLIENT_IDS` no Railway (não atrapalha e cobre o caso de o token vir com esse `aud`).
 4. A mudança leva alguns minutos para valer. Teste no APK de preview: "Continuar com Google" › escolher a conta › volta logado.
@@ -50,7 +50,7 @@ Sem isso o login funciona no APK de preview e **falha só na versão baixada da 
 
 ## 3. Google Cloud: cliente OAuth iOS
 
-1. Google Cloud › Clientes › Criar cliente › **iOS**: nome `App Taaki Delivery (iOS)`, ID do pacote `br.com.deliveryabatia.app` (o Team ID e o App Store ID são opcionais).
+1. Google Cloud › Clientes › Criar cliente › **iOS**: nome `App Taaki Delivery (iOS)`, ID do pacote `br.com.taaki.app` (o Team ID e o App Store ID são opcionais).
 2. Anote o **ID do cliente** e o **Esquema de URL do iOS** (`com.googleusercontent.apps.<...>`).
 3. No EAS, crie as variáveis dos builds iOS (expo.dev › projeto › **Environment variables**, ambientes preview e production; ou `npx eas-cli@latest env:create`):
    - `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` = o ID do cliente iOS
@@ -62,10 +62,10 @@ Sem isso o login funciona no APK de preview e **falha só na versão baixada da 
 A App Store exige "Entrar com Apple" quando o app oferece login com Google. O botão só aparece no iOS.
 
 1. Conta no **Apple Developer Program** (pago, anual), no nome de quem vai publicar.
-2. developer.apple.com › Certificates, Identifiers & Profiles › **Identifiers** › App ID `br.com.deliveryabatia.app` com a capability **Sign In with Apple** marcada. No primeiro `eas build -p ios`, o EAS cria o App ID e liga a capability sozinho, porque o `app.config.js` tem `usesAppleSignIn: true`. Confira depois.
-3. A API confere o identity token com as chaves públicas da Apple e aceita `aud` = `br.com.deliveryabatia.app` (padrão; `APPLE_BUNDLE_IDS` muda isso). **Nada mais é preciso para o login funcionar.**
+2. developer.apple.com › Certificates, Identifiers & Profiles › **Identifiers** › App ID `br.com.taaki.app` com a capability **Sign In with Apple** marcada. No primeiro `eas build -p ios`, o EAS cria o App ID e liga a capability sozinho, porque o `app.config.js` tem `usesAppleSignIn: true`. Confira depois.
+3. A API confere o identity token com as chaves públicas da Apple e aceita `aud` = `br.com.taaki.app` (padrão; `APPLE_BUNDLE_IDS` muda isso). **Nada mais é preciso para o login funcionar.**
 4. **Para revogar o login na Apple ao excluir a conta** (exigência da App Store), crie uma chave:
-   - **Keys** › "+" › nome `Taqui Delivery SIWA` › marque **Sign in with Apple** › Configure › App ID primário `br.com.deliveryabatia.app` › Register.
+   - **Keys** › "+" › nome `Taqui Delivery SIWA` › marque **Sign in with Apple** › Configure › App ID primário `br.com.taaki.app` › Register.
    - Baixe o `.p8`. **Ele só pode ser baixado uma vez**: guarde fora do repositório.
    - Anote o **Key ID**. O **Team ID** fica em Membership details.
    - Railway: `APPLE_TEAM_ID`, `APPLE_KEY_ID` e `APPLE_PRIVATE_KEY` (o conteúdo do `.p8` numa linha só, trocando cada quebra de linha por `\n`).
@@ -76,7 +76,7 @@ A App Store exige "Entrar com Apple" quando o app oferece login com Google. O bo
 | Variável | Valor | Obrigatória? |
 |---|---|---|
 | `GOOGLE_CLIENT_IDS` | IDs dos clientes Android e iOS, separados por vírgula, sem espaço | Não (o token do app sai com o `aud` do cliente web, já aceito); recomendado |
-| `APPLE_BUNDLE_IDS` | vazio (= `br.com.deliveryabatia.app`) | Não |
+| `APPLE_BUNDLE_IDS` | vazio (= `br.com.taaki.app`) | Não |
 | `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` | ver passo 4 | Só para revogar na Apple ao excluir a conta |
 
 `GOOGLE_CLIENT_ID` continua igual (cliente web). As mesmas chaves já estão no `api/.env.railway` local, vazias: preencha lá também, porque o teste `env-railway.test.js` confere que o arquivo e o código batem.

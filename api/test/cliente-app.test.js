@@ -28,7 +28,7 @@ import { limiteRetencao, normalizarIp, registrarAcesso } from '../src/services/r
  */
 const WEB = 'cliente-teste.apps.googleusercontent.com'; // GOOGLE_CLIENT_ID do test/setup.js
 const ANDROID = 'android-teste.apps.googleusercontent.com';
-const BUNDLE = 'br.com.deliveryabatia.app';
+const BUNDLE = 'br.com.taaki.app';
 const KID_G = 'kid-google';
 const KID_A = 'kid-apple';
 const chaveGoogle = generateKeyPairSync('rsa', { modulusLength: 2048 });

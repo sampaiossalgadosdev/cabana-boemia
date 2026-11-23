@@ -54,7 +54,7 @@ export function TelaLojas({ abrirLoja, aoMudarLoja }) {
       <div className="pagina__topo">
         <div>
           <h1 className="pagina__titulo">Lojas</h1>
-          <p className="pagina__sub">Lojas da plataforma Delivery do Batiá. A loja nasce sem cardápio: o dono cadastra na retaguarda.</p>
+          <p className="pagina__sub">Lojas da plataforma Taaki Delivery. A loja nasce sem cardápio: o dono cadastra na retaguarda.</p>
         </div>
         <button type="button" className="botao botao--primario" onClick={() => setEditando('nova')}>
           + Nova loja

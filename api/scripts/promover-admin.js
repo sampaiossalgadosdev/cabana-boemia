@@ -1,5 +1,5 @@
 /**
- * Promove um usuário a ADMIN (plataforma Delivery do Batiá: acima do DONO, sem loja).
+ * Promove um usuário a ADMIN (plataforma Taaki Delivery: acima do DONO, sem loja).
  *   npm run promover-admin -w api -- --email voce@exemplo.com
  * Desfazer (volta a DONO da loja; padrão: Cabana Boemia):
  *   npm run promover-admin -w api -- --email voce@exemplo.com --desfazer [--loja cabana-boemia]

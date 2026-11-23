@@ -3,7 +3,7 @@
   /*
    * Tema da loja: a cor primária vem da loja (src/lib/tema.js aplica
    * variaveisDoTema() do shared, com o contraste conferido). Estes são os do
-   * tema padrão (Delivery do Batiá). "Vermelho" no CSS = destaque da loja;
+   * tema padrão (Taaki Delivery). "Vermelho" no CSS = destaque da loja;
    * erro e alerta usam --cor-erro, que é sempre vermelho.
    */
   --cor-primaria: #c8102e;

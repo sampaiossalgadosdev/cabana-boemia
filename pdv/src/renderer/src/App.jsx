@@ -11,7 +11,7 @@ import { TelaEscolherLoja } from './telas/TelaEscolherLoja.jsx';
 /**
  * Telas: carregando → configurar (sem servidor) → impressora (primeira execução) → login
  * → (ADMIN: escolher a loja) → principal. Ao abrir, tenta a sessão salva (refresh cifrado no main).
- * O tema (cor e logo) é o da loja; sem loja, o padrão do Delivery do Batiá.
+ * O tema (cor e logo) é o da loja; sem loja, o padrão do Taaki Delivery.
  */
 export function App() {
   const [loja, setLoja] = useState(null);

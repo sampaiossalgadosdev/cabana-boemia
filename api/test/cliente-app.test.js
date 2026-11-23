@@ -19,7 +19,7 @@ import { CONTROLADOR, DOCUMENTOS_APP, emailDoTitular, identificacaoDoControlador
 import { limiteRetencao, normalizarIp, registrarAcesso } from '../src/services/registroAcesso.service.js';
 
 /**
- * App Delivery do Batiá: login nativo (Google com várias audiences, Apple),
+ * App Taaki Delivery: login nativo (Google com várias audiences, Apple),
  * refresh token do cliente, rate limit de /cliente/auth/*, exclusão de conta
  * e a página pública /excluir-conta. Google e Apple são simulados com chaves
  * RSA geradas aqui (assinatura, emissor, audience e validade conferidos de
@@ -28,7 +28,7 @@ import { limiteRetencao, normalizarIp, registrarAcesso } from '../src/services/r
  */
 const WEB = 'cliente-teste.apps.googleusercontent.com'; // GOOGLE_CLIENT_ID do test/setup.js
 const ANDROID = 'android-teste.apps.googleusercontent.com';
-const BUNDLE = 'br.com.deliveryabatia.app';
+const BUNDLE = 'br.com.taaki.app';
 const KID_G = 'kid-google';
 const KID_A = 'kid-apple';
 const chaveGoogle = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -190,7 +190,7 @@ test('páginas legais do app: controlador, todos os tópicos e a vigência', () 
   const p = paginaPrivacidade('privacidade@exemplo.com');
   for (const trecho of [
     'controlador',
-    'João Pedro de Oliveira Sampaio (Delivery do Batiá), Abatiá-PR',
+    'João Pedro de Oliveira Sampaio (Taaki Delivery), Abatiá-PR',
     'Resolução CD/ANPD nº 2/2022',
     'não há encarregado (DPO) nomeado',
     'nome e e-mail',
@@ -220,7 +220,7 @@ test('páginas legais do app: controlador, todos os tópicos e a vigência', () 
   const t = paginaTermos('privacidade@exemplo.com');
   for (const trecho of [
     'Termos de uso',
-    'Responsável pela plataforma: <strong>João Pedro de Oliveira Sampaio (Delivery do Batiá), Abatiá-PR',
+    'Responsável pela plataforma: <strong>João Pedro de Oliveira Sampaio (Taaki Delivery), Abatiá-PR',
     'Cada loja é responsável',
     'não pode usá-los para outra finalidade',
     'na entrega, direto à loja',
@@ -238,13 +238,13 @@ test('páginas legais do app: controlador, todos os tópicos e a vigência', () 
 });
 
 test('controlador num lugar só: trocar para razão social e CNPJ muda as duas páginas', () => {
-  assert.equal(identificacaoDoControlador(), 'João Pedro de Oliveira Sampaio (Delivery do Batiá), Abatiá-PR');
-  const empresa = { ...CONTROLADOR, nome: 'Delivery do Batiá Ltda.', documento: 'CNPJ 00.000.000/0001-00', pequenoPorte: false };
-  assert.equal(identificacaoDoControlador(empresa), 'Delivery do Batiá Ltda., CNPJ 00.000.000/0001-00, Abatiá-PR');
+  assert.equal(identificacaoDoControlador(), 'João Pedro de Oliveira Sampaio (Taaki Delivery), Abatiá-PR');
+  const empresa = { ...CONTROLADOR, nome: 'Taaki Delivery Ltda.', documento: 'CNPJ 00.000.000/0001-00', pequenoPorte: false };
+  assert.equal(identificacaoDoControlador(empresa), 'Taaki Delivery Ltda., CNPJ 00.000.000/0001-00, Abatiá-PR');
   const p = paginaPrivacidade(null, empresa);
-  assert.match(p, /Delivery do Batiá Ltda\., CNPJ 00\.000\.000\/0001-00, Abatiá-PR/);
+  assert.match(p, /Taaki Delivery Ltda\., CNPJ 00\.000\.000\/0001-00, Abatiá-PR/);
   assert.doesNotMatch(p, /não há encarregado/, 'sem pequeno porte, o texto do encarregado sai');
-  assert.match(paginaTermos(null, empresa), /Delivery do Batiá Ltda\./);
+  assert.match(paginaTermos(null, empresa), /Taaki Delivery Ltda\./);
 });
 
 test('canal do titular: e-mail do ambiente (CONTATO_TITULAR_EMAIL) quando existe; sempre o formulário', () => {
@@ -665,7 +665,7 @@ describe('app: login, sessão longa, exclusão de conta e /excluir-conta', { ski
       assert.equal(r.headers.get('x-robots-tag'), null, 'páginas legais podem ser indexadas');
       assert.doesNotMatch(r.corpo, /<script/);
       assert.match(r.corpo, /mailto:titular@teste\.com/);
-      assert.match(r.corpo, /João Pedro de Oliveira Sampaio \(Delivery do Batiá\)/);
+      assert.match(r.corpo, /João Pedro de Oliveira Sampaio \(Taaki Delivery\)/);
     }
     assert.match((await req('GET', '/privacidade-app', { url: raiz })).corpo, /Política de privacidade/);
     assert.match((await req('GET', '/termos-app', { url: raiz })).corpo, /Termos de uso/);

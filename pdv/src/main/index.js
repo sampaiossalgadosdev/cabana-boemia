@@ -186,7 +186,7 @@ function criarJanela() {
     minWidth: 1024,
     minHeight: 640,
     show: false,
-    title: 'PDV do Batiá',
+    title: 'Taaki PDV',
     backgroundColor: '#FBF3E8',
     autoHideMenuBar: true,
     webPreferences: {

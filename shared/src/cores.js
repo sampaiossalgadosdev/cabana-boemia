@@ -18,8 +18,8 @@ export const BASE_CLARA = '#FFFFFF';
 export const CONTRASTE_MINIMO_TEXTO = 4.5;
 export const CONTRASTE_MINIMO_BASE = 3;
 
-/** Tema padrão da plataforma (Delivery do Batiá): sem loja escolhida ou loja sem cor. */
-export const TEMA_PADRAO = Object.freeze({ nome: 'Delivery do Batiá', corPrimaria: '#C8102E' });
+/** Tema padrão da plataforma (Taaki Delivery): sem loja escolhida ou loja sem cor. */
+export const TEMA_PADRAO = Object.freeze({ nome: 'Taaki Delivery', corPrimaria: '#C8102E' });
 
 /** Sugestões da tela "Perfil da loja" (todas passam em `avaliarCor`; testado). */
 export const PALETA_SUGESTOES = Object.freeze([

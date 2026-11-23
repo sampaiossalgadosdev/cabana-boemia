@@ -9,7 +9,7 @@
   --cor-branco: #ffffff;
 
   /*
-   * Tema da loja (cor primária). Estes são os do tema padrão (Delivery do Batiá /
+   * Tema da loja (cor primária). Estes são os do tema padrão (Taaki Delivery /
    * Cabana); com a loja definida, src/lib/tema.js troca por variaveisDoTema()
    * do shared (contraste conferido). Erro/alerta continuam vermelhos sempre.
    */

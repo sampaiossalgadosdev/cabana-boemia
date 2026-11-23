@@ -1,8 +1,9 @@
-// Configuração do app "Delivery do Batiá" (Expo), multi-loja: vitrine de lojas,
+// Configuração do app "Taaki Delivery" (Expo), multi-loja: vitrine de lojas,
 // página de cada loja no tema dela (cor e logo da API). Pastas android/ e ios/
 // são geradas pelo prebuild (CNG) e não vão para o git: tudo nativo se configura aqui.
 
-const ID_APP = 'br.com.deliveryabatia.app';
+// Pacote Android / bundle iOS: PERMANENTE depois da publicação (não mudar).
+const ID_APP = 'br.com.taaki.app';
 
 // Login com Google no iOS: esquema de URL = o "iOS URL scheme" do cliente OAuth iOS
 // (com.googleusercontent.apps.<...>). O plugin do Google Sign-In só mexe no iOS
@@ -14,7 +15,8 @@ const EAS_PROJECT_ID = '77cc3648-5ee3-4448-a147-6c213d3a69ea';
 
 /** @type {import("expo/config").ExpoConfig} */
 export default {
-  name: 'Delivery do Batiá',
+  // Nome curto, embaixo do ícone. Nos textos o produto é "Taaki Delivery".
+  name: 'Taaki',
   slug: 'delivery-abatia',
   scheme: 'deliveryabatia',
   version: '0.3.0',
@@ -40,7 +42,7 @@ export default {
     adaptiveIcon: {
       foregroundImage: './assets/icone-android-frente.png',
       monochromeImage: './assets/icone-android-monocromatico.png',
-      backgroundColor: '#C8102E',
+      backgroundColor: '#0A1428',
     },
     // Só o que o app usa: rede (fetch) e estado da rede (NetInfo).
     permissions: ['android.permission.INTERNET', 'android.permission.ACCESS_NETWORK_STATE'],
@@ -58,7 +60,7 @@ export default {
         image: './assets/splash.png',
         imageWidth: 240,
         resizeMode: 'contain',
-        backgroundColor: '#C8102E',
+        backgroundColor: '#0A1428',
       },
     ],
     [

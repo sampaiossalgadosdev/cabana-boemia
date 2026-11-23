@@ -46,8 +46,8 @@ export function AceiteTermos() {
         </Text>
         <Text style={s.texto}>
           {jaAceitouAntes
-            ? 'Os Termos de uso e a Política de privacidade do Delivery do Batiá mudaram. Leia a versão nova e aceite para continuar usando sua conta.'
-            : 'Para usar sua conta no Delivery do Batiá, leia e aceite os Termos de uso e a Política de privacidade.'}
+            ? 'Os Termos de uso e a Política de privacidade do Taaki Delivery mudaram. Leia a versão nova e aceite para continuar usando sua conta.'
+            : 'Para usar sua conta no Taaki Delivery, leia e aceite os Termos de uso e a Política de privacidade.'}
         </Text>
         <Text style={s.texto}>
           Toque nos nomes abaixo para ler. Receber ofertas é outra escolha, opcional, em Perfil › Comunicações.

@@ -1,4 +1,4 @@
-# Publicar o app Delivery do Batiá (Google Play e App Store)
+# Publicar o app Taaki Delivery (Google Play e App Store)
 
 Passo a passo de build, envio, versão e dos formulários de privacidade das lojas. O login (Google Cloud, Apple, chaves) está em [`CONFIGURACAO_LOGIN.md`](CONFIGURACAO_LOGIN.md); faça aquele antes do primeiro envio.
 
@@ -40,7 +40,7 @@ GOOGLE_IOS_URL_SCHEME=com.googleusercontent.apps.XXXX npx eas-cli@latest build -
 
 ### Google Play
 
-1. **O primeiro AAB vai à mão** (o Google exige): Play Console › Delivery do Batiá › Testes › Teste interno (ou fechado) › Criar versão › enviar o `.aab` baixado do EAS. Aceite o **Play App Signing** (o Google guarda a chave final; a do EAS vira chave de upload).
+1. **O primeiro AAB vai à mão** (o Google exige): Play Console › Taaki Delivery › Testes › Teste interno (ou fechado) › Criar versão › enviar o `.aab` baixado do EAS. Aceite o **Play App Signing** (o Google guarda a chave final; a do EAS vira chave de upload).
 2. Depois do primeiro, pelo EAS:
    ```bash
    npx eas-cli@latest submit -p android --latest
@@ -54,7 +54,7 @@ GOOGLE_IOS_URL_SCHEME=com.googleusercontent.apps.XXXX npx eas-cli@latest build -
 npx eas-cli@latest submit -p ios --latest
 ```
 
-O EAS pede o login da Apple (ou uma chave da App Store Connect API) e cria o app na App Store Connect se ainda não existir (`br.com.deliveryabatia.app`). O build cai no TestFlight; a revisão é pedida na App Store Connect.
+O EAS pede o login da Apple (ou uma chave da App Store Connect API) e cria o app na App Store Connect se ainda não existir (`br.com.taaki.app`). O build cai no TestFlight; a revisão é pedida na App Store Connect.
 
 ## 4. Google Play › Segurança dos dados (rascunho)
 
@@ -128,19 +128,21 @@ App Store Connect › App › Privacidade do app:
 
 ### Google Play
 
-**Nome do app** (até 30): `Delivery do Batiá`
+**Nome do app** (até 30): `Taaki Delivery`
+
+Embaixo do ícone do celular aparece só **"Taaki"** (`name` do `app.config.js`).
 
 **Descrição curta** (até 80):
 
-> Peça das lanchonetes e restaurantes de Abatiá e pague na entrega.
+> Comida, bebida e outros comércios de Abatiá e região. Pague na entrega.
 
 **Descrição completa** (até 4000):
 
-> O Delivery do Batiá reúne as lanchonetes e restaurantes de Abatiá-PR num app só. Veja o cardápio de cada loja, monte sua sacola e receba em casa. O pagamento é feito na entrega, direto com a loja: Pix, dinheiro ou cartão.
+> O Taaki Delivery reúne os comércios de Abatiá e das cidades vizinhas num app só: restaurantes, lanchonetes, pizzarias, bebidas e outras lojas da região. Veja o cardápio de cada loja, monte sua sacola e receba em casa. O pagamento é feito na entrega, direto com a loja.
 >
 > COMO FUNCIONA
 > • Escolha a loja: o início mostra quem está aberto agora e quando cada uma abre.
-> • Monte a sacola, com observação em cada item ("sem cebola", "bem passado").
+> • Monte a sacola, com observação em cada item ("sem cebola", "bem gelada").
 > • Entre com sua conta Google (ou Apple, no iPhone) e informe seu celular.
 > • Escolha o endereço: o app mostra a taxa de entrega de cada loja para o seu bairro.
 > • Envie e acompanhe o número do pedido e a previsão de entrega.
@@ -152,12 +154,12 @@ App Store Connect › App › Privacidade do app:
 > • Sem internet, o app mostra o último cardápio visto.
 >
 > PAGAMENTO NA ENTREGA
-> O app não pede cartão. Você paga a loja quando o pedido chega. Para cancelar, fale com a loja pelo WhatsApp: o link aparece na tela do pedido.
+> O app não pede dados de pagamento. Você paga a loja quando o pedido chega, numa das formas que ela aceita. Para cancelar, fale com a loja pelo WhatsApp: o link aparece na tela do pedido.
 >
 > SEUS DADOS
 > A loja recebe só o necessário para preparar e entregar o seu pedido (nome, telefone, endereço e itens). Receber ofertas é opcional e pode ser desligado no Perfil. Você pode excluir sua conta pelo próprio app.
 >
-> Tem uma loja em Abatiá e quer entrar no app? Fale com a gente pelo contato da tela Sobre.
+> Tem um comércio em Abatiá ou na região e quer entrar no app? Fale com a gente pelo contato da tela Sobre.
 
 **Imagens**: ícone 512×512 = `app/assets/loja/icone-play-512.png`; destaque 1024×500 = `app/assets/loja/destaque-play-1024x500.png` (os dois **provisórios**, gerados por `scripts/gerar-imagens.ps1`; com a arte final em `app/assets/marca/`, rode o script de novo). Capturas de tela do celular: pelo menos 2 (vitrine com o carrossel, cardápio de uma loja, sacola, pedido enviado), 1080×1920 ou parecido, tiradas num celular real ou no emulador.
 
@@ -165,10 +167,10 @@ App Store Connect › App › Privacidade do app:
 
 ### App Store
 
-- **Nome** (30): `Delivery do Batiá`
-- **Subtítulo** (30): `Lojas de Abatiá na sua casa`
-- **Palavras-chave** (100): `delivery,abatiá,lanche,pizza,marmita,restaurante,lanchonete,pedido,entrega,comida`
-- **Texto promocional** (170): `Peça das lanchonetes e restaurantes de Abatiá-PR e pague na entrega, com Pix, dinheiro ou cartão.`
+- **Nome** (30): `Taaki Delivery`
+- **Subtítulo** (30): `Abatiá e região na sua casa`
+- **Palavras-chave** (100): `delivery,abatiá,região,lanche,pizza,marmita,bebida,restaurante,lanchonete,pedido,entrega,comida`
+- **Texto promocional** (170): `Peça comida, bebida e mais dos comércios de Abatiá e região e pague na entrega, direto com a loja.`
 - **Descrição**: a mesma do Google Play.
 - **URL de suporte**: `https://cabana.managerpix.com.br/termos-app` (ou uma página de contato, quando houver).
 - **Categoria**: Comida e bebida.

@@ -100,7 +100,7 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sem loja (login, plataforma): tema padrão do Delivery do Batiá.
+  // Sem loja (login, plataforma): tema padrão do Taaki Delivery.
   useEffect(() => {
     if (!usuario) aplicarTema(null);
   }, [usuario]);

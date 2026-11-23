@@ -1,5 +1,5 @@
 /**
- * Quem é o CONTROLADOR dos dados do app Delivery do Batiá (LGPD), usado nas
+ * Quem é o CONTROLADOR dos dados do app Taaki Delivery (LGPD), usado nas
  * páginas /privacidade-app e /termos-app. Um lugar só: quando houver empresa,
  * trocar `nome` pela razão social e preencher `documento` com o CNPJ.
  *
@@ -7,7 +7,7 @@
  * encarregado (DPO) nomeado; o canal de contato do titular cumpre essa função.
  */
 export const CONTROLADOR = Object.freeze({
-  nome: 'João Pedro de Oliveira Sampaio (Delivery do Batiá)',
+  nome: 'João Pedro de Oliveira Sampaio (Taaki Delivery)',
   /** Ex.: 'CNPJ 00.000.000/0001-00' (null = pessoa física, sem documento publicado). */
   documento: null,
   cidade: 'Abatiá-PR',
@@ -26,7 +26,7 @@ export function emailDoTitular(env = process.env) {
   return email || null;
 }
 
-/** "Nome (Delivery do Batiá), CNPJ …, Abatiá-PR" */
+/** "Nome (Taaki Delivery), CNPJ …, Abatiá-PR" */
 export function identificacaoDoControlador(c = CONTROLADOR) {
   return [c.nome, c.documento, c.cidade].filter(Boolean).join(', ');
 }
@@ -53,7 +53,7 @@ export const precisaAceite = (termosVersao) => termosVersao !== DOCUMENTOS_APP.v
 export function dadosDaPlataforma(email = emailDoTitular(), c = CONTROLADOR) {
   return {
     plataforma: {
-      nome: 'Delivery do Batiá',
+      nome: 'Taaki Delivery',
       responsavel: c.nome,
       documento: c.documento,
       cidade: c.cidade,

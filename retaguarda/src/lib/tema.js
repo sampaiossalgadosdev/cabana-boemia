@@ -1,7 +1,7 @@
 /**
  * Tema da retaguarda por loja (lógica pura, testada): cor primária da loja nos
  * destaques (menu, botões, abas), base neutra. Sem loja (ADMIN na plataforma)
- * ou cor ilegível: o tema padrão do Delivery do Batiá. A regra de contraste é a
+ * ou cor ilegível: o tema padrão do Taaki Delivery. A regra de contraste é a
  * do shared (a mesma que a API usa para recusar a cor).
  */
 import { TEMA_PADRAO, variaveisDoTema } from '@restaurante/shared/cores';

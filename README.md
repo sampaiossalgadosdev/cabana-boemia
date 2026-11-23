@@ -1,6 +1,6 @@
 # Cabana Boemia — Sistema de pedidos
 
-Monorepo npm workspaces: `api` (Express + Prisma + Socket.IO), `site` (cliente), `retaguarda` (dono), `pdv` (Electron, balcão), `app` (Delivery do Batiá, Expo, Android/iOS; em desenvolvimento) e `shared`.
+Monorepo npm workspaces: `api` (Express + Prisma + Socket.IO), `site` (cliente), `retaguarda` (dono), `pdv` (Electron, balcão), `app` (Taaki Delivery, Expo, Android/iOS; em desenvolvimento) e `shared`.
 
 Em produção é **um serviço só** no Railway (mais o PostgreSQL), em **https://cabana.managerpix.com.br** (CNAME no Registro.br apontando para o Railway; o domínio do Railway, https://cabana-boemia-production.up.railway.app, continua ativo e serve o mesmo sistema). A API serve tudo:
 
@@ -21,26 +21,26 @@ npm run dev:api          # API em http://localhost:3000 (lê api/.env)
 npm run dev:site         # http://localhost:5173 (repassa /api para a 3000)
 npm run dev:retaguarda   # http://localhost:5174/admin/
 npm run dev:pdv
-npm run dev:app          # app Delivery do Batiá (Expo; abrir no Expo Go pelo QR)
+npm run dev:app          # app Taaki Delivery (Expo; abrir no Expo Go pelo QR)
 npm test                 # todos os workspaces
 npm run seed:demo        # dados de demonstração do dia (roteiro em DEMO.md)
-npm run dist -w pdv      # instalador do PDV → pdv/dist/PDV-do-Batia-Setup-<versão>.exe
+npm run dist -w pdv      # instalador do PDV → pdv/dist/Taaki-PDV-Setup-<versão>.exe
 ```
 
-App Delivery do Batiá: login (Google Cloud, Apple) em `app/CONFIGURACAO_LOGIN.md`; build, envio às lojas, regra do `versionCode` e formulários de privacidade em `app/PUBLICACAO.md`.
+App Taaki Delivery: login (Google Cloud, Apple) em `app/CONFIGURACAO_LOGIN.md`; build, envio às lojas, regra do `versionCode` e formulários de privacidade em `app/PUBLICACAO.md`.
 
-### PDV do Batiá (balcão)
+### Taaki PDV (balcão)
 
-Um PDV só para **todas as lojas**: o programa se chama **PDV do Batiá** (antes, "Cabana Boemia PDV"). A loja vem do login: dono e atendente entram na loja deles; o administrador da plataforma escolhe a loja ("Em qual loja?") e o computador lembra a escolha.
+Um PDV só para **todas as lojas**: o programa se chama **Taaki PDV** (antes "Táqui PDV", "PDV do Batiá", "PDV do Abatiá" e, no começo, "Cabana Boemia PDV"). A loja vem do login: dono e atendente entram na loja deles; o administrador da plataforma escolhe a loja ("Em qual loja?") e o computador lembra a escolha.
 
-O instalador (`npm run dist -w pdv`, no Windows → `pdv/dist/PDV-do-Batia-Setup-<versão>.exe`) instala só para o usuário do Windows, sem pedir administrador, cria atalho "PDV do Batiá" na área de trabalho e no menu Iniciar e abre o PDV ao terminar; a partir daí ele abre sozinho com o Windows. O instalador não é assinado: na primeira vez o Windows SmartScreen avisa "editor desconhecido" (Mais informações › Executar assim mesmo). O log da impressão fica em `%APPDATA%\PDV do Abatiá\logs\impressao.log` (a pasta de dados mantém o nome de antes da troca para "PDV do Batiá", de propósito: ver `CLAUDE.md` › PDV › Nome).
+O instalador (`npm run dist -w pdv`, no Windows → `pdv/dist/Taaki-PDV-Setup-<versão>.exe`) instala só para o usuário do Windows, sem pedir administrador, cria atalho "Taaki PDV" na área de trabalho e no menu Iniciar e abre o PDV ao terminar; a partir daí ele abre sozinho com o Windows. O instalador não é assinado: na primeira vez o Windows SmartScreen avisa "editor desconhecido" (Mais informações › Executar assim mesmo). O log da impressão fica em `%APPDATA%\PDV do Abatiá\logs\impressao.log` (a pasta de dados mantém o nome de antes das trocas de nome, de propósito: ver `CLAUDE.md` › PDV › Nome).
 
-Atualizar um PDV que já se chama "PDV do Abatiá" para o "PDV do Batiá": é o mesmo programa para o Windows (mesmo `appId`), então o instalador novo atualiza por cima. Servidor, login, impressora e fila de impressão continuam, porque a pasta de dados não muda. Depois de instalar, confira se ficou um atalho só ("PDV do Batiá") na área de trabalho e apague um "PDV do Abatiá" que tenha sobrado (a atualização por cima com nome novo ainda não foi testada numa instalação real).
+Atualizar um PDV que se chama "PDV do Abatiá", "PDV do Batiá" ou "Táqui PDV" para o "Taaki PDV": é o mesmo programa para o Windows (mesmo `appId`), então o instalador novo atualiza por cima. Servidor, login, impressora e fila de impressão continuam, porque a pasta de dados não muda. Depois de instalar, confira se ficou um atalho só ("Taaki PDV") na área de trabalho e apague um "PDV do Abatiá"/"PDV do Batiá"/"Táqui PDV" que tenha sobrado (a atualização por cima com nome novo ainda não foi testada numa instalação real).
 
 #### Instalar numa loja nova
 
 1. Antes, na retaguarda (`/admin`), o administrador cria a loja em **Lojas** e o **dono** dela ("Criar dono"). O dono cadastra os produtos, os turnos e horários e a área de entrega, e cria os atendentes em **Equipe**.
-2. No computador do balcão da loja: copie `PDV-do-Batia-Setup-<versão>.exe` (pen drive ou link) e execute.
+2. No computador do balcão da loja: copie `Taaki-PDV-Setup-<versão>.exe` (pen drive ou link) e execute.
 3. Primeira abertura: o servidor já vem preenchido com `https://cabana.managerpix.com.br` (confira e salve); depois a impressora térmica (lista do Windows, largura 80/58 mm, "Imprimir teste") ou "Configurar depois".
 4. Entre com o e-mail e a senha do dono ou de um atendente **daquela loja**: a barra mostra a logo e o nome dela, e só os pedidos, o caixa e os cupons dela aparecem.
 5. Confira: um pedido de teste (Delivery › Novo pedido) cai no painel e o cupom sai com o nome da loja.
@@ -53,7 +53,7 @@ A API multi-loja **não atende mais o programa antigo** (ele para de receber ped
 1. **Backup do banco** de produção (ver `api/prisma/REVERTER_MULTI_LOJA.md`).
 2. Merge da branch `feat/multi-loja` na `main` e push: o Railway faz o deploy e roda as migrations.
 3. No Railway (`railway ssh`): `npm run seed -w api` (a Cabana ganha a logo e a cor padrão; nada do que o dono editou muda).
-4. No computador da Cabana: **feche o PDV antigo** (Sair e fechar a janela; se precisar, feche pelo Gerenciador de Tarefas) e execute `PDV-do-Batia-Setup-<versão>.exe`.
+4. No computador da Cabana: **feche o PDV antigo** (Sair e fechar a janela; se precisar, feche pelo Gerenciador de Tarefas) e execute `Taaki-PDV-Setup-<versão>.exe`.
    - É outro programa (instala ao lado do antigo). Na **primeira abertura** ele importa do antigo, sozinho: o **endereço do servidor**, a **impressora** (modo, largura, tabela, guilhotina), o **login salvo** (abre já logado, no mesmo usuário do Windows) e o identificador do computador para a fila de impressão. O antigo **deixa de abrir com o Windows** (o instalador e o PDV novo apagam a entrada dele) e o novo passa a abrir.
    - Se o login não vier (ex.: o antigo já tinha saído da conta), é só entrar com o usuário da Cabana.
 5. Confira no PDV novo: a barra mostra a logo e o nome "Cabana Boemia"; um pedido de teste chega no painel; o cupom sai na impressora; o "Caixa" abre normal; em Impressora, a térmica certa está escolhida.

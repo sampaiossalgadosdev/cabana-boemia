@@ -117,27 +117,26 @@ export async function entrarComApple({ appleId, email }, { nome, comRefresh = fa
 
 /**
  * Login com celular (o código já foi conferido pelo verificador).
- * `telefone` = 11 dígitos, como o banco guarda. Conta de quem tem o telefone:
- * a que já o verificou; senão a mais antiga com esse telefone (cadastro do
- * PDV ou do site), que passa a ter o telefone verificado; senão uma conta
- * nova, sem nome (o app pede), com o telefone verificado. Mesma sessão do
- * Google/Apple (refresh rotativo no app) e o mesmo aceite no login.
+ * `telefone` = 11 dígitos, como o banco guarda. Só entra numa conta que já
+ * tem ESTE telefone verificado (no máximo uma, pelo índice único parcial).
+ * Se o telefone só existe em contas não verificadas (digitado no site, numa
+ * conta Google, ou cadastrado no PDV), cria uma conta nova, sem nome (o app
+ * pede), com o telefone verificado, e não toca nas antigas: o código do SMS
+ * prova a posse do número, não a da conta de outra pessoa que o digitou.
+ * Mesma sessão do Google/Apple (refresh rotativo no app) e o mesmo aceite no login.
  */
 export async function entrarComTelefone(telefone, { comRefresh = false, aceite, ip, agora = new Date() } = {}) {
-  const achar = async () => {
-    const existente = await clienteRepo.buscarParaLoginPorTelefone(telefone);
-    if (!existente) return clienteRepo.criarComTelefoneVerificado(telefone, agora);
-    if (existente.telefoneVerificado) return existente;
-    return clienteRepo.marcarTelefoneVerificado(existente.id, agora);
-  };
-  let cliente;
-  try {
-    cliente = await achar();
-  } catch (err) {
-    // Dois logins do mesmo número ao mesmo tempo: o índice único deixou só um
-    // verificar; o outro entra na conta que venceu.
-    if (!ehDuplicado(err)) throw err;
-    cliente = await achar();
+  let cliente = await clienteRepo.buscarVerificadoPorTelefone(telefone);
+  if (!cliente) {
+    try {
+      cliente = await clienteRepo.criarComTelefoneVerificado(telefone, agora);
+    } catch (err) {
+      // Dois logins do mesmo número novo ao mesmo tempo: o índice único deixou
+      // só um criar; o outro entra na conta que venceu.
+      if (!ehDuplicado(err)) throw err;
+      cliente = await clienteRepo.buscarVerificadoPorTelefone(telefone);
+      if (!cliente) throw err;
+    }
   }
   return aceiteNoLogin(await sessao(cliente, comRefresh), aceite, ip);
 }

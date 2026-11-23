@@ -236,7 +236,7 @@ describe('anúncios, aceite e marketing', { skip: semBancoDeTeste }, () => {
     assert.equal(r.status, 200);
     assert.equal(r.corpo.documentos.versao, DOCUMENTOS_APP.versao);
     assert.equal(r.corpo.contato.email, 'titular@teste.test');
-    assert.equal(r.corpo.plataforma.nome, 'Táqui Delivery');
+    assert.equal(r.corpo.plataforma.nome, 'Taaki Delivery');
   });
 
   test('aceite: cliente novo precisa aceitar; versão antiga = 409; aceite grava versão, data e histórico', async () => {

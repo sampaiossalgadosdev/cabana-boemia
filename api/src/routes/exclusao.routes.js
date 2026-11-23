@@ -57,7 +57,7 @@ function pagina({ enviado = false, erros = {}, valores = {} } = {}) {
     titulo: 'Excluir conta',
     corpo: `<section>
   <h2>Pelo app (na hora)</h2>
-  <p>Abra o app <strong>Táqui Delivery</strong>, vá em <strong>Perfil › Excluir minha conta</strong> e confirme.</p>
+  <p>Abra o app <strong>Taaki Delivery</strong>, vá em <strong>Perfil › Excluir minha conta</strong> e confirme.</p>
 </section>
 <section>
   <h2>O que é apagado</h2>

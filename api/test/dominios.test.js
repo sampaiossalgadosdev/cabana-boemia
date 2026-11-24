@@ -191,6 +191,9 @@ describe('separação por host: Taaki x Cabana', () => {
         const r = await pedir(porta, rota, { host });
         assert.equal(r.status, 200, `${host}${rota}`);
         assert.match(r.corpo, /Taaki Delivery/, `${host}${rota}`);
+        // Paleta do Taaki, não mais o vermelho e o creme da Cabana.
+        assert.match(r.corpo, /#0A1428/, `${host}${rota}`);
+        assert.doesNotMatch(r.corpo, /#C8102E|#FBF3E8|#9E0B22/i, `${host}${rota}`);
       }
     }
   });

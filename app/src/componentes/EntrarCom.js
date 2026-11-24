@@ -7,6 +7,7 @@ import { URL_PRIVACIDADE, URL_TERMOS } from '../lib/links.js';
 import { useEstilos, useTema } from '../tema/tema.js';
 import { TextoErro, Titulo } from './formulario.js';
 import { EntrarComCelular } from './EntrarComCelular.js';
+import { MarcaTaaki } from './MarcaTaaki.js';
 
 function BotaoApple({ onPress, desabilitado }) {
   // Botão oficial (exigência das diretrizes da Apple); carregado só no iOS.
@@ -63,7 +64,7 @@ export function CaixaAceite({ marcada, onMudar }) {
  * versão aceita vai junto no login e fica registrada). Erros do login viram
  * texto na tela; cancelar não mostra nada.
  */
-export function EntrarCom({ titulo, texto }) {
+export function EntrarCom({ titulo, texto, marca = false }) {
   const s = useEstilos(criarEstilos);
   const tema = useTema();
   const { entrarComGoogle, entrarComApple } = useCliente();
@@ -100,6 +101,7 @@ export function EntrarCom({ titulo, texto }) {
 
   return (
     <View style={s.bloco}>
+      {marca && <MarcaTaaki tamanho={72} estilo={s.marca} />}
       <Titulo subtitulo={texto}>{titulo}</Titulo>
       <CaixaAceite
         marcada={aceito}
@@ -151,6 +153,7 @@ export function EntrarCom({ titulo, texto }) {
 const criarEstilos = (t) =>
   StyleSheet.create({
     bloco: { gap: 12 },
+    marca: { alignSelf: 'center', marginBottom: 4 },
     google: {
       minHeight: 48,
       flexDirection: 'row',
@@ -169,5 +172,5 @@ const criarEstilos = (t) =>
     googleTexto: { fontSize: t.fontes.tamanho.medio, fontWeight: t.fontes.peso.medio, color: t.cores.texto },
     aceite: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 4 },
     aceiteTexto: { flex: 1, fontSize: t.fontes.tamanho.normal, color: t.cores.texto, lineHeight: 21 },
-    link: { color: t.cores.acao, textDecorationLine: 'underline', fontWeight: t.fontes.peso.medio },
+    link: { color: t.cores.acaoTexto, textDecorationLine: 'underline', fontWeight: t.fontes.peso.medio },
   });

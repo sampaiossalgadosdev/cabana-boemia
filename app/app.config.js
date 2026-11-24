@@ -35,7 +35,7 @@ export default {
   orientation: 'portrait',
   icon: './assets/icone.png',
   userInterfaceStyle: 'light',
-  backgroundColor: '#FBF3E8',
+  backgroundColor: '#F5F7FA',
   ios: {
     bundleIdentifier: ID_APP,
     supportsTablet: false,

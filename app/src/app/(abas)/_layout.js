@@ -12,7 +12,7 @@ export default function LayoutAbas() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: tema.cores.acao,
+        tabBarActiveTintColor: tema.cores.acaoTexto,
         tabBarInactiveTintColor: tema.cores.textoSuave,
         tabBarLabelStyle: { fontSize: 12, fontWeight: tema.fontes.peso.medio },
         tabBarStyle: { backgroundColor: tema.cores.superficie, borderTopColor: tema.cores.borda },

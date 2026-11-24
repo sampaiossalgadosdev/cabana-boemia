@@ -10,6 +10,7 @@ import { FaixaSemConexao } from '../../componentes/Faixas.js';
 import { TelaSemInternet } from '../../componentes/TelaSemInternet.js';
 import { LogoLoja } from '../../componentes/Loja.js';
 import { CarrosselAnuncios } from '../../componentes/Anuncios.js';
+import { MarcaTaaki } from '../../componentes/MarcaTaaki.js';
 import { filtrarLojas, situacaoDaLoja } from '../../logica/lojas.js';
 import { formatarPreco } from '../../logica/dinheiro.js';
 import { rotuloItens } from '../../logica/sacola.js';
@@ -80,9 +81,12 @@ export default function Vitrine() {
 
   const topo = (
     <View style={[s.topo, { paddingTop: top + 12 }]}>
-      <Text style={s.titulo} accessibilityRole="header">
-        Taaki Delivery
-      </Text>
+      <View style={s.marca}>
+        <MarcaTaaki tamanho={40} />
+        <Text style={s.titulo} accessibilityRole="header">
+          Taaki Delivery
+        </Text>
+      </View>
       <View style={s.busca}>
         <Ionicons name="search" size={18} color={tema.cores.textoSuave} />
         <TextInput
@@ -159,6 +163,7 @@ const criarEstilos = (t) =>
   StyleSheet.create({
     tela: { flex: 1, backgroundColor: t.cores.fundo },
     topo: { backgroundColor: t.cores.cabecalho, paddingHorizontal: 16, paddingBottom: 14, gap: 10 },
+    marca: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     titulo: { color: t.cores.textoInverso, fontSize: t.fontes.tamanho.titulo, fontWeight: t.fontes.peso.pesado },
     busca: {
       flexDirection: 'row',
@@ -203,5 +208,5 @@ const criarEstilos = (t) =>
     },
     sacolaLoja: { fontSize: t.fontes.tamanho.normal, fontWeight: t.fontes.peso.forte, color: t.cores.texto },
     sacolaResumo: { fontSize: t.fontes.tamanho.pequeno, color: t.cores.textoSuave },
-    sacolaAcao: { color: t.cores.acao, fontWeight: t.fontes.peso.forte, fontSize: t.fontes.tamanho.normal },
+    sacolaAcao: { color: t.cores.acaoTexto, fontWeight: t.fontes.peso.forte, fontSize: t.fontes.tamanho.normal },
   });

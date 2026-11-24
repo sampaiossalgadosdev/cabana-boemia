@@ -11,6 +11,8 @@ Em produção é **um serviço só** no Railway (mais o PostgreSQL), em **https:
 | `/api/...` | rotas da API (ex.: `/api/health`, `/api/publico/cardapio`) |
 | `/api/socket.io` | tempo real da equipe (PDV) |
 
+Nos domínios do **Taaki Delivery** (`api.taakidelivery.com.br` hoje; `taakidelivery.com.br` e `www` quando entrarem no Railway; lista em `TAAKI_HOSTS`) o mesmo serviço mostra em `/` a **landing do Taaki** (não o site da Cabana), `/app` leva ao app no Google Play e `/parceiro` à retaguarda (`/admin/`); `/api`, `/admin` e as páginas do app (`/privacidade-app`, `/termos-app`, `/excluir-conta`) valem em todos os domínios. Detalhes e o plano de tirar o domínio da Cabana: `CLAUDE.md` › Domínios.
+
 O PDV fala com o mesmo domínio: na primeira tela do app instalado, digite só `https://cabana.managerpix.com.br` (o PDV acrescenta o `/api`).
 
 ## Desenvolvimento
@@ -87,6 +89,7 @@ O Railway usa o **Railpack**, que reconhece os workspaces pelo `package.json` da
 | `JWT_SECRET`, `JWT_REFRESH_SECRET`, `JWT_CLIENTE_SECRET` | 48 bytes aleatórios cada, **diferentes entre si** e dos de dev. Gerar: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`. Sem eles (ou com menos de 32 caracteres) a API não inicia. |
 | `GOOGLE_CLIENT_ID` | ID do cliente OAuth "Site Cabana Boemia" (`456901563669-…apps.googleusercontent.com`, valor público). Vazio = login do site responde 503. |
 | `CORS_ORIGINS` | `https://cabana.managerpix.com.br,https://cabana-boemia-production.up.railway.app` (com `https://`, sem barra no fim, separados por vírgula sem espaço) |
+| `TAAKI_HOSTS`, `TAAKI_APP_URL`, `TAAKI_APP_URL_IOS` | opcionais; vazias = `taakidelivery.com.br,www.taakidelivery.com.br,api.taakidelivery.com.br`, Google Play e o mesmo no iPhone. As origens `https://` dos hosts do Taaki entram no CORS sozinhas. |
 | `NODE_ENV` | `production` |
 | `BCRYPT_CUSTO` | `12` |
 | `RAILPACK_NODE_NPM_INSTALL` | `npm ci --workspace=api --workspace=site --workspace=retaguarda --workspace=shared` (variável de build do Railpack: troca só o comando de instalação; direto, não via `npm run`) |
@@ -125,6 +128,7 @@ DATABASE_URL="<DATABASE_PUBLIC_URL>" node api/prisma/seed.js
 
 - `cabana.managerpix.com.br`: registro **CNAME** no Registro.br (zona de `managerpix.com.br`) apontando para o alvo que o Railway mostrou em *Settings → Networking → Custom Domain*. O Railway emite o certificado `https` sozinho.
 - O domínio do Railway (`cabana-boemia-production.up.railway.app`) continua ativo; os dois estão no `CORS_ORIGINS` e nas origens do cliente OAuth.
+- `api.taakidelivery.com.br`: CNAME no **Cloudflare** (só DNS, sem proxy) para o alvo do Railway. O plano do Railway aceita 2 domínios customizados; perto do lançamento sai `cabana.managerpix.com.br` e entra a raiz `taakidelivery.com.br` (antes, ver a lista em `CLAUDE.md` › Domínios).
 - `managerpix.com.br` **vence em 11/04/2027**: se não for renovado, site, retaguarda, PDV e login param.
 - Trocar de domínio (ex.: `cabanaboemia.com.br`): Custom Domain no Railway + DNS, verificar o domínio novo no Search Console e pôr no Branding do Google, acrescentar a origem no cliente OAuth e no `CORS_ORIGINS`, e trocar o servidor no PDV (deslogado). Nenhuma mudança de código: o sistema não guarda o domínio.
 

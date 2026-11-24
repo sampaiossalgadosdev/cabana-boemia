@@ -20,7 +20,24 @@ Dados fixos do app:
 2. O Google devolve um **ID token com `aud` = esse cliente web**, que a API já aceita (`GOOGLE_CLIENT_ID`).
 3. O app manda o token para `POST /api/cliente/auth/google` (o mesmo endpoint do site) com `refresh: true` e recebe token + refresh.
 
-O cliente OAuth **Android** não aparece no código. Ele existe para o Google autorizar o app pelo par **pacote + SHA-1 do certificado** que assinou o APK/AAB. Sem um cliente Android com o SHA-1 certo, o Google responde `DEVELOPER_ERROR`.
+O cliente OAuth **Android** não aparece no código nem em nenhuma variável. Ele existe para o Google autorizar o app pelo par **pacote + SHA-1 do certificado** que assinou o APK/AAB **instalado**. Sem um cliente Android com o SHA-1 certo, o Google responde `DEVELOPER_ERROR`.
+
+**`GOOGLE_CLIENT_ID` (Railway) = só o ID do cliente web, um só, sem vírgulas.** Ele é entregue ao app como `webClientId` por `GET /api/publico/config`: com mais de um ID ali, o `webClientId` fica inválido e o login no Android dá `DEVELOPER_ERROR` (aconteceu em 2026-11-24). Os IDs dos clientes Android **não precisam estar em nenhuma variável**.
+
+### Clientes OAuth Android exigidos
+
+Um cliente Android (tipo **Android**, pacote `br.com.taaki.app`) **para cada SHA-1** que pode ter assinado o app instalado, todos **no mesmo projeto do cliente web**:
+
+- cada SHA-1 da página **"Assinatura de apps"** da Play Console (Testar e lançar › Configuração › Integridade do app › Assinatura de apps). Ela pode listar mais de um certificado: hoje são três, a **chave clássica atual**, a **chave anterior** e a **chave pós-quântica**. Use a opção **"Copiar todas as impressões digitais do certificado → SHA-1"** de cada um;
+- o SHA-1 da **chave de upload do EAS** (APK de preview/development instalado direto).
+
+Clientes atuais (2026-11-24): **Taaki Android (Play)**, **Taaki Android (Play anterior)**, **Taaki Android (Play PQ)** e **Taaki Android (upload)**. (IDs e SHA-1 não ficam neste documento: veja no Google Cloud e na Play Console.)
+
+### `DEVELOPER_ERROR` (código 10)
+
+Significa: **falta um cliente Android com o pacote e o SHA-1 do app instalado** (no mesmo projeto do cliente web), **ou o `webClientId` está errado** (`GOOGLE_CLIENT_ID` com mais de um ID ou de outro projeto). O erro acontece no celular, entre o Google Play Services e o app: **o token nem chega à API**, então **não aparece `POST /api/cliente/auth/google` no log do Railway**. Desde o versionCode 4 o app mostra o código entre parênteses ("… (código 10).") e registra `[login-google] código …` no logcat (tag `ReactNativeJS`).
+
+Para conferir qual certificado o app instalado tem (Windows, com o adb das Platform-Tools e um JDK): `adb shell pm path br.com.taaki.app` → `adb pull <caminho> base.apk` → `keytool -printcert -jarfile base.apk` e compare o SHA-1 com os dos clientes Android.
 
 Use o **mesmo projeto do Google Cloud** do site ("Cabana Boemia"): o cliente Android precisa estar no mesmo projeto do cliente web. Na tela de consentimento aparece o nome do Branding ("Cabana Boemia"). Quando o app virar multi-loja, vale criar um projeto "Taaki Delivery" e migrar os clientes.
 
@@ -32,10 +49,10 @@ Use o **mesmo projeto do Google Cloud** do site ("Cabana Boemia"): o cliente And
    Os perfis development, preview e production usam o mesmo keystore, então um SHA-1 cobre todos os builds do EAS.
 2. [Google Cloud Console](https://console.cloud.google.com/) › projeto **Cabana Boemia** › **Google Auth Platform** › **Clientes** › **Criar cliente**:
    - Tipo: **Android**
-   - Nome: `App Taaki Delivery (Android, EAS)`
    - Nome do pacote: `br.com.taaki.app`
    - Impressão digital SHA-1: a do passo 1
-3. Salve. Não há segredo nem nada para copiar para o app. Opcional: acrescente o ID desse cliente em `GOOGLE_CLIENT_IDS` no Railway (não atrapalha e cobre o caso de o token vir com esse `aud`).
+   - Nome: `Taaki Android (upload)`
+3. Salve. Não há segredo nem nada para copiar para o app nem para o Railway (o ID do cliente Android não vai em nenhuma variável).
 4. A mudança leva alguns minutos para valer. Teste no APK de preview: "Continuar com Google" › escolher a conta › volta logado.
 
 ## 2. Google Cloud: cliente Android do Play App Signing (depois do primeiro envio ao Play)
@@ -43,10 +60,10 @@ Use o **mesmo projeto do Google Cloud** do site ("Cabana Boemia"): o cliente And
 Quem instala pela Play Store recebe o app **reassinado pelo Google** com outra chave. É preciso um segundo cliente Android:
 
 1. Play Console › app **Taaki Delivery** › **Testar e lançar** › **Configuração** › **Integridade do app** › **Assinatura do app**.
-2. Copie o SHA-1 de **"Certificado da chave de assinatura do app"**. O da "chave de upload" é o do EAS, já cadastrado no passo 1.
-3. Google Cloud › Clientes › Criar cliente › Android: nome `App Taaki Delivery (Android, Play)`, mesmo pacote, esse SHA-1.
+2. A página pode listar **mais de um certificado da chave de assinatura do app** (hoje: chave clássica atual, chave anterior e chave pós-quântica). Para **cada um**, use **"Copiar todas as impressões digitais do certificado → SHA-1"**. O da "chave de upload" é o do EAS, já cadastrado no passo 1.
+3. Google Cloud › Clientes › Criar cliente › Android, **um por SHA-1**, mesmo pacote: `Taaki Android (Play)` (clássica atual), `Taaki Android (Play anterior)` e `Taaki Android (Play PQ)` (pós-quântica).
 
-Sem isso o login funciona no APK de preview e **falha só na versão baixada da Play Store**.
+Sem isso o login funciona no APK de preview e **falha só na versão baixada da Play Store** (`DEVELOPER_ERROR`, código 10). Faltando um só dos SHA-1, falha nos aparelhos que receberam o app assinado com aquela chave.
 
 ## 3. Google Cloud: cliente OAuth iOS
 
@@ -75,11 +92,11 @@ A App Store exige "Entrar com Apple" quando o app oferece login com Google. O bo
 
 | Variável | Valor | Obrigatória? |
 |---|---|---|
-| `GOOGLE_CLIENT_IDS` | IDs dos clientes Android e iOS, separados por vírgula, sem espaço | Não (o token do app sai com o `aud` do cliente web, já aceito); recomendado |
+| `GOOGLE_CLIENT_IDS` | ID do cliente iOS (quando houver); os clientes Android **não** precisam entrar | Não (o token do app sai com o `aud` do cliente web, já aceito) |
 | `APPLE_BUNDLE_IDS` | vazio (= `br.com.taaki.app`) | Não |
 | `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` | ver passo 4 | Só para revogar na Apple ao excluir a conta |
 
-`GOOGLE_CLIENT_ID` continua igual (cliente web). As mesmas chaves já estão no `api/.env.railway` local, vazias: preencha lá também, porque o teste `env-railway.test.js` confere que o arquivo e o código batem.
+`GOOGLE_CLIENT_ID` = **só o ID do cliente web, sem vírgulas** (vai para o app como `webClientId`; ver "Como o login do Google funciona"). As mesmas chaves já estão no `api/.env.railway` local, vazias: preencha lá também, porque o teste `env-railway.test.js` confere que o arquivo e o código batem.
 
 ## 6. Play Console: teste fechado
 

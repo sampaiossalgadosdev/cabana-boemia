@@ -2,6 +2,18 @@
 // página de cada loja no tema dela (cor e logo da API). Pastas android/ e ios/
 // são geradas pelo prebuild (CNG) e não vão para o git: tudo nativo se configura aqui.
 
+import configPlugins from 'expo/config-plugins';
+import { marcarRecursosOpcionais } from './plugins/recursosOpcionais.js';
+
+const { withAndroidManifest } = configPlugins;
+
+// Tela retrato e Wi-Fi como recursos NÃO obrigatórios no Google Play (ver plugins/recursosOpcionais.js).
+const comRecursosOpcionais = (config) =>
+  withAndroidManifest(config, (c) => {
+    c.modResults = marcarRecursosOpcionais(c.modResults);
+    return c;
+  });
+
 // Pacote Android / bundle iOS: PERMANENTE depois da publicação (não mudar).
 const ID_APP = 'br.com.taaki.app';
 
@@ -29,7 +41,7 @@ export default {
     supportsTablet: false,
     // "Entrar com Apple" (exigido pela App Store quando há login com Google).
     usesAppleSignIn: true,
-    buildNumber: '3',
+    buildNumber: '4',
     infoPlist: {
       // Sem criptografia própria (só HTTPS do sistema): dispensa a pergunta da App Store.
       ITSAppUsesNonExemptEncryption: false,
@@ -38,7 +50,7 @@ export default {
   android: {
     package: ID_APP,
     // Aumentar a cada envio ao Google Play (appVersionSource: local no eas.json).
-    versionCode: 3,
+    versionCode: 4,
     adaptiveIcon: {
       foregroundImage: './assets/icone-android-frente.png',
       monochromeImage: './assets/icone-android-monocromatico.png',
@@ -46,7 +58,13 @@ export default {
     },
     // Só o que o app usa: rede (fetch) e estado da rede (NetInfo).
     permissions: ['android.permission.INTERNET', 'android.permission.ACCESS_NETWORK_STATE'],
-    blockedPermissions: ['android.permission.RECORD_AUDIO', 'android.permission.SYSTEM_ALERT_WINDOW'],
+    // AD_ID: o app não usa o ID de publicidade (anúncios sem medição nem perfil);
+    // bloqueada caso alguma dependência a traga pelo merge do manifesto.
+    blockedPermissions: [
+      'android.permission.RECORD_AUDIO',
+      'android.permission.SYSTEM_ALERT_WINDOW',
+      'com.google.android.gms.permission.AD_ID',
+    ],
   },
   plugins: [
     'expo-router',
@@ -71,6 +89,7 @@ export default {
         android: { targetSdkVersion: 36 },
       },
     ],
+    comRecursosOpcionais,
   ],
   extra: {
     eas: { projectId: EAS_PROJECT_ID },

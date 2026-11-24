@@ -11,12 +11,12 @@ Passo a passo de build, envio, versão e dos formulários de privacidade das loj
 | Campo | O que é | Quando muda |
 |---|---|---|
 | `version` (hoje `0.3.0`) | versão que o cliente vê | a cada versão publicada (0.3.1 correção, 0.4.0 novidade) |
-| `android.versionCode` (hoje `3`) | número interno do Play | **+1 a cada AAB enviado ao Play**, mesmo que o anterior tenha sido recusado ou só testado. O Play recusa número repetido ou menor. Nunca volta. |
-| `ios.buildNumber` (hoje `"3"`) | número interno da App Store | **+1 a cada build enviado à App Store Connect** (mesma regra) |
+| `android.versionCode` (hoje `4`) | número interno do Play | **+1 a cada AAB enviado ao Play**, mesmo que o anterior tenha sido recusado ou só testado. O Play recusa número repetido ou menor. Nunca volta. |
+| `ios.buildNumber` (hoje `"4"`) | número interno da App Store | **+1 a cada build enviado à App Store Connect** (mesma regra) |
 
 Mude os três no mesmo commit (`chore(app): versão X (versionCode N, buildNumber N)`), junto com `"version"` do `app/package.json`.
 
-Histórico: 1 = primeiro teste, 2 = multi-loja (0.2.0), 3 = anúncios, aceite e Sobre (0.3.0).
+Histórico: 1 = primeiro teste, 2 = multi-loja (0.2.0), 3 = anúncios, aceite e Sobre (0.3.0), 4 = código do erro no login com Google e manifesto (tela retrato e Wi-Fi não obrigatórios, sem AD_ID), ainda 0.3.0 (a versão de exibição só muda com o OK do dono).
 
 ## 2. Build
 

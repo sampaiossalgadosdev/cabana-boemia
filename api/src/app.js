@@ -5,6 +5,9 @@ import morgan from 'morgan';
 import { criarRotas } from './routes/index.js';
 import { criarRotasExclusao } from './routes/exclusao.routes.js';
 import { criarRotasLegais } from './routes/legal.routes.js';
+import { criarRotasTaaki } from './routes/taaki.routes.js';
+import { emailDoTitular } from './lib/controlador.js';
+import { lerHostsTaaki, lerDestinosDoApp, origensPermitidas } from './lib/dominios.js';
 import { naoEncontrado } from './middlewares/naoEncontrado.js';
 import { tratarErro } from './middlewares/erro.js';
 import { servirSpa, DIST_SITE, DIST_RETAGUARDA, CSP_SITE, CSP_RETAGUARDA } from './lib/estaticos.js';
@@ -33,6 +36,8 @@ export const PREFIXO_API = '/api';
  *   `limiteSolicitacoes`: envios por hora do formulário de /excluir-conta.
  *   `emailTitular`: e-mail do canal do titular nas páginas legais (padrão: CONTATO_TITULAR_EMAIL).
  *   `distSite` / `distRetaguarda`: builds servidos em / e /admin (testes usam pastas próprias).
+ *   `hostsTaaki`: hosts do Taaki (padrão: TAAKI_HOSTS; ver lib/dominios.js), onde / é a landing.
+ *   `destinosApp`: destinos de /app nos hosts do Taaki (padrão: TAAKI_APP_URL / TAAKI_APP_URL_IOS).
  */
 export function criarApp({
   corsOrigins = lerOrigensCors(process.env.CORS_ORIGINS),
@@ -49,8 +54,11 @@ export function criarApp({
   emailTitular,
   distSite = DIST_SITE,
   distRetaguarda = DIST_RETAGUARDA,
+  hostsTaaki = lerHostsTaaki(process.env.TAAKI_HOSTS),
+  destinosApp = lerDestinosDoApp(),
 } = {}) {
   const app = express();
+  const origens = origensPermitidas(corsOrigins, hostsTaaki);
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1); // Railway fica atrás de proxy
@@ -65,9 +73,9 @@ export function criarApp({
   app.use(
     cors({
       // Sem Origin (PDV Electron, curl, health check do Railway): passa.
-      // Do navegador: só as origens de CORS_ORIGINS.
+      // Do navegador: só as origens de CORS_ORIGINS + https dos hosts do Taaki.
       origin(origin, callback) {
-        callback(null, !origin || corsOrigins.includes(origin));
+        callback(null, !origin || origens.includes(origin));
       },
       credentials: true,
     }),
@@ -93,6 +101,8 @@ export function criarApp({
   // e do app): antes do site, que pegaria qualquer caminho.
   app.use(criarRotasExclusao({ limiteSolicitacoes }));
   app.use(criarRotasLegais({ email: emailTitular }));
+  // Hosts do Taaki: landing em /, /app, /parceiro; o site da Cabana não aparece ali.
+  app.use(criarRotasTaaki({ hosts: hostsTaaki, destinosApp, email: emailTitular ?? emailDoTitular() }));
   servirSpa(app, { prefixo: '/admin', dist: distRetaguarda, csp: CSP_RETAGUARDA });
   servirSpa(app, { prefixo: '/', dist: distSite, csp: CSP_SITE });
 

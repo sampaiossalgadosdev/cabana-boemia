@@ -5,6 +5,21 @@
  */
 export const CSP_PAGINA = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
+/**
+ * Paleta do Taaki Delivery (do logo): azul-marinho, laranja, laranja claro,
+ * branco e o destaque (usar pouco). `laranjaTexto` = laranja escurecido para
+ * texto sobre fundo claro (4,5:1 contra o branco; o laranja puro dá só 3:1).
+ */
+export const CORES_TAAKI = Object.freeze({
+  marinho: '#0A1428',
+  laranja: '#F26B1D',
+  laranjaClaro: '#FD9502',
+  branco: '#FFFFFF',
+  destaque: '#E02502',
+  laranjaTexto: '#B4470A',
+  textoSuaveEscuro: '#B7C1D1',
+});
+
 export const escapar = (t) =>
   String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 

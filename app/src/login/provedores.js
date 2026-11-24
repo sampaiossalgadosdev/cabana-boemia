@@ -8,6 +8,7 @@
  */
 import { Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
+import { interpretarErroGoogle, linhaDoLogGoogle } from '../logica/erroGoogle.js';
 
 /** Erro que a tela mostra como texto (não é falha do app). */
 export class ErroLogin extends Error {
@@ -65,18 +66,10 @@ export async function entrarComGoogle(webClientId) {
     return { idToken };
   } catch (erro) {
     if (erro instanceof ErroLogin) throw erro;
-    if (isErrorWithCode?.(erro)) {
-      if (erro.code === statusCodes.SIGN_IN_CANCELLED) throw new ErroLogin('Login cancelado.', { cancelado: true });
-      if (erro.code === statusCodes.IN_PROGRESS) throw new ErroLogin('Já existe um login em andamento.', { cancelado: true });
-      if (erro.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        throw new ErroLogin('O Google Play Services está desatualizado ou indisponível neste aparelho.');
-      }
-      // DEVELOPER_ERROR (10) = SHA-1/package não cadastrados no Google Cloud.
-      if (String(erro.code) === '10' || erro.code === 'DEVELOPER_ERROR') {
-        throw new ErroLogin('Login com Google ainda não configurado para esta versão do app.');
-      }
-    }
-    throw new ErroLogin('Não foi possível entrar com o Google. Tente de novo.');
+    // Código real no logcat (tag ReactNativeJS) e entre parênteses na tela.
+    console.warn(linhaDoLogGoogle(erro));
+    const { mensagem, cancelado } = interpretarErroGoogle(erro, { statusCodes, isErrorWithCode });
+    throw new ErroLogin(mensagem, { cancelado });
   }
 }
 

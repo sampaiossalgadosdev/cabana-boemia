@@ -40,8 +40,8 @@ describe('config (userData/config.json)', () => {
 
   test('sugestão de produção: só preenche a tela, não vira servidor sem salvar', () => {
     const caminho = path.join(pastaTemp(), 'config.json');
-    const c = criarConfig({ caminho, apiUrlPadrao: null, apiUrlSugerido: 'https://cabana.managerpix.com.br' });
-    assert.deepEqual(c.obter(), { apiUrl: null, apiUrlSugerido: 'https://cabana.managerpix.com.br', impressaoConfigurada: false });
+    const c = criarConfig({ caminho, apiUrlPadrao: null, apiUrlSugerido: 'https://api.taakidelivery.com.br' });
+    assert.deepEqual(c.obter(), { apiUrl: null, apiUrlSugerido: 'https://api.taakidelivery.com.br', impressaoConfigurada: false });
     assert.equal(c.apiUrl(), null, 'a primeira tela continua aparecendo');
     c.definirApiUrl('https://outro.exemplo.com');
     assert.equal(c.apiUrl(), 'https://outro.exemplo.com/api', 'editável: vale o que foi salvo');

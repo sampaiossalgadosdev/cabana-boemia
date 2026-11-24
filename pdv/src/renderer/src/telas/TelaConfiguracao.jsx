@@ -32,7 +32,7 @@ export function TelaConfiguracao({ apiUrl, sugestao = '', aoSalvar, aoVoltar }) 
         <p className="cartao-login__texto">Endereço do servidor do Taaki Delivery. Confira e salve.</p>
         <label className="campo">
           <span>Endereço do servidor</span>
-          <input type="url" required autoFocus placeholder="https://cabana.managerpix.com.br" value={url}
+          <input type="url" required autoFocus placeholder="https://api.taakidelivery.com.br" value={url}
             onChange={(e) => setUrl(e.target.value)} />
         </label>
         {erro && <p className="erro" role="alert">{erro}</p>}

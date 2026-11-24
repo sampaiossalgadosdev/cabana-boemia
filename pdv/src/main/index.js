@@ -25,7 +25,7 @@ app.setPath('userData', path.join(app.getPath('appData'), PASTA_DE_DADOS));
 
 const DEV = !app.isPackaged;
 /** Servidor de produção: já vem preenchido (editável) na primeira execução do app instalado. */
-const SERVIDOR_PRODUCAO = 'https://cabana.managerpix.com.br';
+const SERVIDOR_PRODUCAO = 'https://api.taakidelivery.com.br';
 const URL_DEV_RENDERER = process.env.ELECTRON_RENDERER_URL;
 
 /** Nome da entrada "abrir com o Windows" (HKCU\...\Run); o desinstalador apaga por ele. */

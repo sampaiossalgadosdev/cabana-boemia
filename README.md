@@ -13,7 +13,7 @@ Em produção é **um serviço só** no Railway (mais o PostgreSQL), em **https:
 
 Nos domínios do **Taaki Delivery** (`api.taakidelivery.com.br` hoje; `taakidelivery.com.br` e `www` quando entrarem no Railway; lista em `TAAKI_HOSTS`) o mesmo serviço mostra em `/` a **landing do Taaki** (não o site da Cabana), `/app` leva ao app no Google Play e `/parceiro` à retaguarda (`/admin/`); `/api`, `/admin` e as páginas do app (`/privacidade-app`, `/termos-app`, `/excluir-conta`) valem em todos os domínios. Detalhes e o plano de tirar o domínio da Cabana: `CLAUDE.md` › Domínios.
 
-O PDV fala com o mesmo domínio: na primeira tela do app instalado, digite só `https://cabana.managerpix.com.br` (o PDV acrescenta o `/api`).
+O PDV fala com o mesmo serviço: na primeira tela do app instalado o servidor já vem preenchido com `https://api.taakidelivery.com.br` (desde o Taaki PDV 0.3.1; antes era `https://cabana.managerpix.com.br`, que continua funcionando enquanto estiver no Railway). Digite só o domínio: o PDV acrescenta o `/api`.
 
 ## Desenvolvimento
 
@@ -43,10 +43,21 @@ Atualizar um PDV que se chama "PDV do Abatiá", "PDV do Batiá" ou "Táqui PDV" 
 
 1. Antes, na retaguarda (`/admin`), o administrador cria a loja em **Lojas** e o **dono** dela ("Criar dono"). O dono cadastra os produtos, os turnos e horários e a área de entrega, e cria os atendentes em **Equipe**.
 2. No computador do balcão da loja: copie `Taaki-PDV-Setup-<versão>.exe` (pen drive ou link) e execute.
-3. Primeira abertura: o servidor já vem preenchido com `https://cabana.managerpix.com.br` (confira e salve); depois a impressora térmica (lista do Windows, largura 80/58 mm, "Imprimir teste") ou "Configurar depois".
+3. Primeira abertura: o servidor já vem preenchido com `https://api.taakidelivery.com.br` (confira e salve); depois a impressora térmica (lista do Windows, largura 80/58 mm, "Imprimir teste") ou "Configurar depois".
 4. Entre com o e-mail e a senha do dono ou de um atendente **daquela loja**: a barra mostra a logo e o nome dela, e só os pedidos, o caixa e os cupons dela aparecem.
 5. Confira: um pedido de teste (Delivery › Novo pedido) cai no painel e o cupom sai com o nome da loja.
 6. Mais de um computador na mesma loja pode ficar com a impressora ligada: a API reserva cada cupom para um computador, sem imprimir duas vezes.
+
+#### Trocar o servidor de um PDV já instalado
+
+O servidor fica salvo no computador (`%APPDATA%\PDV do Abatiá\config.json`, campo `apiUrl`) e **vale mais que o padrão do programa**: instalar uma versão nova não troca o servidor de quem já configurou. Para passar um PDV para `https://api.taakidelivery.com.br`:
+
+1. No PDV, clique em **Sair** (o servidor só pode ser trocado deslogado). Se houver caixa aberto, não precisa fechar: ele continua no servidor (é o mesmo banco).
+2. Na tela de login, embaixo do botão **Entrar**, aparece "Servidor: https://cabana.managerpix.com.br **alterar**". Clique em **alterar**.
+3. No campo do endereço, apague o antigo, digite `https://api.taakidelivery.com.br` e salve.
+4. Entre com o e-mail e a senha de sempre. A barra mostra a loja; confira que a impressora continua escolhida (ela fica no mesmo `config.json` e não muda).
+
+Pelo arquivo (se a tela não abrir): feche o PDV (inclusive no Gerenciador de Tarefas), abra `%APPDATA%\PDV do Abatiá\config.json` no Bloco de Notas, troque o valor de `"apiUrl"` para `"https://api.taakidelivery.com.br"` (sem `/api`, sem barra no fim), salve e abra o PDV. A sessão salva continua valendo (mesmo banco); se pedir login, é só entrar.
 
 #### Migrar o computador da Cabana (do "Cabana Boemia PDV")
 

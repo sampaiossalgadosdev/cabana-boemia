@@ -38,3 +38,9 @@ test('app.config: retrato mantido, AD_ID bloqueada, plugin ligado', () => {
   assert.ok(config.android.blockedPermissions.includes('com.google.android.gms.permission.AD_ID'));
   assert.ok(config.plugins.some((p) => typeof p === 'function'));
 });
+
+test('app.config: versionCode 4 e buildNumber "4" (versão de exibição 0.3.0)', () => {
+  assert.equal(config.android.versionCode, 4);
+  assert.equal(config.ios.buildNumber, '4');
+  assert.equal(config.version, '0.3.0');
+});

@@ -41,7 +41,7 @@ export default {
     supportsTablet: false,
     // "Entrar com Apple" (exigido pela App Store quando há login com Google).
     usesAppleSignIn: true,
-    buildNumber: '3',
+    buildNumber: '4',
     infoPlist: {
       // Sem criptografia própria (só HTTPS do sistema): dispensa a pergunta da App Store.
       ITSAppUsesNonExemptEncryption: false,
@@ -50,7 +50,7 @@ export default {
   android: {
     package: ID_APP,
     // Aumentar a cada envio ao Google Play (appVersionSource: local no eas.json).
-    versionCode: 3,
+    versionCode: 4,
     adaptiveIcon: {
       foregroundImage: './assets/icone-android-frente.png',
       monochromeImage: './assets/icone-android-monocromatico.png',

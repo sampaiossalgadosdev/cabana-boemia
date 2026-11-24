@@ -4,7 +4,7 @@
  * do servidor, sem /api) ou o de produção. Sem React Native aqui: testado no
  * Node com um fetch falso.
  */
-export const SERVIDOR_PADRAO = 'https://cabana.managerpix.com.br';
+export const SERVIDOR_PADRAO = 'https://api.taakidelivery.com.br';
 
 /** Tempo máximo de uma requisição (o fetch do React Native não tem limite próprio). */
 export const TEMPO_LIMITE_MS = 15_000;

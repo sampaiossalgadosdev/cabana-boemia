@@ -12,10 +12,10 @@ function fetchFalso(status, corpo, chamadas = []) {
 }
 
 test('base absoluta: padrão é produção; aceita barra final e /api digitado', () => {
-  assert.equal(SERVIDOR_PADRAO, 'https://cabana.managerpix.com.br');
-  assert.equal(BASE, 'https://cabana.managerpix.com.br/api', 'sem EXPO_PUBLIC_API_URL no teste');
-  assert.equal(baseDaApi(''), 'https://cabana.managerpix.com.br/api');
-  assert.equal(baseDaApi(undefined), 'https://cabana.managerpix.com.br/api');
+  assert.equal(SERVIDOR_PADRAO, 'https://api.taakidelivery.com.br');
+  assert.equal(BASE, 'https://api.taakidelivery.com.br/api', 'sem EXPO_PUBLIC_API_URL no teste');
+  assert.equal(baseDaApi(''), 'https://api.taakidelivery.com.br/api');
+  assert.equal(baseDaApi(undefined), 'https://api.taakidelivery.com.br/api');
   assert.equal(baseDaApi('http://192.168.0.10:3000/'), 'http://192.168.0.10:3000/api');
   assert.equal(baseDaApi(' https://x.com.br/api/ '), 'https://x.com.br/api');
 });
@@ -41,7 +41,7 @@ test('URL absoluta, token no Authorization, JSON no corpo', async () => {
   const chamadas = [];
   const r = await requisitar('PUT', '/cliente/me', { token: 'abc', corpo: { nome: 'A' }, fetch: fetchFalso(200, { ok: 1 }, chamadas) });
   assert.deepEqual(r, { ok: 1 });
-  assert.equal(chamadas[0].url, 'https://cabana.managerpix.com.br/api/cliente/me');
+  assert.equal(chamadas[0].url, 'https://api.taakidelivery.com.br/api/cliente/me');
   assert.equal(chamadas[0].opcoes.headers.authorization, 'Bearer abc');
   assert.equal(chamadas[0].opcoes.body, '{"nome":"A"}');
 });
@@ -98,7 +98,7 @@ test('rotas novas do app: login com refresh, Apple, renovar, sair e excluir cont
   } finally {
     globalThis.fetch = original;
   }
-  const rota = (c) => `${c.metodo} ${c.url.replace('https://cabana.managerpix.com.br/api', '')}`;
+  const rota = (c) => `${c.metodo} ${c.url.replace('https://api.taakidelivery.com.br/api', '')}`;
   assert.deepEqual(chamadas.map(rota), [
     'POST /cliente/auth/google',
     'POST /cliente/auth/apple',
@@ -118,7 +118,7 @@ test('rotas novas do app: login com refresh, Apple, renovar, sair e excluir cont
 
 test('links legais do app: páginas da plataforma servidas pela API (não as do site)', async () => {
   const { URL_PRIVACIDADE, URL_TERMOS, URL_EXCLUIR_CONTA } = await import('../src/lib/links.js');
-  assert.equal(URL_PRIVACIDADE, 'https://cabana.managerpix.com.br/privacidade-app');
-  assert.equal(URL_TERMOS, 'https://cabana.managerpix.com.br/termos-app');
-  assert.equal(URL_EXCLUIR_CONTA, 'https://cabana.managerpix.com.br/excluir-conta');
+  assert.equal(URL_PRIVACIDADE, 'https://api.taakidelivery.com.br/privacidade-app');
+  assert.equal(URL_TERMOS, 'https://api.taakidelivery.com.br/termos-app');
+  assert.equal(URL_EXCLUIR_CONTA, 'https://api.taakidelivery.com.br/excluir-conta');
 });

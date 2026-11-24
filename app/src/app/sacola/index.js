@@ -314,7 +314,7 @@ const criarEstilos = (t) =>
     },
     logo: { width: 46, height: 30 },
     restauranteNome: { fontSize: t.fontes.tamanho.medio, fontWeight: t.fontes.peso.forte, color: t.cores.texto },
-    link: { color: t.cores.acao, fontWeight: t.fontes.peso.medio, fontSize: t.fontes.tamanho.normal, marginTop: 2 },
+    link: { color: t.cores.acaoTexto, fontWeight: t.fontes.peso.medio, fontSize: t.fontes.tamanho.normal, marginTop: 2 },
     secao: {
       fontSize: t.fontes.tamanho.medio,
       fontWeight: t.fontes.peso.pesado,

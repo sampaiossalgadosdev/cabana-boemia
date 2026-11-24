@@ -32,7 +32,7 @@ GOOGLE_IOS_URL_SCHEME=com.googleusercontent.apps.XXXX npx eas-cli@latest build -
 ```
 
 - O build roda na nuvem do EAS; o link do arquivo aparece no fim (e em expo.dev › Builds).
-- O perfil `production` já leva `EXPO_PUBLIC_API_URL=https://cabana.managerpix.com.br`.
+- Todos os perfis (`base`) levam `EXPO_PUBLIC_API_URL=https://api.taakidelivery.com.br` (desde o versionCode 4). Até o versionCode 3 o app usava `https://cabana.managerpix.com.br`: o servidor atende os dois domínios, então **não tire o domínio da Cabana do Railway enquanto houver gente com o versionCode 3 ou anterior** (ver CLAUDE.md › Domínios).
 - A chave de assinatura Android (keystore) está guardada no EAS desde o primeiro build. **Não apague** em expo.dev › Credentials: sem ela, não dá para atualizar o app no Play (a não ser pelo Play App Signing, ver abaixo).
 - No iOS, a variável `GOOGLE_IOS_URL_SCHEME` liga o plugin do Google Sign-In; pode ficar em expo.dev › Project › Environment variables (ambiente production) para não digitar.
 
@@ -64,7 +64,7 @@ O EAS pede o login da Apple (ou uma chave da App Store Connect API) e cria o app
 |---|---|
 | O app coleta ou compartilha dados do usuário? | Sim |
 | Todos os dados são criptografados em trânsito? | Sim (só HTTPS) |
-| Oferece um jeito de pedir a exclusão dos dados? | Sim: no app (Perfil › Excluir minha conta) e em `https://cabana.managerpix.com.br/excluir-conta` |
+| Oferece um jeito de pedir a exclusão dos dados? | Sim: no app (Perfil › Excluir minha conta) e em `https://api.taakidelivery.com.br/excluir-conta` |
 | O app contém anúncios? (pergunta separada, em "Anúncios") | **Sim**: carrossel "Patrocinado" no Início. Sem SDK de anúncio, sem ID de publicidade, igual para todos |
 
 **Tipos de dados**
@@ -94,7 +94,7 @@ Observações para decidir com calma:
 - **Anúncios**: "Sim, meu app contém anúncios".
 - **Classificação de conteúdo** (questionário IARC): categoria "Todos os outros tipos de app"; sem violência, sexo, linguagem, drogas; **sem** compras no app (o pagamento é na entrega); usuários **não** interagem entre si; compartilha dados com terceiros (a loja) = sim; anúncios = sim.
 - **Acesso ao app**: as telas de pedido exigem login. Crie uma conta Google de teste para o revisor, ou explique: "O cardápio de todas as lojas abre sem login. Para pedir, toque em Continuar com Google".
-- **Política de privacidade**: `https://cabana.managerpix.com.br/privacidade-app`.
+- **Política de privacidade**: `https://api.taakidelivery.com.br/privacidade-app`. (A ficha atual da Play Console ainda pode estar com os links de `cabana.managerpix.com.br`: trocar política e exclusão de conta pelos do domínio do Taaki.)
 - **App de serviços financeiros / saúde / governo / notícias**: não.
 
 ## 5. App Store › Privacidade do app (rótulos)
@@ -119,7 +119,7 @@ App Store Connect › App › Privacidade do app:
 
 - **Dados não vinculados a você**: nenhum.
 - Os anúncios do carrossel são próprios da plataforma e **não usam** dados do usuário: nada a declarar em "Publicidade de terceiros".
-- **URL da política de privacidade**: `https://cabana.managerpix.com.br/privacidade-app`.
+- **URL da política de privacidade**: `https://api.taakidelivery.com.br/privacidade-app`.
 - **Exclusão de conta**: dentro do app (exigência 5.1.1(v)), já feito; com conta Apple, o app revoga o "Entrar com Apple" se as variáveis `APPLE_*` estiverem no Railway.
 - **Classificação etária**: no questionário, conteúdo todo "nenhum", "Conteúdo gerado pelo usuário" = não (observações só vão à loja), "Anúncios" = sim. Como a política e os termos dizem que o app é para maiores de 18, escolha a faixa **18+** na sobreposição de idade mínima (a Apple passou a ter 13+, 16+ e 18+), para ficar coerente com o texto.
 - **Revisão**: em "Informações para a revisão", conta de teste (Apple ID de teste ou explicação de que o cardápio abre sem login) e a observação: "Pagamento feito na entrega, direto ao estabelecimento; o app não vende bens digitais" (evita a pergunta sobre compra dentro do app, diretriz 3.1.3(e)).
@@ -172,6 +172,6 @@ Embaixo do ícone do celular aparece só **"Taaki"** (`name` do `app.config.js`)
 - **Palavras-chave** (100): `delivery,abatiá,região,lanche,pizza,marmita,bebida,restaurante,lanchonete,pedido,entrega,comida`
 - **Texto promocional** (170): `Peça comida, bebida e mais dos comércios de Abatiá e região e pague na entrega, direto com a loja.`
 - **Descrição**: a mesma do Google Play.
-- **URL de suporte**: `https://cabana.managerpix.com.br/termos-app` (ou uma página de contato, quando houver).
+- **URL de suporte**: `https://api.taakidelivery.com.br/termos-app` (ou uma página de contato, quando houver).
 - **Categoria**: Comida e bebida.
 - Capturas: 6,9" (1320×2868) e 6,5" (1284×2778) no mínimo.

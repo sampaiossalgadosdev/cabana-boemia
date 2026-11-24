@@ -93,7 +93,7 @@ export default function Pedidos() {
   } else if (status !== 'logado') {
     corpo = (
       <ScrollView contentContainerStyle={s.conteudo}>
-        <EntrarCom titulo="Entre para ver seus pedidos" texto="Com sua conta você vê os pedidos que já fez e repete qualquer um com um toque." />
+        <EntrarCom marca titulo="Entre para ver seus pedidos" texto="Com sua conta você vê os pedidos que já fez e repete qualquer um com um toque." />
       </ScrollView>
     );
   } else if (pedidos === null) {
@@ -178,7 +178,7 @@ const criarEstilos = (t) =>
     selo: {
       fontSize: 11,
       fontWeight: t.fontes.peso.forte,
-      color: t.cores.acaoPressionada,
+      color: t.cores.erro,
       backgroundColor: t.cores.avisoFundo,
       paddingHorizontal: 6,
       paddingVertical: 2,

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { ETIQUETA_ANUNCIO, acaoDoAnuncio, anunciosParaMostrar, rotuloDoAnuncio } from '../src/logica/anuncios.js';
 import { PLATAFORMA_PADRAO, dadosDaPlataforma, precisaAceitar } from '../src/logica/plataforma.js';
 
-const BASE = 'https://cabana.managerpix.com.br/api';
+const BASE = 'https://api.taakidelivery.com.br/api';
 const loja = { id: 1, anunciante: 'Lanchonete Teste', imagemUrl: '/api/publico/anuncios/imagens/7', destino: { tipo: 'LOJA', slug: 'lanchonete-teste', nome: 'Lanchonete Teste' } };
 const link = { id: 2, anunciante: 'Mercado do Zé', imagemUrl: '/api/publico/anuncios/imagens/8', destino: { tipo: 'LINK', url: 'https://mercado.example.com/oferta' } };
 
@@ -19,7 +19,7 @@ test('destino do anúncio: loja do app ou link https; o resto é ignorado', () =
 test('anúncios para mostrar: imagem com a base da API, sem os inválidos; etiqueta e rótulo acessível', () => {
   const r = anunciosParaMostrar([loja, link, { id: 3, imagemUrl: null, destino: link.destino }, { ...link, id: 4, destino: { tipo: 'X' } }], BASE);
   assert.deepEqual(r.map((a) => a.id), [1, 2]);
-  assert.equal(r[0].imagem, 'https://cabana.managerpix.com.br/api/publico/anuncios/imagens/7');
+  assert.equal(r[0].imagem, 'https://api.taakidelivery.com.br/api/publico/anuncios/imagens/7');
   assert.deepEqual(anunciosParaMostrar(undefined, BASE), []);
   assert.equal(ETIQUETA_ANUNCIO, 'Patrocinado');
   assert.equal(rotuloDoAnuncio(r[0]), 'Patrocinado: Lanchonete Teste. Abre a loja Lanchonete Teste.');

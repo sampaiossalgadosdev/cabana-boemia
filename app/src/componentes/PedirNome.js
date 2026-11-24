@@ -7,6 +7,7 @@ import { errosPorCampo } from '../logica/checkout.js';
 import { useEstilos } from '../tema/tema.js';
 import { Botao } from './basicos.js';
 import { Campo, TextoErro } from './formulario.js';
+import { MarcaTaaki } from './MarcaTaaki.js';
 
 /**
  * Entrou pelo celular numa conta nova (sem nome): por cima de tudo, depois do
@@ -43,6 +44,7 @@ export function PedirNome() {
         contentContainerStyle={[s.conteudo, { paddingTop: top + 24, paddingBottom: bottom + 24 }]}
         keyboardShouldPersistTaps="handled"
       >
+        <MarcaTaaki tamanho={72} estilo={s.marca} />
         <Text style={s.titulo} accessibilityRole="header">
           Como podemos te chamar?
         </Text>
@@ -75,6 +77,7 @@ const criarEstilos = (t) =>
   StyleSheet.create({
     tela: { flex: 1, backgroundColor: t.cores.fundo },
     conteudo: { paddingHorizontal: 20 },
+    marca: { alignSelf: 'center', marginBottom: 20 },
     titulo: { fontSize: t.fontes.tamanho.titulo, fontWeight: t.fontes.peso.pesado, color: t.cores.texto, marginBottom: 12 },
     texto: { fontSize: t.fontes.tamanho.normal, color: t.cores.textoSuave, lineHeight: 22, marginTop: 8 },
   });

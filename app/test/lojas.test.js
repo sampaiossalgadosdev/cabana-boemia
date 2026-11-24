@@ -86,6 +86,7 @@ test('cores da loja: cor primária nos destaques com o texto da API; cor ilegív
   assert.equal(verde.cabecalho, '#1E7B3C');
   assert.equal(verde.textoAcao, '#FFFFFF');
   assert.equal(verde.fundo, '#FBF3E8', 'base neutra continua');
+  assert.equal(verde.acaoTexto, verde.preco, 'texto/link na cor da loja, legível no fundo');
   assert.equal(coresDaLoja({ corPrimaria: '#3B82F6', corTexto: '#111111' }, base).textoInverso, '#111111');
   assert.equal(coresDaLoja({ corPrimaria: '#FFFF00' }, base), base);
   assert.equal(coresDaLoja(null, base), base);

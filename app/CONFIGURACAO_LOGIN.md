@@ -9,10 +9,10 @@ Dados fixos do app:
 | Nome | Taaki Delivery |
 | Pacote Android / Bundle ID iOS | `br.com.taaki.app` |
 | Projeto EAS | `@sampaio040826/delivery-abatia` (ID `77cc3648-5ee3-4448-a147-6c213d3a69ea`) |
-| API | `https://cabana.managerpix.com.br` |
-| Exclusão de conta (web) | `https://cabana.managerpix.com.br/excluir-conta` |
-| Política de privacidade (app) | `https://cabana.managerpix.com.br/privacidade-app` |
-| Termos de uso (app) | `https://cabana.managerpix.com.br/termos-app` |
+| API | `https://api.taakidelivery.com.br` |
+| Exclusão de conta (web) | `https://api.taakidelivery.com.br/excluir-conta` |
+| Política de privacidade (app) | `https://api.taakidelivery.com.br/privacidade-app` |
+| Termos de uso (app) | `https://api.taakidelivery.com.br/termos-app` |
 
 ## Como o login do Google funciona no app
 
@@ -102,8 +102,8 @@ A App Store exige "Entrar com Apple" quando o app oferece login com Google. O bo
 
 1. Crie o app: nome "Taaki Delivery", idioma padrão Português (Brasil), App, Gratuito.
 2. **Política do app** (Painel › Configurar o app):
-   - Política de privacidade: `https://cabana.managerpix.com.br/privacidade-app` (em nome da plataforma). **Rascunho: precisa de revisão jurídica antes da produção** (ver CLAUDE.md).
-   - **Exclusão de conta**: marque que o app permite criar conta e informe o link `https://cabana.managerpix.com.br/excluir-conta`. Dentro do app: Perfil › Excluir minha conta.
+   - Política de privacidade: `https://api.taakidelivery.com.br/privacidade-app` (em nome da plataforma). **Rascunho: precisa de revisão jurídica antes da produção** (ver CLAUDE.md).
+   - **Exclusão de conta**: marque que o app permite criar conta e informe o link `https://api.taakidelivery.com.br/excluir-conta`. Dentro do app: Perfil › Excluir minha conta.
    - **Segurança dos dados**: coletados nome, e-mail, telefone, endereço (informações pessoais) e histórico de pedidos (compras no app), para funcionalidade do app e gerenciamento da conta; nada compartilhado com terceiros nem usado para anúncios; dados criptografados em trânsito (HTTPS); o usuário pode pedir a exclusão.
    - Acesso ao app: o cardápio abre sem login; para finalizar um pedido é preciso entrar com Google (o revisor usa a própria conta).
    - Anúncios: não. Classificação de conteúdo: questionário (app de delivery, sem conteúdo sensível). Público-alvo: 18+.
@@ -125,4 +125,4 @@ npx eas-cli@latest build -p android --profile production
 - Pedido de teste com a loja aberta › tela "Pedido nº N recebido!".
 - Fechar e reabrir o app depois de mais de um dia: continua logado (refresh de 60 dias).
 - Perfil › Excluir minha conta › confirmar › volta ao login. Os pedidos ficam como "Cliente excluído" no PDV/retaguarda.
-- `https://cabana.managerpix.com.br/excluir-conta` abre a página e o envio aparece em `GET /api/retaguarda/solicitacoes-exclusao` (dono). Ainda não há tela na retaguarda.
+- `https://api.taakidelivery.com.br/excluir-conta` abre a página e o envio aparece em `GET /api/retaguarda/solicitacoes-exclusao` (dono). Ainda não há tela na retaguarda.

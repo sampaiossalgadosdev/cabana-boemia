@@ -6,6 +6,7 @@ import { obterDadosDoApp } from '../lib/config.js';
 import { SERVIDOR } from '../lib/links.js';
 import { PLATAFORMA_PADRAO } from '../logica/plataforma.js';
 import { useEstilos, useTema } from '../tema/tema.js';
+import { MarcaTaaki } from '../componentes/MarcaTaaki.js';
 
 function Link({ icone, titulo, detalhe, onPress }) {
   const s = useEstilos(criarEstilos);
@@ -49,6 +50,7 @@ export default function Sobre() {
 
   return (
     <ScrollView style={s.tela} contentContainerStyle={s.conteudo}>
+      <MarcaTaaki tamanho={72} estilo={s.logo} />
       <Text style={s.marca} accessibilityRole="header">
         Taaki Delivery
       </Text>
@@ -109,11 +111,12 @@ const criarEstilos = (t) =>
   StyleSheet.create({
     tela: { flex: 1, backgroundColor: t.cores.fundo },
     conteudo: { padding: 16, paddingBottom: 40 },
+    logo: { marginBottom: 12 },
     marca: { fontSize: t.fontes.tamanho.titulo, fontWeight: t.fontes.peso.pesado, color: t.cores.cabecalho },
     cartao: { backgroundColor: t.cores.superficie, borderRadius: t.raio.normal, borderWidth: 1, borderColor: t.cores.borda, padding: 14, marginTop: 16, gap: 2 },
     tituloCartao: { fontSize: t.fontes.tamanho.medio, fontWeight: t.fontes.peso.pesado, color: t.cores.texto, marginBottom: 4 },
     valor: { fontSize: t.fontes.tamanho.normal, color: t.cores.texto, fontWeight: t.fontes.peso.medio },
     nota: { fontSize: t.fontes.tamanho.pequeno, color: t.cores.textoSuave, lineHeight: 19 },
     link: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: t.cores.borda, marginTop: 8 },
-    linkTitulo: { fontSize: t.fontes.tamanho.normal, color: t.cores.acao, fontWeight: t.fontes.peso.forte },
+    linkTitulo: { fontSize: t.fontes.tamanho.normal, color: t.cores.acaoTexto, fontWeight: t.fontes.peso.forte },
   });

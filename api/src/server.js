@@ -5,6 +5,7 @@ import { prisma } from './lib/prisma.js';
 import { problemasNosSegredos } from './lib/tokens.js';
 import { credenciaisApple } from './lib/apple.js';
 import { emailDoTitular } from './lib/controlador.js';
+import { lerHostsTaaki, origensPermitidas } from './lib/dominios.js';
 import { ehProducao, problemasNoVerificador } from './lib/verificadorTelefone.js';
 import { iniciarLimpezaDiaria } from './services/registroAcesso.service.js';
 
@@ -58,7 +59,9 @@ const pararLimpeza = iniciarLimpezaDiaria();
 const porta = Number(process.env.PORT) || 3000;
 const app = criarApp();
 const servidor = http.createServer(app);
-const io = criarTempoReal(servidor, { corsOrigins: lerOrigensCors(process.env.CORS_ORIGINS) });
+const io = criarTempoReal(servidor, {
+  corsOrigins: origensPermitidas(lerOrigensCors(process.env.CORS_ORIGINS), lerHostsTaaki(process.env.TAAKI_HOSTS)),
+});
 
 servidor.listen(porta, () => {
   console.log(`API ouvindo na porta ${porta}`);

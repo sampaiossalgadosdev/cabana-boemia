@@ -112,6 +112,8 @@ export function coresDaLoja(loja, coresBase) {
     cabecalho: a.cor,
     textoInverso: texto,
     preco: corParaTextoNaBase(a.cor),
+    // Texto/link na cor da loja sobre o fundo claro (escurecida até 4,5:1).
+    acaoTexto: corParaTextoNaBase(a.cor),
   };
 }
 

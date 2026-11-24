@@ -164,7 +164,7 @@ export default function Perfil() {
   } else if (status !== 'logado') {
     corpo = (
       <>
-        <EntrarCom titulo="Entre na sua conta" texto="Com sua conta seus dados de entrega ficam salvos para os próximos pedidos." />
+        <EntrarCom marca titulo="Entre na sua conta" texto="Com sua conta seus dados de entrega ficam salvos para os próximos pedidos." />
         {links}
       </>
     );

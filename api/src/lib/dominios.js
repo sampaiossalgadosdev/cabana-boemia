@@ -39,7 +39,7 @@ export function lerHostsTaaki(valor) {
 export const ehHostTaaki = (req, hosts) => hosts.includes(soHost(req.hostname ?? ''));
 
 /** Só link https vale como destino de /app (outra coisa cai no padrão). */
-const linkHttps = (v) => {
+export const linkHttps = (v) => {
   const t = String(v ?? '').trim();
   return /^https:\/\/\S+$/.test(t) && URL.canParse(t) ? t : null;
 };

@@ -13,7 +13,7 @@ import * as equipeRepo from '../repositories/equipe.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoService from './endereco.service.js';
 import { bairroParaLoja } from './bairro.service.js';
-import { OPCOES_TRANSACAO, pedidoDaEquipe, STATUS_ABERTOS, ehDaLoja } from './pedido.service.js';
+import { OPCOES_TRANSACAO, pedidoDaEquipe, STATUS_ABERTOS, STATUS_FORA_DO_PDV, ehDaLoja } from './pedido.service.js';
 import { exigirCaixaAberto } from './caixa.service.js';
 import { usarCampanha } from './campanha.service.js';
 import { desfazVerificacaoSeMudou } from './cliente.service.js';
@@ -39,6 +39,7 @@ export async function listarPedidosDoDia(lojaId, { dataRef, canais, somenteAbert
     dataRef: dia,
     canais,
     status: somenteAbertos ? STATUS_ABERTOS : undefined,
+    excluirStatus: STATUS_FORA_DO_PDV,
   });
   return { dataRef: dia, pedidos: pedidos.map(pedidoDaEquipe) };
 }

@@ -50,6 +50,12 @@ export const STATUS_ABERTOS = ['ABERTO', 'CONFIRMADO', 'EM_PREPARO', 'SAIU_ENTRE
 /** Status que a equipe escolhe no painel (delivery/encomenda abertos). */
 export const STATUS_ANDAMENTO = ['ABERTO', 'EM_PREPARO', 'SAIU_ENTREGA'];
 
+/**
+ * Pagamento online ainda não aprovado (ou que expirou): o pedido não existe para a
+ * equipe (lista do dia, fila, caixa, ações do painel) até a aprovação.
+ */
+export const STATUS_FORA_DO_PDV = ['AGUARDANDO_PAGAMENTO', 'EXPIRADO'];
+
 /** Teto da taxa de entrega digitada no PDV (R$ 1.000,00): acima disso é erro de digitação. */
 export const TAXA_MANUAL_MAX_CENTAVOS = 100_000;
 
@@ -740,8 +746,12 @@ export async function criarPedidoDoWhatsapp(
 
 const pedidoNaoEncontrado = () => new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
 
-/** Pedido de outra loja não existe para quem é desta (404, como inexistente). */
-export const ehDaLoja = (pedido, lojaId) => Boolean(pedido) && pedido.lojaId === lojaId;
+/**
+ * Pedido de outra loja não existe para quem é desta (404, como inexistente). O que
+ * aguarda pagamento online ou expirou também não existe para a equipe.
+ */
+export const ehDaLoja = (pedido, lojaId) =>
+  Boolean(pedido) && pedido.lojaId === lojaId && !STATUS_FORA_DO_PDV.includes(pedido.status);
 
 function pedidoEncerrado(status) {
   return new ErroHttp(409, `Pedido já está ${status === 'CANCELADO' ? 'cancelado' : 'finalizado'}`, {

@@ -155,15 +155,15 @@ export function ultimoDoCliente(clienteId, lojaId, db = prisma) {
 
 /**
  * Pedidos da loja num dia operacional, do mais antigo para o mais novo.
- * @param {{ lojaId: number, dataRef: string, canais?: string[], status?: string[] }} filtro
+ * @param {{ lojaId: number, dataRef: string, canais?: string[], status?: string[], excluirStatus?: string[] }} filtro
  */
-export function listarDoDia({ lojaId, dataRef, canais, status }, db = prisma) {
+export function listarDoDia({ lojaId, dataRef, canais, status, excluirStatus }, db = prisma) {
   return db.pedido.findMany({
     where: {
       lojaId,
       dataRef: new Date(`${dataRef}T00:00:00.000Z`),
       ...(canais?.length ? { canal: { in: canais } } : {}),
-      ...(status?.length ? { status: { in: status } } : {}),
+      ...(status?.length ? { status: { in: status } } : excluirStatus?.length ? { status: { notIn: excluirStatus } } : {}),
     },
     orderBy: [{ numeroDia: 'asc' }],
     select: SELECT_PEDIDO,

@@ -82,46 +82,54 @@ enum StatusTrabalhoImpressao {
 /// CHECKs (só na migration): slug, documento (11 ou 14 dígitos), cores #RRGGBB,
 /// horaViradaDia 0–12, frete grátis ligado exige mínimo > 0.
 model Loja {
-  id                        Int       @id @default(autoincrement())
-  slug                      String    @unique @db.VarChar(60) // minúsculas, números e hífen
-  nome                      String    @db.VarChar(100)
-  razaoSocial               String?   @db.VarChar(150)
-  documento                 String?   @db.VarChar(14) // CNPJ (14) ou CPF (11), só dígitos
-  endereco                  String?   @db.VarChar(200)
-  whatsapp                  String    @default("") // só dígitos com o 55 (wa.me); vazio = não configurado
-  logoUrl                   String?   @db.VarChar(500)
-  corPrimaria               String?   @db.VarChar(7) // "#RRGGBB"
-  corFundo                  String?   @db.VarChar(7)
-  corPrimariaPadrao         String?   @db.VarChar(7) // definida pelo ADMIN; "Voltar ao padrão" do dono
-  logoUrlPadrao             String?   @db.VarChar(500)
-  descricao                 String?   @db.VarChar(500)
-  ativa                     Boolean   @default(true)
-  ordem                     Int       @default(0)
-  tempoEstimadoPadraoMin    Int       @default(40)
+  id                        Int         @id @default(autoincrement())
+  slug                      String      @unique @db.VarChar(60) // minúsculas, números e hífen
+  nome                      String      @db.VarChar(100)
+  razaoSocial               String?     @db.VarChar(150)
+  documento                 String?     @db.VarChar(14) // CNPJ (14) ou CPF (11), só dígitos
+  endereco                  String?     @db.VarChar(200)
+  whatsapp                  String      @default("") // só dígitos com o 55 (wa.me); vazio = não configurado
+  logoUrl                   String?     @db.VarChar(500)
+  corPrimaria               String?     @db.VarChar(7) // "#RRGGBB"
+  corFundo                  String?     @db.VarChar(7)
+  corPrimariaPadrao         String?     @db.VarChar(7) // definida pelo ADMIN; "Voltar ao padrão" do dono
+  logoUrlPadrao             String?     @db.VarChar(500)
+  descricao                 String?     @db.VarChar(500)
+  ativa                     Boolean     @default(true)
+  ordem                     Int         @default(0)
+  tempoEstimadoPadraoMin    Int         @default(40)
   tempoEstimadoManualMin    Int?
   tempoManualDefinidoEm     DateTime?
-  horaViradaDia             Int       @default(4) // dia operacional vira às HH:00 local (0–12; CHECK)
-  freteGratisAtivo          Boolean   @default(false)
+  horaViradaDia             Int         @default(4) // dia operacional vira às HH:00 local (0–12; CHECK)
+  freteGratisAtivo          Boolean     @default(false)
   freteGratisMinimoCentavos Int? // frete grátis a partir deste subtotal (centavos); CHECK: ligado exige > 0
-  freteGratisWhatsapp       Boolean   @default(true) // frete grátis vale também no delivery lançado pelo PDV
+  freteGratisWhatsapp       Boolean     @default(true) // frete grátis vale também no delivery lançado pelo PDV
   /// Pino da loja (origem da distância até o cliente). Os dois ou nenhum (CHECK).
   latitude                  Float?
   longitude                 Float?
-  criadoEm                  DateTime  @default(now())
-  atualizadoEm              DateTime  @updatedAt
+  /// Quem entrega: PROPRIO (motoboy da loja, taxa da área é da loja) ou PLATAFORMA
+  /// (entregador do Taaki, taxa por km é da plataforma). Só o ADMIN altera.
+  modoEntrega               ModoEntrega @default(PROPRIO)
+  /// A loja aceita pagamento online no app (vale só com a flag global e a conexão CONECTADA).
+  pagamentoOnlineAtivo      Boolean     @default(false)
+  criadoEm                  DateTime    @default(now())
+  atualizadoEm              DateTime    @updatedAt
 
-  usuarios   Usuario[]
-  categorias Categoria[]
-  produtos   Produto[]
-  insumos    Insumo[]
-  turnos     Turno[]
-  areas      AreaEntrega[]
-  pedidos    Pedido[]
-  contadores ContadorPedido[]
-  caixas     Caixa[]
-  impressoes TrabalhoImpressao[]
-  imagens    ImagemLoja[]
-  anuncios   Anuncio[]
+  conexaoMercadoPago ConexaoMercadoPago?
+  lancamentos        LancamentoLoja[]
+  fechamentos        FechamentoSemanal[]
+  usuarios           Usuario[]
+  categorias         Categoria[]
+  produtos           Produto[]
+  insumos            Insumo[]
+  turnos             Turno[]
+  areas              AreaEntrega[]
+  pedidos            Pedido[]
+  contadores         ContadorPedido[]
+  caixas             Caixa[]
+  impressoes         TrabalhoImpressao[]
+  imagens            ImagemLoja[]
+  anuncios           Anuncio[]
 }
 
 /// Imagem enviada pela retaguarda (logo da loja), servida em /api/publico/imagens/:id.
@@ -154,13 +162,15 @@ model Usuario {
 
   loja Loja? @relation(fields: [lojaId], references: [id], onDelete: Restrict)
 
-  refreshTokens   RefreshToken[]
-  pedidosCriados  Pedido[]
-  movimentacoes   MovimentacaoEstoque[]
-  caixasAbertos   Caixa[]               @relation("CaixaAbertoPor")
-  caixasFechados  Caixa[]               @relation("CaixaFechadoPor")
-  movimentosCaixa MovimentoCaixa[]
-  anuncios        Anuncio[]
+  refreshTokens       RefreshToken[]
+  pedidosCriados      Pedido[]
+  movimentacoes       MovimentacaoEstoque[]
+  caixasAbertos       Caixa[]               @relation("CaixaAbertoPor")
+  caixasFechados      Caixa[]               @relation("CaixaFechadoPor")
+  movimentosCaixa     MovimentoCaixa[]
+  anuncios            Anuncio[]
+  lancamentos         LancamentoLoja[]
+  fechamentosQuitados FechamentoSemanal[]
 
   @@index([lojaId])
 }
@@ -181,34 +191,35 @@ model RefreshToken {
 // ───────────── Clientes ─────────────
 
 model Cliente {
-  id              Int       @id @default(autoincrement())
-  googleId        String?   @unique
-  appleId         String?   @unique // "sub" do Entrar com Apple (app iOS)
-  nome            String
+  id                   Int       @id @default(autoincrement())
+  googleId             String?   @unique
+  appleId              String?   @unique // "sub" do Entrar com Apple (app iOS)
+  nome                 String
   /// Nome sem acento e minúsculo (busca do PDV: "joao" acha "João"). Calculado
   /// pela extensão em src/lib/prisma.js a cada gravação de `nome`; sem default.
-  nomeBusca       String
-  email           String?
-  telefone        String?
+  nomeBusca            String
+  email                String?
+  telefone             String?
   /// Telefone confirmado por código (login com celular). Mudar o telefone desfaz.
   /// Único entre os verificados: índice parcial "Cliente_telefone_verificado_key"
   /// (só na migration telefone_verificado; o Prisma não declara índice parcial).
   telefoneVerificado   Boolean   @default(false)
   telefoneVerificadoEm DateTime?
-  observacao      String?   @db.VarChar(300) // anotação da equipe (PDV)
+  observacao           String?   @db.VarChar(300) // anotação da equipe (PDV)
   /// Versão dos termos/política do app aceita por último (null = nunca aceitou; o site não usa).
-  termosVersao    String?   @db.VarChar(20)
-  termosAceitosEm DateTime?
+  termosVersao         String?   @db.VarChar(20)
+  termosAceitosEm      DateTime?
   /// Consentimento de marketing (opcional, revogável no Perfil do app; nasce desligado).
-  marketing       Boolean   @default(false)
-  marketingEm     DateTime?
-  criadoEm        DateTime  @default(now())
-  atualizadoEm    DateTime  @updatedAt
+  marketing            Boolean   @default(false)
+  marketingEm          DateTime?
+  criadoEm             DateTime  @default(now())
+  atualizadoEm         DateTime  @updatedAt
 
   enderecos      Endereco[]
   pedidos        Pedido[]
   refreshTokens  RefreshTokenCliente[]
   consentimentos Consentimento[]
+  usosCampanha   UsoCampanhaFreteGratis[]
 
   @@index([telefone])
 }
@@ -402,56 +413,68 @@ model MovimentacaoEstoque {
 
 /// Sempre de uma loja só (itens, caixa e impressões são da mesma loja).
 model Pedido {
-  id                  Int             @id @default(autoincrement())
-  lojaId              Int
-  numeroDia           Int
-  dataRef             DateTime        @db.Date // dia local (America/Sao_Paulo) do pedido
-  canal               CanalPedido
-  status              StatusPedido    @default(ABERTO)
-  clienteId           Int?
-  nomeCliente         String
-  telefone            String?
-  enderecoTexto       String?
-  bairroNome          String?
-  taxaEntregaCentavos Int             @default(0)
-  subtotalCentavos    Int             @default(0)
-  totalCentavos       Int             @default(0)
-  formaPagamento      FormaPagamento?
-  trocoParaCentavos   Int?
-  mesaRotulo          String?
-  tempoEstimadoMin    Int? // tempo mostrado ao cliente, gravado na criação
-  chaveIdempotencia   String?         @unique // reenvio do mesmo pedido devolve o já criado
-  criadoPorId         Int?
-  criadoEm            DateTime        @default(now())
-  atualizadoEm        DateTime        @updatedAt
-  finalizadoEm        DateTime?
-  canceladoEm         DateTime?
-  caixaId             Int? // caixa em que foi FINALIZADO (ou pago antes, no "pago agora")
+  id                             Int                @id @default(autoincrement())
+  lojaId                         Int
+  /// Nulo só no AGUARDANDO_PAGAMENTO e no EXPIRADO (CHECK): número e dia são os da aprovação.
+  numeroDia                      Int?
+  dataRef                        DateTime           @db.Date // dia local (America/Sao_Paulo) do pedido
+  canal                          CanalPedido
+  status                         StatusPedido       @default(ABERTO)
+  clienteId                      Int?
+  nomeCliente                    String
+  telefone                       String?
+  enderecoTexto                  String?
+  bairroNome                     String?
+  taxaEntregaCentavos            Int                @default(0)
+  subtotalCentavos               Int                @default(0)
+  totalCentavos                  Int                @default(0)
+  formaPagamento                 FormaPagamento?
+  trocoParaCentavos              Int?
+  mesaRotulo                     String?
+  tempoEstimadoMin               Int? // tempo mostrado ao cliente, gravado na criação
+  chaveIdempotencia              String?            @unique // reenvio do mesmo pedido devolve o já criado
+  criadoPorId                    Int?
+  criadoEm                       DateTime           @default(now())
+  atualizadoEm                   DateTime           @updatedAt
+  finalizadoEm                   DateTime?
+  canceladoEm                    DateTime?
+  caixaId                        Int? // caixa em que foi FINALIZADO (ou pago antes, no "pago agora")
   /// Encomenda: entrega/retirada agendada (mesmo dia operacional). CHECK: encomenda = (agendadoPara não nulo).
-  encomenda           Boolean         @default(false)
-  agendadoPara        DateTime?
-  retirarNoBalcao     Boolean         @default(false) // só encomenda, sem endereço nem taxa (CHECK)
-  descontoCentavos    Int             @default(0) // só pedidos da equipe; total = subtotal + taxa − desconto
-  observacao          String?         @db.VarChar(200) // observação do pedido inteiro
-  pagoEm              DateTime? // "pago agora" no PDV: forma e caixaId gravados na criação
+  encomenda                      Boolean            @default(false)
+  agendadoPara                   DateTime?
+  retirarNoBalcao                Boolean            @default(false) // só encomenda, sem endereço nem taxa (CHECK)
+  descontoCentavos               Int                @default(0) // só pedidos da equipe; total = subtotal + taxa − desconto
+  observacao                     String?            @db.VarChar(200) // observação do pedido inteiro
+  pagoEm                         DateTime? // "pago agora" no PDV: forma e caixaId gravados na criação
   /// Chave de acesso da NFC-e emitida para a venda (prova de emissão), preenchida pela
   /// equipe. 44 dígitos, modelo 65 e dígito verificador conferidos no service; CHECK só dígitos.
-  chaveNfce           String?         @unique @db.VarChar(44)
+  chaveNfce                      String?            @unique @db.VarChar(44)
   /// Posições usadas na distância (fotos do momento da compra) e a distância até o
   /// cliente pelas ruas (ROTA) ou linha reta × 1,3 (ESTIMADA). CHECKs: pares completos.
-  latitudeEntrega     Float?
-  longitudeEntrega    Float?
-  latitudeLoja        Float?
-  longitudeLoja       Float?
-  distanciaMetros     Int?
-  distanciaOrigem     OrigemDistancia?
+  latitudeEntrega                Float?
+  longitudeEntrega               Float?
+  latitudeLoja                   Float?
+  longitudeLoja                  Float?
+  distanciaMetros                Int?
+  distanciaOrigem                OrigemDistancia?
+  /// Frete grátis aplicado: da loja (custo da loja) ou da campanha da primeira compra (custo da plataforma).
+  origemFreteGratis              OrigemFreteGratis  @default(NENHUM)
+  /// Só com entregador da plataforma (CHECK: os três juntos): de onde veio a taxa (KM, ou AREA
+  /// como reserva no PDV) e a divisão da taxa cheia (95% do entregador, meio para cima; o resto
+  /// da plataforma), gravada mesmo com frete grátis.
+  origemTaxaEntrega              OrigemTaxaEntrega?
+  valorEntregadorCentavos        Int?
+  valorPlataformaEntregaCentavos Int?
 
-  loja       Loja                @relation(fields: [lojaId], references: [id])
-  cliente    Cliente?            @relation(fields: [clienteId], references: [id])
-  caixa      Caixa?              @relation(fields: [caixaId], references: [id], onDelete: Restrict)
-  criadoPor  Usuario?            @relation(fields: [criadoPorId], references: [id])
-  itens      ItemPedido[]
-  impressoes TrabalhoImpressao[]
+  loja        Loja                    @relation(fields: [lojaId], references: [id])
+  cliente     Cliente?                @relation(fields: [clienteId], references: [id])
+  caixa       Caixa?                  @relation(fields: [caixaId], references: [id], onDelete: Restrict)
+  criadoPor   Usuario?                @relation(fields: [criadoPorId], references: [id])
+  itens       ItemPedido[]
+  impressoes  TrabalhoImpressao[]
+  pagamentos  Pagamento[]
+  lancamentos LancamentoLoja[]
+  usoCampanha UsoCampanhaFreteGratis?
 
   @@unique([lojaId, dataRef, numeroDia])
   @@index([status])
@@ -715,4 +738,185 @@ model CacheRota {
   criadoEm        DateTime @default(now())
 
   @@id([origemLat, origemLng, destinoLat, destinoLng])
+}
+
+// ───────── Pagamento online (Mercado Pago, Split 1:1) ─────────
+// Plano e decisões: docs/pagamento-online.md.
+
+enum ModoEntrega {
+  PLATAFORMA // entregador do Taaki
+  PROPRIO // motoboy da loja
+}
+
+enum OrigemFreteGratis {
+  NENHUM
+  LOJA // frete grátis configurado pela loja (custo da loja)
+  CAMPANHA // primeira compra (custo da plataforma)
+}
+
+enum OrigemTaxaEntrega {
+  KM // R$ 1,00 + R$ 0,90/km (shared/taxaKm)
+  AREA // taxa da área de entrega (reserva do PDV sem pino)
+}
+
+enum StatusConexaoMp {
+  CONECTADA
+  EXPIRADA // a renovação do token falhou: a loja precisa conectar de novo
+  DESCONECTADA
+}
+
+enum MetodoPagamentoOnline {
+  PIX
+  CARTAO_ONLINE
+}
+
+enum StatusPagamento {
+  PENDENTE
+  APROVADO
+  RECUSADO
+  EXPIRADO
+  CANCELADO
+  REEMBOLSADO
+  REEMBOLSO_PARCIAL
+  REEMBOLSO_PENDENTE // estorno recusado pelo Mercado Pago: o ADMIN resolve (sem retentativa)
+}
+
+enum SituacaoCampanha {
+  RESERVADO // pedido criado, ainda não aprovado nem finalizado
+  USADO
+}
+
+enum TipoLancamentoLoja {
+  TAXA_ENTREGA_DINHEIRO // a loja recebeu o dinheiro e deve a taxa (entregador da plataforma)
+  TAXA_ENTREGA_COMPLEMENTO // parte da taxa que não coube no split (trava de 50%)
+  CREDITO_CAMPANHA // crédito da loja: taxa da área na campanha em loja PROPRIO
+  AJUSTE_MANUAL
+  ESTORNO // desfaz um lançamento (lançamento nunca se apaga nem se altera)
+}
+
+enum StatusFechamento {
+  ABERTO
+  AGUARDANDO_PAGAMENTO
+  QUITADO
+}
+
+/// Conta Mercado Pago da loja (OAuth). Tokens só cifrados (AES-256-GCM, lib/cifra.js);
+/// desconectar apaga os tokens. CHECK: CONECTADA exige o access token.
+model ConexaoMercadoPago {
+  id                  Int             @id @default(autoincrement())
+  lojaId              Int             @unique
+  mpUserId            String          @db.VarChar(30)
+  accessTokenCifrado  String?
+  refreshTokenCifrado String?
+  publicKey           String?         @db.VarChar(100)
+  expiraEm            DateTime?
+  status              StatusConexaoMp @default(CONECTADA)
+  conectadaEm         DateTime        @default(now())
+  atualizadoEm        DateTime        @updatedAt
+
+  loja Loja @relation(fields: [lojaId], references: [id], onDelete: Restrict)
+}
+
+/// Uma tentativa de pagamento online do pedido (Pix ou cartão); a loja é a do pedido.
+/// CHECKs: total > 0; valor da plataforma no split e reembolsado entre 0 e o total.
+model Pagamento {
+  id                       Int                   @id @default(autoincrement())
+  pedidoId                 Int
+  metodo                   MetodoPagamentoOnline
+  status                   StatusPagamento       @default(PENDENTE)
+  mpPaymentId              String?               @unique @db.VarChar(30)
+  mpPreferenceId           String?               @unique @db.VarChar(80)
+  valorTotalCentavos       Int
+  /// Comissão do marketplace enviada ao Mercado Pago (0 = campo omitido).
+  valorPlataformaCentavos  Int                   @default(0)
+  valorReembolsadoCentavos Int                   @default(0)
+  idempotencyKey           String                @unique @db.VarChar(64)
+  expiraEm                 DateTime
+  pixQrCode                String?
+  pixQrCodeBase64          String?
+  /// Campos relevantes da resposta do Mercado Pago (status_detail, datas, ids). Nunca dado de cartão.
+  dadosMp                  Json?
+  aprovadoEm               DateTime?
+  criadoEm                 DateTime              @default(now())
+  atualizadoEm             DateTime              @updatedAt
+
+  pedido Pedido @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+
+  @@index([pedidoId])
+  @@index([status, expiraEm])
+}
+
+/// Notificação recebida do Mercado Pago (dedupe pela chave e auditoria). Sem dado pessoal.
+model EventoWebhook {
+  id           Int       @id @default(autoincrement())
+  chave        String    @unique @db.VarChar(200)
+  tipo         String    @db.VarChar(60)
+  recursoId    String?   @db.VarChar(60)
+  recebidoEm   DateTime  @default(now())
+  processadoEm DateTime?
+  resultado    String?   @db.VarChar(200)
+
+  @@index([recebidoEm])
+}
+
+/// Frete grátis da primeira compra: um por telefone verificado. Reservado na criação do
+/// pedido, USADO na aprovação/finalização; expirar ou cancelar apaga a linha (libera).
+/// CHECKs: usadoEm só (e sempre) no USADO; telefone com 11 dígitos.
+model UsoCampanhaFreteGratis {
+  id          Int              @id @default(autoincrement())
+  telefone    String           @unique @db.VarChar(11)
+  clienteId   Int?
+  pedidoId    Int              @unique
+  situacao    SituacaoCampanha @default(RESERVADO)
+  reservadoEm DateTime         @default(now())
+  usadoEm     DateTime?
+
+  cliente Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  pedido  Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+}
+
+/// Livro-razão entre a loja e a plataforma. Positivo = a loja deve à plataforma;
+/// negativo = a plataforma deve à loja. Só inserção (trigger recusa DELETE e UPDATE,
+/// menos o vínculo ao fechamento); correção = lançamento ESTORNO. CHECK: valor != 0.
+model LancamentoLoja {
+  id            Int                @id @default(autoincrement())
+  lojaId        Int
+  pedidoId      Int?
+  tipo          TipoLancamentoLoja
+  valorCentavos Int
+  observacao    String?            @db.VarChar(300)
+  fechamentoId  Int?
+  criadoPorId   Int?
+  criadoEm      DateTime           @default(now())
+
+  loja       Loja               @relation(fields: [lojaId], references: [id], onDelete: Restrict)
+  pedido     Pedido?            @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+  fechamento FechamentoSemanal? @relation(fields: [fechamentoId], references: [id], onDelete: Restrict)
+  criadoPor  Usuario?           @relation(fields: [criadoPorId], references: [id], onDelete: Restrict)
+
+  @@index([lojaId, criadoEm])
+  @@index([pedidoId])
+  @@index([fechamentoId])
+}
+
+/// Fechamento semanal da loja (segunda a domingo pelo dia operacional; `fim` exclusivo).
+/// CHECKs: fim > inicio; QUITADO = quitadoEm preenchido.
+model FechamentoSemanal {
+  id            Int              @id @default(autoincrement())
+  lojaId        Int
+  inicio        DateTime         @db.Date
+  fim           DateTime         @db.Date
+  saldoCentavos Int              @default(0)
+  status        StatusFechamento @default(ABERTO)
+  quitadoEm     DateTime?
+  quitadoPorId  Int?
+  observacao    String?          @db.VarChar(300)
+  criadoEm      DateTime         @default(now())
+  atualizadoEm  DateTime         @updatedAt
+
+  loja        Loja             @relation(fields: [lojaId], references: [id], onDelete: Restrict)
+  quitadoPor  Usuario?         @relation(fields: [quitadoPorId], references: [id], onDelete: Restrict)
+  lancamentos LancamentoLoja[]
+
+  @@unique([lojaId, inicio])
 }

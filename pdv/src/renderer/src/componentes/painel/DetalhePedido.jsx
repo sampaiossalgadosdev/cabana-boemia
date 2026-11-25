@@ -11,6 +11,7 @@ import {
 import { STATUS, STATUS_ANDAMENTO, estaAberto, formatarChaveNfce, problemaNaChaveNfce, tituloDoPedido } from '../../lib/painel.js';
 import { avaliarAgendamento, dataHoraLocal } from '../../lib/novoPedido.js';
 import { diaOperacional } from '../../lib/caixa.js';
+import { textoDistancia } from '@restaurante/shared/cupom';
 
 /**
  * Opções do pedido (diálogo): andamento (Em aberto / Em preparo / Saiu para
@@ -108,6 +109,23 @@ export function DetalhePedido({ pedido, aoFechar, aoAtualizado }) {
                 {pedido.bairroNome && ` · ${pedido.bairroNome}`}
               </span>
             )
+          )}
+          {!pedido.retirarNoBalcao && pedido.enderecoTexto && (
+            <span className="detalhe-pedido__mapa">
+              {textoDistancia(pedido) ? <span>Distância: {textoDistancia(pedido)}</span> : null}
+              {pedido.linkMapa ? (
+                <button
+                  type="button"
+                  className="botao botao--contorno botao--pequeno"
+                  disabled={enviando}
+                  onClick={() => chamar(pdv.mapa.abrir(pedido.linkMapa)).catch((err) => setErro(err.message))}
+                >
+                  Abrir no mapa
+                </button>
+              ) : (
+                <span className="detalhe-pedido__sem-pino">Sem pino no mapa</span>
+              )}
+            </span>
           )}
         </div>
 

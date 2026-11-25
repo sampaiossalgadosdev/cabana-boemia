@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { criarAgente } from '../src/main/agente-impressao/agente.js';
+import { criarAgente, trabalhoDeTeste } from '../src/main/agente-impressao/agente.js';
 import { criarFilaLocal } from '../src/main/agente-impressao/fila.js';
 import { criarHeartbeat, esperaBackoff } from '../src/main/agente-impressao/conexao.js';
 import { cupomParaEscPos } from '../src/main/agente-impressao/formatacao.js';
@@ -531,8 +531,30 @@ describe('formatação ESC/POS', () => {
   });
 
   test('config: padrões do dono e validação', () => {
-    assert.deepEqual(PADRAO_IMPRESSAO, { modo: 'desligado', impressora: '', largura: 48, tabela: 'cp860', guilhotina: true });
+    assert.deepEqual(PADRAO_IMPRESSAO, { modo: 'desligado', impressora: '', largura: 48, tabela: 'cp860', guilhotina: true, qrMapa: true });
     assert.throws(() => validarConfigImpressao({ modo: 'impressora' }), /Escolha a impressora/);
     assert.deepEqual(validarConfigImpressao({ modo: 'arquivo' }), { ...PADRAO_IMPRESSAO, modo: 'arquivo' });
+    assert.equal(validarConfigImpressao({ qrMapa: false }).qrMapa, false);
+    assert.throws(() => validarConfigImpressao({ qrMapa: 'sim' }), /QR do mapa/);
+  });
+
+  test('QR do mapa: comando nativo da térmica (GS ( k, modelo 2), centralizado; tamanho menor em 58 mm', () => {
+    const link = 'https://www.google.com/maps/search/?api=1&query=-23.3049,-50.3133';
+    const linhas = [{ texto: 'antes'.padEnd(48) }, { texto: ' '.repeat(48), qr: link }, { texto: 'depois'.padEnd(48) }];
+    const b = Buffer.from(cupomParaEscPos(linhas, { largura: 48, tabela: 'cp860', guilhotina: false }));
+    const h = b.toString('hex');
+    assert.ok(h.includes('1d286b04003141320'), 'modelo 2');
+    assert.ok(h.includes('1d286b0300314306'), 'tamanho 6 em 80 mm');
+    assert.ok(h.includes('1b6101') && h.includes('1b6100'), 'centraliza e volta à esquerda');
+    assert.ok(b.toString('latin1').includes(link), 'o link vai nos dados do QR');
+    assert.equal(b.toString('latin1').includes(' '.repeat(48)), false, 'a linha do QR não imprime texto em branco');
+    const b32 = Buffer.from(cupomParaEscPos(linhas, { largura: 32, tabela: 'cp860', guilhotina: false })).toString('hex');
+    assert.ok(b32.includes('1d286b0300314305'), 'tamanho 5 em 58 mm');
+  });
+
+  test('cupom de teste leva o QR do mapa (confere se a impressora imprime QR)', () => {
+    const { pedido } = trabalhoDeTeste(new Date('2026-11-25T15:00:00Z'));
+    assert.match(pedido.linkMapa, /^https:\/\/www\.google\.com\/maps\/search\//);
+    assert.equal(pedido.distanciaMetros, 1200);
   });
 });

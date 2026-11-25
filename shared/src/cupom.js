@@ -7,12 +7,14 @@
  * telefone, endereço); itens com observação em destaque; taxa de entrega e
  * total; pagamento e troco; data e hora.
  *
- * Cada linha: { texto, negrito?, grande? }. `texto` já vem com a largura
+ * Cada linha: { texto, negrito?, grande?, qr? }. `texto` já vem com a largura
  * exata: `colunas` caracteres, ou `colunas / 2` quando `grande` (a fonte
- * dupla ocupa duas colunas por caractere).
+ * dupla ocupa duas colunas por caractere). Linha com `qr` (link do mapa da
+ * entrega) vira QR code na térmica e some no texto (o link vem escrito embaixo).
  */
 import { formatarTelefone } from './telefone.js';
 import { agruparItens } from './itens.js';
+import { formatarDistancia } from './mapa.js';
 
 export const LARGURAS = [48, 32];
 export const TIPOS_CUPOM = ['PEDIDO', 'CANCELAMENTO', 'CONTA', 'FECHAMENTO', 'RELATORIO_DIA'];
@@ -141,6 +143,10 @@ function criarMontador(colunas) {
       linhas.push({ texto: ' '.repeat(colunas) });
       return m;
     },
+    qr(valor) {
+      linhas.push({ texto: ' '.repeat(colunas), qr: valor });
+      return m;
+    },
   };
   return m;
 }
@@ -159,7 +165,14 @@ function blocoEncomenda(m, pedido) {
   m.separador();
 }
 
-function blocoCliente(m, pedido) {
+/** "3,2 km" ou "~3,2 km (estimada)" (linha reta × 1,3 quando a rota falhou). */
+export function textoDistancia(pedido) {
+  if (!Number.isInteger(pedido?.distanciaMetros)) return null;
+  const d = formatarDistancia(pedido.distanciaMetros);
+  return pedido.distanciaEstimada ? `~${d} (estimada)` : d;
+}
+
+function blocoCliente(m, pedido, { mapa = false, distancia: comDistancia = false } = {}) {
   const temEntrega = Boolean(pedido.enderecoTexto);
   if (!pedido.telefone && !temEntrega && pedido.canal === 'SALAO') return;
   m.texto(pedido.nomeCliente, { negrito: true, primeiraLinha: 'Cliente: ', recuo: 9 });
@@ -167,6 +180,15 @@ function blocoCliente(m, pedido) {
   if (temEntrega) {
     m.texto(pedido.enderecoTexto, { primeiraLinha: 'End: ', recuo: 5 });
     if (pedido.bairroNome) m.texto(pedido.bairroNome, { primeiraLinha: 'Bairro: ', recuo: 8 });
+    const distancia = textoDistancia(pedido);
+    if (comDistancia && distancia) m.texto(distancia, { primeiraLinha: 'Distância: ', recuo: 11 });
+    // Pino do cliente: QR para o entregador abrir no celular, com o link escrito embaixo.
+    if (mapa && pedido.linkMapa) {
+      m.separador();
+      m.centro('Mapa da entrega (aponte a câmera):');
+      m.qr(pedido.linkMapa);
+      m.texto(pedido.linkMapa);
+    }
   }
   m.separador();
 }
@@ -322,10 +344,11 @@ function cupomRelatorioDia(m, trabalho, restaurante) {
  *   `pedido` no formato público da API (itens com nome, quantidade, totais em centavos);
  *   FECHAMENTO traz `caixa` (resumo sem esperado nem diferença) no lugar do pedido;
  *   RELATORIO_DIA traz `relatorio` (GET /retaguarda/relatorios/dia).
- * @param {{ colunas?: 48 | 32, restaurante?: string }} [opcoes]
+ * @param {{ colunas?: 48 | 32, restaurante?: string, qrMapa?: boolean }} [opcoes]
+ *   `qrMapa`: QR do mapa da entrega no cupom do pedido (padrão ligado; opção da tela Impressora).
  * @returns {{ texto: string, negrito?: boolean, grande?: boolean }[]}
  */
-export function montarCupom(trabalho, { colunas = 48, restaurante = 'Cabana Boemia' } = {}) {
+export function montarCupom(trabalho, { colunas = 48, restaurante = 'Cabana Boemia', qrMapa = true } = {}) {
   if (!LARGURAS.includes(colunas)) throw new Error(`Largura inválida: ${colunas} (use ${LARGURAS.join(' ou ')})`);
   if (!TIPOS_CUPOM.includes(trabalho?.tipo)) throw new Error(`Tipo de cupom inválido: ${trabalho?.tipo}`);
   const { pedido, tipo } = trabalho;
@@ -362,7 +385,8 @@ export function montarCupom(trabalho, { colunas = 48, restaurante = 'Cabana Boem
   }
 
   cabecalho(m, restaurante, null, pedido);
-  blocoCliente(m, pedido);
+  // QR do mapa só no cupom do pedido (o do cancelamento não sai para a rua).
+  blocoCliente(m, pedido, { mapa: qrMapa, distancia: true });
   blocoItens(m, pedido);
   blocoTotais(m, pedido);
   blocoPagamento(m, pedido);
@@ -377,5 +401,6 @@ export function montarCupom(trabalho, { colunas = 48, restaurante = 'Cabana Boem
  * centralizada na largura toda, como sai no papel.
  */
 export function cupomParaTexto(linhas, colunas = 48) {
-  return `${linhas.map((l) => (l.grande ? centralizar(l.texto.trim(), colunas) : l.texto).trimEnd()).join('\n')}\n`;
+  const visiveis = linhas.filter((l) => !l.qr); // o QR só existe no papel; o link vem escrito
+  return `${visiveis.map((l) => (l.grande ? centralizar(l.texto.trim(), colunas) : l.texto).trimEnd()).join('\n')}\n`;
 }

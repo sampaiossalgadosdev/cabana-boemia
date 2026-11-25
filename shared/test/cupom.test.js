@@ -197,3 +197,37 @@ describe('cupom.js', () => {
     assert.deepEqual(quebrar('abcdefghijkl', 5), ['abcde', 'fghij', 'kl']);
   });
 });
+
+describe('cupom.js: mapa da entrega', () => {
+  const link = 'https://www.google.com/maps/search/?api=1&query=-23.3101,-50.3052';
+  const comMapa = { ...pedidoSite, pedido: { ...pedidoSite.pedido, linkMapa: link, distanciaMetros: 3249, distanciaEstimada: false } };
+
+  test('pedido com pino: distância, QR (largura exata) e o link escrito; no texto o QR some', () => {
+    for (const colunas of [48, 32]) {
+      const linhas = montarCupom(comMapa, { colunas });
+      const qr = linhas.filter((l) => l.qr);
+      assert.deepEqual(qr.map((l) => l.qr), [link]);
+      assert.equal(qr[0].texto.length, colunas);
+      const texto = cupomParaTexto(linhas, colunas);
+      assert.match(texto, /Distância: 3,2 km/);
+      assert.match(texto, /Mapa da entrega/);
+      assert.ok(texto.replace(/\s+/g, '').includes(link), 'o link vem escrito (quebrado na largura)');
+    }
+  });
+
+  test('distância estimada aparece marcada; sem pino nem distância o cupom fica como antes', () => {
+    const estimada = { ...comMapa, pedido: { ...comMapa.pedido, distanciaEstimada: true } };
+    assert.match(cupomParaTexto(montarCupom(estimada, { colunas: 48 }), 48), /Distância: ~3,2 km \(estimada\)/);
+    assert.equal(cupomParaTexto(montarCupom(pedidoSite, { colunas: 48 }), 48).includes('Mapa'), false);
+  });
+
+  test('QR desligado na impressora: sem QR nem link, a distância continua; cancelamento não leva mapa', () => {
+    const sem = cupomParaTexto(montarCupom(comMapa, { colunas: 48, qrMapa: false }), 48);
+    assert.ok(montarCupom(comMapa, { colunas: 48, qrMapa: false }).every((l) => !l.qr));
+    assert.equal(sem.includes(link), false);
+    assert.match(sem, /Distância: 3,2 km/);
+    const cancel = { ...cancelamentoWhatsapp, pedido: { ...cancelamentoWhatsapp.pedido, linkMapa: link, distanciaMetros: 3249 } };
+    const t = cupomParaTexto(montarCupom(cancel, { colunas: 48 }), 48);
+    assert.equal(t.includes('Mapa') || t.includes('Distância'), false);
+  });
+});

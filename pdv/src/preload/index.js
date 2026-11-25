@@ -91,6 +91,9 @@ contextBridge.exposeInMainWorld('pdv', {
   cep: {
     consultar: (cep) => chamar('cep:consultar', String(cep ?? '')),
   },
+  mapa: {
+    abrir: (link) => chamar('mapa:abrir', String(link ?? '')),
+  },
   tempo: {
     obter: () => chamar('tempo:obter'),
     definir: (minutos) => chamar('tempo:definir', minutos == null ? null : Number(minutos)),

@@ -19,6 +19,8 @@ export const PADRAO_IMPRESSAO = Object.freeze({
   largura: 48,
   tabela: 'cp860',
   guilhotina: true,
+  // QR do mapa da entrega no cupom do pedido (só quando o cliente marcou o pino).
+  qrMapa: true,
 });
 
 /**
@@ -38,7 +40,9 @@ export function validarConfigImpressao(dados) {
   if (!TABELAS.includes(tabela)) throw new Error('Tabela de caracteres deve ser cp860 ou cp850');
   const guilhotina = d.guilhotina ?? PADRAO_IMPRESSAO.guilhotina;
   if (typeof guilhotina !== 'boolean') throw new Error('Guilhotina: ligada ou desligada');
-  return { modo, impressora, largura, tabela, guilhotina };
+  const qrMapa = d.qrMapa ?? PADRAO_IMPRESSAO.qrMapa;
+  if (typeof qrMapa !== 'boolean') throw new Error('QR do mapa: ligado ou desligado');
+  return { modo, impressora, largura, tabela, guilhotina, qrMapa };
 }
 
 /** Lê o salvo; o que estiver inválido volta ao padrão (nunca lança). */

@@ -1,6 +1,7 @@
 import { IconeMais, IconeStatus } from '../Icones.jsx';
 import { formatarDataHora, formatarPreco, formatarTelefone, NOME_PAGAMENTO } from '../../lib/formatar.js';
 import { minutosDeAtraso, STATUS, estaAberto, tituloDoPedido } from '../../lib/painel.js';
+import { textoDistancia } from '@restaurante/shared/cupom';
 
 /** Uma linha da lista "Entregas/Encomendas". O botão à direita abre as opções do pedido. */
 export function LinhaPedido({ pedido, agora, novo, aoAbrir, aoVer }) {
@@ -24,6 +25,7 @@ export function LinhaPedido({ pedido, agora, novo, aoAbrir, aoVer }) {
           <p className="linha-pedido__texto">
             {pedido.enderecoTexto}
             {pedido.bairroNome && ` · ${pedido.bairroNome}`}
+            {textoDistancia(pedido) && ` · ${textoDistancia(pedido)}`}
           </p>
         )}
         {pedido.telefone && <p className="linha-pedido__texto">Tel.: {formatarTelefone(pedido.telefone)}</p>}

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { criarConfig, validarApiUrl } from '../src/main/config.js';
 import { criarTempoReal } from '../src/main/tempoReal.js';
 import { criarArmazemRefresh } from '../src/main/armazemRefresh.js';
-import { chaveNfceParaApi, criarHandlers, executar, validarMinutos } from '../src/main/ipc.js';
+import { chaveNfceParaApi, criarHandlers, executar, linkMapaValido, validarMinutos } from '../src/main/ipc.js';
 import { criarEstadoLoja } from '../src/main/loja.js';
 
 const pastaTemp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pdv-teste-'));
@@ -390,7 +390,7 @@ describe('handlers IPC', () => {
   test('impressora: config com padrões, lista do Windows, salvar reconfigura o agente', async () => {
     const { h, agente, caminho } = montar();
     const r = await h['impressao:config']();
-    assert.deepEqual(r.config, { modo: 'desligado', impressora: '', largura: 48, tabela: 'cp860', guilhotina: true });
+    assert.deepEqual(r.config, { modo: 'desligado', impressora: '', largura: 48, tabela: 'cp860', guilhotina: true, qrMapa: true });
     assert.deepEqual(r.impressoras, ['EPSON TM-T20', 'Microsoft Print to PDF']);
 
     const ruins = [
@@ -408,7 +408,7 @@ describe('handlers IPC', () => {
     assert.deepEqual(agente.eventos, []);
 
     const salvo = await h['impressao:definirConfig']({ modo: 'impressora', impressora: ' EPSON TM-T20 ', largura: 32, tabela: 'cp850', guilhotina: false });
-    assert.deepEqual(salvo, { modo: 'impressora', impressora: 'EPSON TM-T20', largura: 32, tabela: 'cp850', guilhotina: false });
+    assert.deepEqual(salvo, { modo: 'impressora', impressora: 'EPSON TM-T20', largura: 32, tabela: 'cp850', guilhotina: false, qrMapa: true });
     assert.deepEqual(agente.eventos, ['reconfigurar']);
     // Persistido no config.json, ao lado do apiUrl.
     const json = JSON.parse(fs.readFileSync(caminho, 'utf8'));
@@ -420,7 +420,7 @@ describe('handlers IPC', () => {
     const caminho = path.join(pastaTemp(), 'config.json');
     fs.writeFileSync(caminho, JSON.stringify({ apiUrl: 'http://x', impressao: { modo: 'impressora', largura: 99 } }));
     assert.deepEqual(criarConfig({ caminho, apiUrlPadrao: null }).impressao(), {
-      modo: 'desligado', impressora: '', largura: 48, tabela: 'cp860', guilhotina: true,
+      modo: 'desligado', impressora: '', largura: 48, tabela: 'cp860', guilhotina: true, qrMapa: true,
     });
   });
 
@@ -545,5 +545,33 @@ describe('tempo real: endereço do socket', () => {
     });
     t.ligar();
     assert.deepEqual(chamadas, [{ url: 'https://cabana.up.railway.app', path: '/api/socket.io' }]);
+  });
+});
+
+describe('Abrir no mapa (IPC)', () => {
+  const bom = 'https://www.google.com/maps/search/?api=1&query=-23.3049,-50.3133';
+
+  test('só o link do Google Maps com o pino; qualquer outro é recusado', () => {
+    assert.equal(linkMapaValido(bom), bom);
+    assert.equal(linkMapaValido('https://www.google.com/maps/search/?api=1&query=-23.123456,-50.1'), 'https://www.google.com/maps/search/?api=1&query=-23.123456,-50.1');
+    for (const ruim of [
+      'http://www.google.com/maps/search/?api=1&query=-23.3,-50.3',
+      'https://evil.com/maps/search/?api=1&query=-23.3,-50.3',
+      `${bom}&x=1`,
+      'file:///C:/Windows/system32/calc.exe',
+      'https://www.google.com/maps/search/?api=1&query=rua',
+      null,
+      42,
+    ]) {
+      assert.throws(() => linkMapaValido(ruim), /Link do mapa inválido/, String(ruim));
+    }
+  });
+
+  test('o handler abre fora (navegador) só o link validado', async () => {
+    const abertos = [];
+    const h = criarHandlers({ config: {}, api: {}, tempoReal: {}, agente: {}, listarImpressoras: async () => [], versao: 'x', loja: {}, abrirExterno: async (u) => abertos.push(u) });
+    assert.equal(await h['mapa:abrir'](bom), true);
+    await assert.rejects(h['mapa:abrir']('https://evil.com'), /inválido/);
+    assert.deepEqual(abertos, [bom]);
   });
 });

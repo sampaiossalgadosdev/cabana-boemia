@@ -303,6 +303,17 @@
   display: grid;
   gap: 2px;
 }
+/* Distância e "Abrir no mapa" (pino que o cliente marcou no app). */
+.detalhe-pedido__mapa {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 4px;
+}
+.detalhe-pedido__sem-pino {
+  color: var(--cor-texto-suave);
+}
 .detalhe-pedido__acao {
   display: grid;
   gap: 12px;

@@ -61,6 +61,11 @@ export function CamposImpressora({ form, impressoras, mudar }) {
           <input type="checkbox" checked={form.guilhotina} onChange={(e) => mudar('guilhotina', e.target.checked)} />
           Cortar o papel (guilhotina)
         </label>
+
+        <label className="opcao opcao--caixa">
+          <input type="checkbox" checked={form.qrMapa !== false} onChange={(e) => mudar('qrMapa', e.target.checked)} />
+          QR code do mapa no cupom de entrega (para o entregador abrir no celular)
+        </label>
       </div>
     </>
   );

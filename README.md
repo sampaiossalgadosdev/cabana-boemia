@@ -101,6 +101,7 @@ O Railway usa o **Railpack**, que reconhece os workspaces pelo `package.json` da
 | `GOOGLE_CLIENT_ID` | ID do cliente OAuth "Site Cabana Boemia" (`456901563669-…apps.googleusercontent.com`, valor público). Vazio = login do site responde 503. |
 | `CORS_ORIGINS` | `https://cabana.managerpix.com.br,https://cabana-boemia-production.up.railway.app` (com `https://`, sem barra no fim, separados por vírgula sem espaço) |
 | `TAAKI_HOSTS`, `TAAKI_APP_URL`, `TAAKI_APP_URL_IOS` | opcionais; vazias = `taakidelivery.com.br,www.taakidelivery.com.br,api.taakidelivery.com.br`, Google Play e o mesmo no iPhone. As origens `https://` dos hosts do Taaki entram no CORS sozinhas. |
+| `GOOGLE_MAPS_SERVER_KEY`, `GOOGLE_MAPS_WEB_KEY` | chaves do Google Maps do servidor (Geocoding + Routes) e da retaguarda (Maps JavaScript). Vazias = sem busca no mapa e distância estimada. Opcionais: `MAPAS_LIMITE_GEOCODING_DIA` (300), `MAPAS_LIMITE_ROTAS_DIA` (500), `MAPAS_CENTRO`, `TAXA_KM_BASE_CENTAVOS` (100), `TAXA_KM_POR_KM_CENTAVOS` (90). Passo a passo em `app/CONFIGURACAO_MAPAS.md`. |
 | `NODE_ENV` | `production` |
 | `BCRYPT_CUSTO` | `12` |
 | `RAILPACK_NODE_NPM_INSTALL` | `npm ci --workspace=api --workspace=site --workspace=retaguarda --workspace=shared` (variável de build do Railpack: troca só o comando de instalação; direto, não via `npm run`) |

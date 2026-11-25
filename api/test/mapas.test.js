@@ -438,7 +438,7 @@ describe('mapas: serviço, endereço, pedido, loja e rotas (banco)', { skip: sem
     assert.equal(t.pedido.distanciaMetros, 2345);
   });
 
-  test('pedido com o Google fora: criado na hora com distância estimada; Google lento não atrasa além do limite', async () => {
+  test('pedido com o Google fora: criado na hora com distância estimada (o tempo limite de 1,5 s é testado no cliente do Google)', async () => {
     const e = await prisma.endereco.create({
       data: { clienteId: cliente.id, rua: 'Rua F', numero: '2', bairroId: centro.id, latitude: CASA.latitude + 0.002, longitude: CASA.longitude },
     });

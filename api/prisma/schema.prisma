@@ -102,6 +102,9 @@ model Loja {
   freteGratisAtivo          Boolean   @default(false)
   freteGratisMinimoCentavos Int? // frete grátis a partir deste subtotal (centavos); CHECK: ligado exige > 0
   freteGratisWhatsapp       Boolean   @default(true) // frete grátis vale também no delivery lançado pelo PDV
+  /// Pino da loja (origem da distância até o cliente). Os dois ou nenhum (CHECK).
+  latitude                  Float?
+  longitude                 Float?
   criadoEm                  DateTime  @default(now())
   atualizadoEm              DateTime  @updatedAt
 
@@ -220,6 +223,9 @@ model Endereco {
   cidade      String?  @db.VarChar(60)
   estado      String?  @db.VarChar(30)
   principal   Boolean  @default(false) // no máximo um por cliente (garantido no service)
+  /// Pino confirmado no mapa (posição exata). Os dois ou nenhum (CHECK); o texto continua obrigatório.
+  latitude    Float?
+  longitude   Float?
   criadoEm    DateTime @default(now())
 
   cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
@@ -429,6 +435,14 @@ model Pedido {
   /// Chave de acesso da NFC-e emitida para a venda (prova de emissão), preenchida pela
   /// equipe. 44 dígitos, modelo 65 e dígito verificador conferidos no service; CHECK só dígitos.
   chaveNfce           String?         @unique @db.VarChar(44)
+  /// Posições usadas na distância (fotos do momento da compra) e a distância até o
+  /// cliente pelas ruas (ROTA) ou linha reta × 1,3 (ESTIMADA). CHECKs: pares completos.
+  latitudeEntrega     Float?
+  longitudeEntrega    Float?
+  latitudeLoja        Float?
+  longitudeLoja       Float?
+  distanciaMetros     Int?
+  distanciaOrigem     OrigemDistancia?
 
   loja       Loja                @relation(fields: [lojaId], references: [id])
   cliente    Cliente?            @relation(fields: [clienteId], references: [id])
@@ -670,4 +684,33 @@ model Anuncio {
   @@index([inicio, fim])
   @@index([imagemId])
   @@index([destinoLojaId])
+}
+
+// ───────── Mapas (geocoding e rotas pelo servidor) ─────────
+
+enum OrigemDistancia {
+  ROTA // pelas ruas (Routes API ou cache dela)
+  ESTIMADA // linha reta × 1,3 (API fora, cota esgotada ou tempo esgotado)
+}
+
+/// Chamadas feitas ao Google por dia (limite diário e acompanhamento). Sem dado pessoal.
+model UsoMapa {
+  dia      DateTime @db.Date // dia civil em America/Sao_Paulo
+  servico  String   @db.VarChar(20) // "geocoding" | "rotas"
+  chamadas Int      @default(0)
+
+  @@id([dia, servico])
+}
+
+/// Distância pelas ruas já calculada: origem e destino arredondados em 4 casas
+/// (~11 m), guardados ×10⁴ como inteiros. Validade conferida no service (30 dias).
+model CacheRota {
+  origemLat       Int
+  origemLng       Int
+  destinoLat      Int
+  destinoLng      Int
+  distanciaMetros Int
+  criadoEm        DateTime @default(now())
+
+  @@id([origemLat, origemLng, destinoLat, destinoLng])
 }

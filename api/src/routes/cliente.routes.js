@@ -7,6 +7,7 @@ import { criarLimitadorAuthCliente, criarLimitadoresTelefone } from '../middlewa
 import { criarVerificadorTelefone, telefoneE164 } from '../lib/verificadorTelefone.js';
 import { criarClienteController } from '../controllers/cliente.controller.js';
 import { lojaDoSite } from '../middlewares/loja.js';
+import { criarLimitadorMapa, criarMapaController } from '../controllers/mapa.controller.js';
 
 /** Dados pessoais: nunca em cache. */
 function semCache(req, res, next) {
@@ -18,7 +19,7 @@ function semCache(req, res, next) {
  * Rotas do cliente (site e app; JWT de cliente, separado do da equipe).
  * @param {{ verificarIdTokenGoogle?: Function, verificarIdentityTokenApple?: Function,
  *           revogarApple?: Function, limiteAuthCliente?: number, relogio?: () => Date,
- *           verificadorTelefone?: object, limitesTelefone?: object }} [opcoes]
+ *           verificadorTelefone?: object, limitesTelefone?: object, mapas?: object }} [opcoes]
  *   `verificadorTelefone`: login com celular (padrão: o de PHONE_VERIFIER);
  *   `limitesTelefone`: janelas e limites (ver criarLimitadoresTelefone; os testes encurtam).
  */
@@ -30,11 +31,13 @@ export function criarClienteRoutes({
   limitesTelefone,
   limiteAuthCliente,
   relogio,
+  mapas,
 } = {}) {
   const c = criarClienteController(
-    { verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple, verificadorTelefone },
+    { verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple, verificadorTelefone, mapas },
     relogio,
   );
+  const mapa = criarMapaController(mapas);
   const r = Router();
   r.use(semCache);
 
@@ -55,6 +58,8 @@ export function criarClienteRoutes({
   r.delete('/me', assincrono(c.excluirConta));
   r.post('/aceite', assincrono(c.aceitarTermos));
   r.put('/marketing', assincrono(c.definirMarketing));
+  // Busca do endereço no mapa (Geocoding pelo servidor; a chave não vai ao app).
+  r.post('/mapa/geocodificar', criarLimitadorMapa({ chave: (req) => `cliente:${req.cliente.id}` }), assincrono(mapa.geocodificarEndereco));
   r.get('/enderecos', assincrono(c.listarEnderecos));
   r.post('/enderecos', assincrono(c.criarEndereco));
   r.put('/enderecos/:id', assincrono(c.atualizarEndereco));

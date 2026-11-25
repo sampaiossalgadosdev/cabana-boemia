@@ -13,6 +13,7 @@ import * as lojaRepo from '../repositories/loja.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import { calcularTurnoAtivo, calcularProximaAbertura } from './turno.service.js';
 import { identidade, limparImagensDaLoja } from './identidade.service.js';
+import { pinoDoCorpo } from './endereco.service.js';
 
 /** Loja que o site atual atende (rotas sem slug). */
 export const SLUG_LOJA_PADRAO = 'cabana-boemia';
@@ -118,6 +119,8 @@ const CAMPOS_EDITAVEIS = [
   'descricao',
   'ativa',
   'ordem',
+  'latitude',
+  'longitude',
 ];
 
 /** Loja como o ADMIN vê (cadastro completo, sem a configuração do dia). */
@@ -143,6 +146,7 @@ export async function listarParaPlataforma() {
  * @param {string[]} [turnos] nomes
  */
 export async function criarLoja(dados, turnos = []) {
+  dados = comPinoConferido(dados);
   // O que o ADMIN escolhe na criação é o padrão da loja (o dono personaliza depois).
   dados = {
     ...dados,
@@ -164,6 +168,12 @@ export async function criarLoja(dados, turnos = []) {
   }
 }
 
+/** Pino da loja com a mesma regra do endereço (os dois juntos, no raio da cidade); ausente = não mexe. */
+function comPinoConferido({ latitude, longitude, ...resto }) {
+  const pin = pinoDoCorpo({ latitude, longitude });
+  return pin === undefined ? resto : { ...resto, latitude: pin?.latitude ?? null, longitude: pin?.longitude ?? null };
+}
+
 /** O slug da loja padrão é fixo: é por ele que o site atual acha a Cabana. */
 export async function editarLoja(id, dados) {
   if (dados.slug !== undefined && dados.slug !== SLUG_LOJA_PADRAO && id === (await lojaPadraoId())) {
@@ -175,7 +185,7 @@ export async function editarLoja(id, dados) {
   // Padrão novo: a loja que ainda usa o padrão antigo (o dono não personalizou) acompanha.
   const atual = await lojaRepo.buscarPorId(id);
   if (!atual) throw lojaNaoEncontrada();
-  dados = { ...dados };
+  dados = comPinoConferido(dados);
   if (dados.corPrimariaPadrao !== undefined && dados.corPrimaria === undefined && (atual.corPrimaria ?? null) === (atual.corPrimariaPadrao ?? null)) {
     dados.corPrimaria = dados.corPrimariaPadrao;
   }

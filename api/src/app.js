@@ -39,6 +39,7 @@ export const PREFIXO_API = '/api';
  *   `distSite` / `distRetaguarda`: builds servidos em / e /admin (testes usam pastas próprias).
  *   `hostsTaaki`: hosts do Taaki (padrão: TAAKI_HOSTS; ver lib/dominios.js), onde / é a landing.
  *   `destinosApp`: destinos de /app nos hosts do Taaki (padrão: TAAKI_APP_URL / TAAKI_APP_URL_IOS).
+ *   `mapas`: serviço de mapas (padrão: o do ambiente; os testes simulam o Google).
  *   `landingTaaki`: modo da landing (padrão: TAAKI_APP_LANCADO, TAAKI_FAQ_IPHONE, TAAKI_INSTAGRAM_URL).
  */
 export function criarApp({
@@ -59,6 +60,7 @@ export function criarApp({
   hostsTaaki = lerHostsTaaki(process.env.TAAKI_HOSTS),
   destinosApp = lerDestinosDoApp(),
   landingTaaki = lerConfigLanding(),
+  mapas,
 } = {}) {
   const app = express();
   const origens = origensPermitidas(corsOrigins, hostsTaaki);
@@ -98,6 +100,7 @@ export function criarApp({
       limitesTelefone,
       limiteAuthCliente,
       emailTitular,
+      mapas,
     }),
   );
   // Páginas públicas do app (exclusão de conta, privacidade e termos; links do Play Console

@@ -17,6 +17,7 @@ import { ErroHttp } from '../lib/erros.js';
 import { avisarCardapioAtualizado } from '../lib/eventos.js';
 import * as imagemRepo from '../repositories/imagem.repository.js';
 import * as lojaRepo from '../repositories/loja.repository.js';
+import { pinoDoCorpo } from './endereco.service.js';
 
 export const MAX_LOGO_BYTES = 500 * 1024;
 export const PREFIXO_IMAGEM = '/api/publico/imagens/';
@@ -55,6 +56,10 @@ function perfil(l) {
     corPrimariaPadrao: l.corPrimariaPadrao ?? null,
     logoUrlPadrao: l.logoUrlPadrao ?? null,
     noPadrao: (l.corPrimaria ?? null) === (l.corPrimariaPadrao ?? null) && (l.logoUrl ?? null) === (l.logoUrlPadrao ?? null),
+    // Pino da loja (origem da distância) e o endereço em texto (ponto de partida da busca no mapa).
+    endereco: l.endereco ?? null,
+    latitude: l.latitude ?? null,
+    longitude: l.longitude ?? null,
   };
 }
 
@@ -104,6 +109,17 @@ export async function definirCor(lojaId, corPrimaria) {
   await buscarLoja(lojaId);
   const loja = await lojaRepo.atualizar(lojaId, { corPrimaria: cor });
   avisar(lojaId);
+  return perfil(loja);
+}
+
+/**
+ * DONO: pino da loja (busca + arrastar no mapa da retaguarda). Os dois null = apaga
+ * (sem pino, os pedidos da loja ficam sem distância). Mesma regra do raio da cidade.
+ */
+export async function definirLocalizacao(lojaId, { latitude, longitude }) {
+  const pin = pinoDoCorpo({ latitude: latitude ?? null, longitude: longitude ?? null });
+  await buscarLoja(lojaId);
+  const loja = await lojaRepo.atualizar(lojaId, { latitude: pin?.latitude ?? null, longitude: pin?.longitude ?? null });
   return perfil(loja);
 }
 

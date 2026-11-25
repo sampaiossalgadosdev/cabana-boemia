@@ -8,6 +8,8 @@ const SELECT = {
   complemento: true,
   referencia: true,
   principal: true,
+  latitude: true,
+  longitude: true,
   bairro: SELECT_BAIRRO_ENDERECO, // bairro da cidade + áreas (o service mostra pela loja)
 };
 

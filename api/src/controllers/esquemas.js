@@ -28,6 +28,10 @@ export const enderecoSchema = z.object({
   referencia: opcional(200),
   bairroId: z.number({ error: 'Escolha o bairro' }).int().positive(),
   principal: z.boolean().optional(),
+  // Pino no mapa (opcional): os dois juntos (conferido no service). Ausente no PUT = não mexe,
+  // a não ser que rua, número ou bairro mudem (aí o pino antigo é apagado); null = apaga.
+  latitude: z.number({ error: 'Posição inválida' }).min(-90).max(90).nullish(),
+  longitude: z.number({ error: 'Posição inválida' }).min(-180).max(180).nullish(),
 });
 
 export const idSchema = z.object({ id: z.coerce.number().int().positive() });

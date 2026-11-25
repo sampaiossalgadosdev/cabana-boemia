@@ -10,8 +10,8 @@ import { criarEquipeController } from '../controllers/equipe.controller.js';
  * usuário (`req.lojaId`). Dados do dia: nunca em cache.
  * @param {{ relogio?: () => Date }} [opcoes]
  */
-export function criarEquipeRoutes({ relogio } = {}) {
-  const c = criarEquipeController(relogio);
+export function criarEquipeRoutes({ relogio, mapas } = {}) {
+  const c = criarEquipeController(relogio, mapas);
   const r = Router();
   r.use((req, res, next) => {
     res.set('Cache-Control', 'no-store');

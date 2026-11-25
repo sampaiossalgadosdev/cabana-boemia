@@ -68,7 +68,7 @@ function pagina({ enviado = false, erros = {}, valores = {} } = {}) {
   </ul>
   <h2>O que fica</h2>
   <ul>
-    <li>Os pedidos já feitos (valores, itens e data), que o restaurante guarda como registro fiscal, <strong>sem</strong> seu nome, telefone e endereço: aparecem como "Cliente excluído".</li>
+    <li>Os pedidos já feitos (valores, itens e data), que o restaurante guarda como registro fiscal, <strong>sem</strong> seu nome, telefone, endereço e localização no mapa: aparecem como "Cliente excluído".</li>
     <li>Os registros de acesso (IP e data e hora de login e pedidos), por 6 meses, como exige o Marco Civil da Internet; depois são apagados automaticamente.</li>
   </ul>
   <p><small>Se um pedido seu feito nas últimas 3 horas ainda está sendo preparado ou entregue, a exclusão fica liberada quando ele for entregue ou 3 horas depois do pedido (a loja ainda precisa do endereço).</small></p>

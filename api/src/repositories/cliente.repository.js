@@ -66,7 +66,18 @@ export async function excluirComAnonimizacao(clienteId, db = prisma) {
   return db.$transaction(async (tx) => {
     const r = await tx.pedido.updateMany({
       where: { clienteId },
-      data: { nomeCliente: NOME_EXCLUIDO, telefone: null, enderecoTexto: null, bairroNome: null },
+      // O pino da entrega é dado pessoal (onde a pessoa mora) e a distância sai junto
+      // (CHECK: distância exige a posição); a posição da loja fica.
+      data: {
+        nomeCliente: NOME_EXCLUIDO,
+        telefone: null,
+        enderecoTexto: null,
+        bairroNome: null,
+        latitudeEntrega: null,
+        longitudeEntrega: null,
+        distanciaMetros: null,
+        distanciaOrigem: null,
+      },
     });
     await tx.cliente.delete({ where: { id: clienteId } });
     return { pedidosAnonimizados: r.count };

@@ -1,8 +1,8 @@
 # Publicar o app Taaki Delivery (Google Play e App Store)
 
-Passo a passo de build, envio, versão e dos formulários de privacidade das lojas. O login (Google Cloud, Apple, chaves) está em [`CONFIGURACAO_LOGIN.md`](CONFIGURACAO_LOGIN.md); faça aquele antes do primeiro envio.
+Passo a passo de build, envio, versão e dos formulários de privacidade das lojas. O login (Google Cloud, Apple, chaves) está em [`CONFIGURACAO_LOGIN.md`](CONFIGURACAO_LOGIN.md) e o mapa (chaves do Google Maps) em [`CONFIGURACAO_MAPAS.md`](CONFIGURACAO_MAPAS.md); faça os dois antes do envio.
 
-> As respostas de privacidade abaixo são um **rascunho baseado no que o código coleta hoje** (versão 0.3.0). Se o app passar a coletar outra coisa (localização, notificações, analytics, SDK de anúncio), refaça os dois formulários **e** a política de privacidade (`/privacidade-app`, versão nova em `api/src/lib/controlador.js › DOCUMENTOS_APP`).
+> As respostas de privacidade abaixo são um **rascunho baseado no que o código coleta hoje** (versão 0.3.0, versionCode 5: inclui a **localização precisa** do pino do endereço). Se o app passar a coletar outra coisa (notificações, analytics, SDK de anúncio, localização em segundo plano), refaça os dois formulários **e** a política de privacidade (`/privacidade-app`, versão nova em `api/src/lib/controlador.js › DOCUMENTOS_APP`).
 
 ## 1. Versão (regra)
 
@@ -11,12 +11,12 @@ Passo a passo de build, envio, versão e dos formulários de privacidade das loj
 | Campo | O que é | Quando muda |
 |---|---|---|
 | `version` (hoje `0.3.0`) | versão que o cliente vê | a cada versão publicada (0.3.1 correção, 0.4.0 novidade) |
-| `android.versionCode` (hoje `4`) | número interno do Play | **+1 a cada AAB enviado ao Play**, mesmo que o anterior tenha sido recusado ou só testado. O Play recusa número repetido ou menor. Nunca volta. |
-| `ios.buildNumber` (hoje `"4"`) | número interno da App Store | **+1 a cada build enviado à App Store Connect** (mesma regra) |
+| `android.versionCode` (hoje `5`) | número interno do Play | **+1 a cada AAB enviado ao Play**, mesmo que o anterior tenha sido recusado ou só testado. O Play recusa número repetido ou menor. Nunca volta. |
+| `ios.buildNumber` (hoje `"5"`) | número interno da App Store | **+1 a cada build enviado à App Store Connect** (mesma regra) |
 
 Mude os três no mesmo commit (`chore(app): versão X (versionCode N, buildNumber N)`), junto com `"version"` do `app/package.json`.
 
-Histórico: 1 = primeiro teste, 2 = multi-loja (0.2.0), 3 = anúncios, aceite e Sobre (0.3.0), 4 = código do erro no login com Google e manifesto (tela retrato e Wi-Fi não obrigatórios, sem AD_ID), ainda 0.3.0 (a versão de exibição só muda com o OK do dono).
+Histórico: 1 = primeiro teste, 2 = multi-loja (0.2.0), 3 = anúncios, aceite e Sobre (0.3.0), 4 = código do erro no login com Google e manifesto (tela retrato e Wi-Fi não obrigatórios, sem AD_ID), 5 = pino do endereço no mapa e "Usar minha localização" (permissão de localização só com o app em uso; precisa da chave `GOOGLE_MAPS_ANDROID_KEY` no EAS), ainda 0.3.0 (a versão de exibição só muda com o OK do dono).
 
 ## 2. Build
 
@@ -75,6 +75,8 @@ O EAS pede o login da Apple (ou uma chave da App Store Connect API) e cria o app
 | Informações pessoais › Endereço de e-mail | Sim | Não | Obrigatório | Gerenciamento da conta; Publicidade ou marketing* |
 | Informações pessoais › IDs do usuário | Sim (id da conta, id do Google/Apple) | Não | Obrigatório | Gerenciamento da conta; Prevenção de fraude e segurança |
 | Informações pessoais › Endereço | Sim | Sim (a loja do pedido) | Obrigatório | Funcionalidade do app |
+| Local › Local aproximado | Sim (mesmo pino, quando a pessoa escolhe "aproximada" no Android 12+) | Sim (a loja do pedido) | Opcional | Funcionalidade do app |
+| Local › Local exato | Sim (pino do endereço: busca, toque/arrasto no mapa ou "Usar minha localização", só ao tocar e com o app aberto) | Sim (a loja do pedido) | Opcional | Funcionalidade do app |
 | Informações pessoais › Número de telefone | Sim | Sim (a loja do pedido) | Obrigatório | Funcionalidade do app; Publicidade ou marketing* |
 | Informações financeiras › Histórico de compras | Sim (pedidos: itens, valores, forma de pagamento) | Sim (a loja do pedido) | Obrigatório | Funcionalidade do app |
 | Mensagens/Conteúdo › Outro conteúdo gerado pelo usuário | Sim (observações do item e do pedido) | Sim (a loja do pedido) | Opcional | Funcionalidade do app |
@@ -85,7 +87,8 @@ Observações para decidir com calma:
 
 - **"Compartilhado" com a loja**: o Play não conta como compartilhamento o que vai a um terceiro por ação do usuário quando ele espera isso (fazer o pedido numa loja). Mesmo assim, o rascunho marca "compartilhado" para nome, telefone, endereço, compras e observações: é a opção conservadora (declarar a mais não gera problema; declarar a menos, sim).
 - **Endereço IP e data/hora** (registros de acesso do Marco Civil, guardados 6 meses): o Play não tem um tipo "endereço IP". Como o app **não** deduz localização pelo IP, não marque "Localização aproximada". Se o Google questionar, a finalidade é "Prevenção de fraude, segurança e conformidade".
-- **Não coletados**: localização, contatos, fotos, arquivos, áudio, saúde, dados de cartão, identificadores do aparelho/ID de publicidade, histórico de navegação, diagnósticos/falhas (não há Crashlytics nem analytics), atividade no app (nenhum toque em anúncio ou tela é registrado).
+- **Localização** (versionCode 5): marque **Local exato**, coletado, **opcional** (o endereço funciona sem pino), finalidade **Funcionalidade do app**. Marque também **Local aproximado** com as mesmas respostas: no Android 12+ a pessoa pode escolher "aproximada" no pedido de permissão e essa posição vira o pino (opção conservadora, como a do "compartilhado"). Na pergunta sobre localização em segundo plano: **não** (o app bloqueia `ACCESS_BACKGROUND_LOCATION`). O Google Maps Platform recebe o texto do endereço e as posições como **prestador de serviço** (processa em nome do app), o que o Play não conta como compartilhamento.
+- **Não coletados**: localização em segundo plano, contatos, fotos, arquivos, áudio, saúde, dados de cartão, identificadores do aparelho/ID de publicidade, histórico de navegação, diagnósticos/falhas (não há Crashlytics nem analytics), atividade no app (nenhum toque em anúncio ou tela é registrado).
 - **Login com Google/Apple**: os provedores recebem só o pedido de login; não é compartilhamento pelo app.
 
 **Outros formulários do Play Console**
@@ -110,6 +113,7 @@ App Store Connect › App › Privacidade do app:
 | Informações de contato | E-mail | Funcionalidade do app; Publicidade ou marketing do desenvolvedor* |
 | Informações de contato | Número de telefone | Funcionalidade do app; Publicidade ou marketing do desenvolvedor* |
 | Informações de contato | Endereço físico | Funcionalidade do app |
+| Localização | Localização precisa (pino do endereço) | Funcionalidade do app |
 | Identificadores | ID do usuário | Funcionalidade do app |
 | Compras | Histórico de compras | Funcionalidade do app |
 | Conteúdo do usuário | Outro conteúdo do usuário (observações) | Funcionalidade do app |

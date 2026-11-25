@@ -99,7 +99,7 @@ describe('site em /, retaguarda em /admin, API em /api', () => {
     assert.equal(post.status, 404);
   });
 
-  test('CSP do site libera só o Google Identity Services; a retaguarda não carrega nada de fora', async () => {
+  test('CSP do site libera só o Google Identity Services; a retaguarda só o Google Maps', async () => {
     const csp = (await fetch(`${base}/checkout`)).headers.get('content-security-policy');
     assert.equal(diretiva(csp, 'script-src'), `script-src 'self' ${HASH_SCRIPT_SPLASH} https://accounts.google.com/gsi/client`);
     assert.equal(diretiva(csp, 'frame-src'), 'frame-src https://accounts.google.com/gsi/');
@@ -111,10 +111,17 @@ describe('site em /, retaguarda em /admin, API em /api', () => {
     // Fotos dos produtos (link da retaguarda): imagens de qualquer host https.
     assert.equal(diretiva(csp, 'img-src'), "img-src 'self' data: https:");
 
+    // Retaguarda: só o Google Maps JavaScript (pino da loja); nenhum script inline nem eval.
     const cspAdmin = (await fetch(`${base}/admin`)).headers.get('content-security-policy');
-    assert.doesNotMatch(cspAdmin, /google/);
-    assert.equal(diretiva(cspAdmin, 'script-src'), "script-src 'self'");
-    assert.equal(diretiva(cspAdmin, 'img-src'), "img-src 'self' data:");
+    assert.equal(
+      diretiva(cspAdmin, 'script-src'),
+      "script-src 'self' https://*.googleapis.com https://*.gstatic.com https://*.google.com https://*.ggpht.com https://*.googleusercontent.com",
+    );
+    assert.doesNotMatch(diretiva(cspAdmin, 'script-src'), /unsafe/);
+    assert.doesNotMatch(cspAdmin, /accounts\.google\.com/, 'login do Google é só do site');
+    assert.equal(diretiva(cspAdmin, 'object-src'), "object-src 'none'");
+    assert.equal(diretiva(cspAdmin, 'frame-ancestors'), "frame-ancestors 'none'");
+    assert.match(diretiva(cspAdmin, 'img-src'), /^img-src 'self' data: https:\/\/\*\.googleapis\.com/);
 
     // O popup do login Google continua funcionando (COOP).
     assert.equal((await fetch(`${base}/`)).headers.get('cross-origin-opener-policy'), 'same-origin-allow-popups');

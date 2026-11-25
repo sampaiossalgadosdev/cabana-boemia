@@ -39,6 +39,11 @@ export const SELECT_PEDIDO = {
   agendadoPara: true,
   retirarNoBalcao: true,
   observacao: true,
+  // Pino e distância (só a equipe vê: pedidoDaEquipe e o cupom).
+  latitudeEntrega: true,
+  longitudeEntrega: true,
+  distanciaMetros: true,
+  distanciaOrigem: true,
   criadoEm: true,
   finalizadoEm: true,
   canceladoEm: true,

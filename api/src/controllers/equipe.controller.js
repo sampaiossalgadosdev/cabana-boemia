@@ -221,7 +221,7 @@ const tempoSchema = z.object({
 });
 
 /** @param {() => Date} [relogio] fonte do "agora" (injetável nos testes) */
-export function criarEquipeController(relogio = () => new Date()) {
+export function criarEquipeController(relogio = () => new Date(), mapas) {
   return {
     /** Bairros onde ESTA loja entrega (área ativa, bairro ativo na cidade), com a taxa dela. */
     async bairros(req, res) {
@@ -270,6 +270,7 @@ export function criarEquipeController(relogio = () => new Date()) {
       const { pedido, criado } = await pedidoService.criarPedidoDoWhatsapp(req.lojaId, dados, {
         usuarioId: req.usuario.id,
         agora: relogio(),
+        mapas,
       });
       res.status(criado ? 201 : 200).json({ pedido });
     },

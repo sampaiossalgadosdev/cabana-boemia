@@ -3,7 +3,7 @@
  * Tokens e rede ficam SÓ aqui; o renderer fala pelo preload (window.pdv).
  */
 import path from 'node:path';
-import { app, BrowserWindow, Menu, ipcMain, safeStorage, session } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain, safeStorage, session, shell } from 'electron';
 import { io } from 'socket.io-client';
 import { criarConfig } from './config.js';
 import { criarArmazemRefresh } from './armazemRefresh.js';
@@ -142,7 +142,16 @@ function iniciar() {
       return lista.map((p) => p.name).sort((a, b) => a.localeCompare(b));
     };
 
-    handlers = criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao: app.getVersion(), loja });
+    handlers = criarHandlers({
+      config,
+      api,
+      tempoReal,
+      agente,
+      listarImpressoras,
+      versao: app.getVersion(),
+      loja,
+      abrirExterno: (url) => shell.openExternal(url),
+    });
     for (const [canal, handler] of Object.entries(handlers)) {
       ipcMain.handle(canal, (evento, ...args) => {
         // Só a nossa janela, com a nossa página, fala com o main.

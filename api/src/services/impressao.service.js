@@ -13,7 +13,7 @@ import { relatorioDoDia } from './relatorio.service.js';
 import * as impressaoRepo from '../repositories/impressao.repository.js';
 import * as pedidoRepo from '../repositories/pedido.repository.js';
 import * as lojaService from './loja.service.js';
-import { pedidoPublico, ehDaLoja } from './pedido.service.js';
+import { entregaNoMapa, pedidoPublico, ehDaLoja } from './pedido.service.js';
 import { resumoParaCupom } from './caixa.service.js';
 
 /** Quantos trabalhos por busca (o agente busca de novo enquanto vier cheio). */
@@ -50,7 +50,7 @@ const trabalhoPublico = (t) => ({
   dataRelatorio: t.dataRelatorio ? t.dataRelatorio.toISOString().slice(0, 10) : null,
   reservadoPor: t.reservadoPor ?? null,
   reservadoAte: t.reservadoAte ?? null,
-  ...(t.pedido ? { pedido: pedidoPublico(t.pedido) } : {}),
+  ...(t.pedido ? { pedido: { ...pedidoPublico(t.pedido), ...entregaNoMapa(t.pedido) } } : {}),
 });
 
 /**

@@ -95,7 +95,7 @@ const lojaDoPedido = async (lojaSlug, padrao) => (lojaSlug ? (await buscarAtivaP
  * @param {() => Date} [relogio] "agora" do pedido (injetável nos testes)
  */
 export function criarClienteController(
-  { verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple, verificadorTelefone },
+  { verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple, verificadorTelefone, mapas },
   relogio = () => new Date(),
 ) {
   return {
@@ -209,7 +209,7 @@ export function criarClienteController(
     async criarPedido(req, res) {
       const dados = validar(pedidoSchema, req.body);
       const lojaId = await lojaDoPedido(dados.lojaSlug, req.lojaId);
-      const { pedido, criado } = await pedidoService.criarPedidoDoSite(lojaId, req.cliente, dados, { agora: relogio() });
+      const { pedido, criado } = await pedidoService.criarPedidoDoSite(lojaId, req.cliente, dados, { agora: relogio(), mapas });
       await registrarAcesso({ clienteId: req.cliente.id, ip: req.ip, evento: 'PEDIDO' });
       res.status(criado ? 201 : 200).json({ pedido });
     },

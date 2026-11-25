@@ -3,6 +3,7 @@ import { assincrono } from '../lib/assincrono.js';
 import { autenticar } from '../middlewares/autenticar.js';
 import { exigirPapel } from '../middlewares/exigirPapel.js';
 import * as c from '../controllers/plataforma.controller.js';
+import { criarLimitadorMapa, criarMapaController } from '../controllers/mapa.controller.js';
 
 /**
  * Rotas da plataforma (Taaki Delivery): só ADMIN (o DONO leva 403), nunca em cache.
@@ -16,9 +17,10 @@ import * as c from '../controllers/plataforma.controller.js';
 /** Corpo cru da imagem (até 500 KB; o tipo é conferido pelos bytes no service). */
 export const corpoImagem = () => express.raw({ type: () => true, limit: '520kb' });
 
-/** @param {{ relogio?: () => Date }} [opcoes] */
-export function criarPlataformaRoutes({ relogio } = {}) {
+/** @param {{ relogio?: () => Date, mapas?: object }} [opcoes] */
+export function criarPlataformaRoutes({ relogio, mapas } = {}) {
   const anuncios = c.criarAnunciosController(relogio);
+  const mapa = criarMapaController(mapas);
   const r = Router();
   r.use((req, res, next) => {
     res.set('Cache-Control', 'no-store');
@@ -30,6 +32,10 @@ export function criarPlataformaRoutes({ relogio } = {}) {
   r.patch('/lojas/:id', assincrono(c.editarLoja));
   r.put('/lojas/:id/logo-padrao', corpoImagem(), assincrono(c.definirLogoPadrao));
   r.post('/lojas/:id/dono', assincrono(c.criarDono));
+  // Mapas: pino da loja (busca no mapa) e o uso diário do Google.
+  r.get('/mapas/config', mapa.configWeb);
+  r.post('/mapas/geocodificar', criarLimitadorMapa({ limite: 60, chave: (req) => `usuario:${req.usuario.id}` }), assincrono(mapa.geocodificarTexto));
+  r.get('/mapas/uso', assincrono(mapa.uso));
   r.get('/bairros', assincrono(c.listarBairros));
   r.post('/bairros', assincrono(c.criarBairro));
   r.patch('/bairros/:id', assincrono(c.alterarBairro));

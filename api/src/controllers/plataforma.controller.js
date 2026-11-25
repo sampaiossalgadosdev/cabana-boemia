@@ -111,6 +111,9 @@ const camposLoja = {
   descricao: vazioParaNull(500),
   ativa: z.boolean({ error: 'Ativa deve ser verdadeiro ou falso' }),
   ordem: z.number({ error: 'Ordem inválida' }).int().min(0).max(9999),
+  // Pino da loja (os dois juntos; null = apaga): conferido no service (raio da cidade).
+  latitude: z.number({ error: 'Posição inválida' }).min(-90).max(90).nullish(),
+  longitude: z.number({ error: 'Posição inválida' }).min(-180).max(180).nullish(),
 };
 
 const lojaCriarSchema = z.object({

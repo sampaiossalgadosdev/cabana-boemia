@@ -65,8 +65,26 @@ export const CSP_SITE = {
   workerSrc: ["'self'"],
 };
 
-/** CSP da retaguarda: não carrega nada de fora. */
-export const CSP_RETAGUARDA = BASE_CSP;
+// Google Maps JavaScript (pino da loja, só na retaguarda): as origens que o
+// Google documenta para a API (script, blocos do mapa, fontes e o worker em blob:).
+// https://developers.google.com/maps/documentation/javascript/content-security-policy
+const MAPS_SCRIPT = ['https://*.googleapis.com', 'https://*.gstatic.com', 'https://*.google.com', 'https://*.ggpht.com', 'https://*.googleusercontent.com'];
+const MAPS_IMG = ['https://*.googleapis.com', 'https://*.gstatic.com', 'https://*.google.com', 'https://*.googleusercontent.com'];
+
+/**
+ * CSP da retaguarda: a base + só o Google Maps JavaScript (mapa do pino da loja).
+ * `'unsafe-inline'` só em estilo (o mapa posiciona os blocos com estilo inline).
+ */
+export const CSP_RETAGUARDA = {
+  ...BASE_CSP,
+  scriptSrc: ["'self'", ...MAPS_SCRIPT],
+  styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+  imgSrc: ["'self'", 'data:', ...MAPS_IMG],
+  fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+  connectSrc: ["'self'", 'https://*.googleapis.com', 'https://*.google.com', 'https://*.gstatic.com', 'data:', 'blob:'],
+  frameSrc: ['https://*.google.com'],
+  workerSrc: ["'self'", 'blob:'],
+};
 
 /** Arquivo pedido (com extensão ou em assets/) que não existe = 404, não o index.html. */
 const pareceArquivo = (rel) => rel.startsWith('/assets/') || /\.[a-z0-9]+$/i.test(rel);

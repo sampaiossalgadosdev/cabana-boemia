@@ -38,8 +38,8 @@ export function identificacaoDoControlador(c = CONTROLADOR) {
  * (`precisaAceite` do cliente).
  */
 export const DOCUMENTOS_APP = Object.freeze({
-  versao: '2026-11-20',
-  vigencia: '20 de novembro de 2026',
+  versao: '2026-11-25',
+  vigencia: '25 de novembro de 2026',
 });
 
 /** O cliente precisa aceitar (de novo) os termos e a política do app? */

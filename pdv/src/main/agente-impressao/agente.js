@@ -30,7 +30,7 @@ export const TEMPOS_AGENTE = Object.freeze({
 /** Topo do cupom até a API dizer o nome da loja (ex.: "Imprimir teste" antes da primeira busca). */
 const RESTAURANTE_PADRAO = 'Taaki PDV';
 
-/** Cupom de teste (botão "Imprimir teste"): mostra acentos, negrito, grande e o corte. */
+/** Cupom de teste (botão "Imprimir teste"): mostra acentos, negrito, grande, o QR do mapa e o corte. */
 export function trabalhoDeTeste(agora = new Date()) {
   return {
     id: 0,
@@ -44,6 +44,10 @@ export function trabalhoDeTeste(agora = new Date()) {
       telefone: '43999990000',
       enderecoTexto: 'Acentuação: ç ã õ á é í ó ú â ê ô à ü Ç Ã É',
       bairroNome: 'Centro',
+      // QR do mapa (centro de Abatiá): confere se a impressora imprime QR code.
+      linkMapa: 'https://www.google.com/maps/search/?api=1&query=-23.3049,-50.3133',
+      distanciaMetros: 1200,
+      distanciaEstimada: false,
       subtotalCentavos: 2500,
       taxaEntregaCentavos: 500,
       totalCentavos: 3000,
@@ -158,7 +162,7 @@ export function criarAgente({
   }
 
   function documento(trabalho) {
-    const linhas = montarCupom(trabalho, { colunas: cfg.largura, restaurante });
+    const linhas = montarCupom(trabalho, { colunas: cfg.largura, restaurante, qrMapa: cfg.qrMapa !== false });
     // FECHAMENTO não tem pedido: o documento leva o id do caixa; RELATORIO_DIA, o dia operacional.
     const origem = trabalho.pedido
       ? `pedido-${trabalho.pedido.numeroDia}`

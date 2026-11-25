@@ -5,15 +5,17 @@ import { exigirPapel } from '../middlewares/exigirPapel.js';
 import { lojaDaEquipe } from '../middlewares/loja.js';
 import { criarRetaguardaController } from '../controllers/retaguarda.controller.js';
 import { corpoImagem } from './plataforma.routes.js';
+import { criarLimitadorMapa, criarMapaController } from '../controllers/mapa.controller.js';
 
 /**
  * Rotas da retaguarda (só DONO; ADMIN passa como DONO), na loja do usuário
  * (`req.lojaId`), nunca em cache. Catálogo, estoque, turnos,
  * bairros e configuração emitem `cardapio:atualizado` para o PDV recarregar.
- * @param {{ relogio?: () => Date }} [opcoes]
+ * @param {{ relogio?: () => Date, mapas?: object }} [opcoes]
  */
-export function criarRetaguardaRoutes({ relogio } = {}) {
+export function criarRetaguardaRoutes({ relogio, mapas } = {}) {
   const c = criarRetaguardaController(relogio);
+  const mapa = criarMapaController(mapas);
   const r = Router();
   r.use((req, res, next) => {
     res.set('Cache-Control', 'no-store');
@@ -61,6 +63,10 @@ export function criarRetaguardaRoutes({ relogio } = {}) {
   r.put('/perfil/cor', assincrono(c.definirCor));
   r.put('/perfil/logo', corpoImagem(), assincrono(c.definirLogo));
   r.post('/perfil/padrao', assincrono(c.voltarAoPadrao));
+  // Pino da loja (origem da distância até o cliente): busca + arrastar no mapa.
+  r.put('/perfil/localizacao', assincrono(c.definirLocalizacao));
+  r.get('/mapa/config', mapa.configWeb);
+  r.post('/mapa/geocodificar', criarLimitadorMapa({ limite: 60, chave: (req) => `usuario:${req.usuario.id}` }), assincrono(mapa.geocodificarTexto));
 
   r.get('/config', assincrono(c.obterConfig));
   r.put('/config', assincrono(c.definirConfig));

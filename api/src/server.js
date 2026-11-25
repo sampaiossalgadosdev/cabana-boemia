@@ -8,6 +8,7 @@ import { emailDoTitular } from './lib/controlador.js';
 import { lerHostsTaaki, origensPermitidas } from './lib/dominios.js';
 import { ehProducao, problemasNoVerificador } from './lib/verificadorTelefone.js';
 import { iniciarLimpezaDiaria } from './services/registroAcesso.service.js';
+import { iniciarLimpezaDoCache, mapasPadrao } from './services/mapa.service.js';
 
 // Falha cedo: sem segredos válidos a API subiria e só quebraria no primeiro login.
 const problemas = problemasNosSegredos();
@@ -53,8 +54,14 @@ if (!emailDoTitular()) {
   console.warn('Aviso: CONTATO_TITULAR_EMAIL ausente. A política de privacidade do app fica só com o formulário como canal do titular.');
 }
 
+if (!mapasPadrao().ativo) {
+  console.warn('Aviso: GOOGLE_MAPS_SERVER_KEY ausente. Sem busca de endereço no mapa (o cliente posiciona o pino) e a distância dos pedidos fica estimada.');
+}
+
 // Registros de acesso do cliente: apaga os de mais de 6 meses ao iniciar e a cada 24 h.
 const pararLimpeza = iniciarLimpezaDiaria();
+// Cache das distâncias pelas ruas: apaga o que passou de 30 dias.
+const pararLimpezaMapas = iniciarLimpezaDoCache();
 
 const porta = Number(process.env.PORT) || 3000;
 const app = criarApp();
@@ -70,6 +77,7 @@ servidor.listen(porta, () => {
 function encerrar(sinal) {
   console.log(`${sinal} recebido, encerrando...`);
   pararLimpeza();
+  pararLimpezaMapas();
   // io.close desconecta os sockets e fecha também o servidor HTTP.
   io.close(async () => {
     await prisma.$disconnect();

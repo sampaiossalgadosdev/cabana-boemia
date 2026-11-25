@@ -173,6 +173,12 @@ export async function buscarClientes(lojaId, busca) {
 export async function criarCliente(lojaId, { nome, telefone, email = null, observacao = null, endereco = null }) {
   const existente = await equipeRepo.buscarClientePorTelefone(telefone);
   if (existente) throw clienteJaExiste(existente, lojaId);
+  if (endereco) {
+    // Pino (se vier) com a mesma regra do endereço do cliente (raio da cidade).
+    const { latitude, longitude, ...resto } = endereco;
+    const pin = enderecoService.pinoDoCorpo({ latitude, longitude });
+    endereco = { ...resto, latitude: pin?.latitude ?? null, longitude: pin?.longitude ?? null };
+  }
   const id = await prisma.$transaction(async (tx) => {
     // Cadastro único entre lojas: o endereço aponta para um bairro da cidade.
     if (endereco) await enderecoService.garantirBairroAtivo(endereco.bairroId, tx);

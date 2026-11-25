@@ -112,6 +112,12 @@ const horariosSchema = z.object({
     .max(50),
 });
 
+// Pino da loja: os dois números, ou os dois null (apaga).
+const localizacaoSchema = z.object({
+  latitude: z.number({ error: 'Posição inválida' }).min(-90).max(90).nullable(),
+  longitude: z.number({ error: 'Posição inválida' }).min(-180).max(180).nullable(),
+});
+
 const corPerfilSchema = z.object({ corPrimaria: z.string({ error: 'Escolha a cor' }).trim().min(1, 'Escolha a cor') });
 const turnoCriarSchema = z.object({ nome: nome(40) });
 const turnoAlterarSchema = z
@@ -340,6 +346,10 @@ export function criarRetaguardaController(relogio = () => new Date()) {
     },
     async voltarAoPadrao(req, res) {
       res.json({ perfil: await identidadeService.voltarAoPadrao(req.lojaId) });
+    },
+    async definirLocalizacao(req, res) {
+      const pino = validar(localizacaoSchema, req.body ?? {});
+      res.json({ perfil: await identidadeService.definirLocalizacao(req.lojaId, pino) });
     },
 
     // Configurações

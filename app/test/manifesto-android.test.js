@@ -39,8 +39,26 @@ test('app.config: retrato mantido, AD_ID bloqueada, plugin ligado', () => {
   assert.ok(config.plugins.some((p) => typeof p === 'function'));
 });
 
-test('app.config: versionCode 4 e buildNumber "4" (versão de exibição 0.3.0)', () => {
-  assert.equal(config.android.versionCode, 4);
-  assert.equal(config.ios.buildNumber, '4');
+test('app.config: versionCode 5 e buildNumber "5" (versão de exibição 0.3.0)', () => {
+  assert.equal(config.android.versionCode, 5);
+  assert.equal(config.ios.buildNumber, '5');
   assert.equal(config.version, '0.3.0');
+});
+
+test('app.config: localização só com o app em uso; mapa com a chave só do ambiente', () => {
+  const p = config.android.permissions;
+  assert.ok(p.includes('android.permission.ACCESS_FINE_LOCATION') && p.includes('android.permission.ACCESS_COARSE_LOCATION'));
+  assert.ok(!p.some((x) => /BACKGROUND|FOREGROUND_SERVICE/.test(x)));
+  assert.ok(config.android.blockedPermissions.includes('android.permission.ACCESS_BACKGROUND_LOCATION'));
+  const plugin = (nome) => config.plugins.find((x) => Array.isArray(x) && x[0] === nome)?.[1];
+  const local = plugin('expo-location');
+  assert.equal(local.isAndroidBackgroundLocationEnabled, false);
+  assert.equal(local.isIosBackgroundLocationEnabled, false);
+  assert.equal(local.locationAlwaysPermission, false);
+  assert.match(local.locationWhenInUsePermission, /Usar minha localização/);
+  // Sem GOOGLE_MAPS_*_KEY no ambiente dos testes: nenhuma chave no config.
+  assert.ok(plugin('react-native-maps'));
+  assert.equal(plugin('react-native-maps').androidGoogleMapsApiKey, process.env.GOOGLE_MAPS_ANDROID_KEY || undefined);
+  assert.deepEqual(config.extra.mapa, { android: Boolean(process.env.GOOGLE_MAPS_ANDROID_KEY), ios: Boolean(process.env.GOOGLE_MAPS_IOS_KEY) });
+  assert.doesNotMatch(JSON.stringify(config), /AIza/, 'nenhuma chave do Google escrita no código');
 });

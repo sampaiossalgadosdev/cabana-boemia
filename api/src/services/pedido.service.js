@@ -13,6 +13,7 @@ import { diaOperacional, paraCampoData } from '../lib/fuso.js';
 import { horaViradaDe } from './diaOperacional.service.js';
 import { emitirParaEquipe } from '../lib/eventos.js';
 import { freteGratisDaConfig, taxaDeEntrega } from '@restaurante/shared/frete';
+import { linkDoMapa, pinDe } from '@restaurante/shared/mapa';
 import * as pedidoRepo from '../repositories/pedido.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoRepo from '../repositories/endereco.repository.js';
@@ -23,6 +24,8 @@ import { calcularTurnoAtivo } from './turno.service.js';
 import { calcularTempoEstimado } from './publico.service.js';
 import { garantirTelefone } from './cliente.service.js';
 import { taxaDaLoja } from './bairro.service.js';
+import { mapasPadrao } from './mapa.service.js';
+import * as mapaRepo from '../repositories/mapa.repository.js';
 import { limparChave, problemaNaChave } from '../lib/nfce.js';
 
 export const CANAIS = ['SITE', 'WHATSAPP', 'SALAO'];
@@ -231,6 +234,20 @@ export async function baixarEstoque(tx, { produtos, insumos }) {
   }
 }
 
+/**
+ * Posições e distância para gravar no pedido (fotos do momento da compra).
+ * Sem pino do endereço ou da loja: grava o que houver, sem distância. Nunca lança.
+ */
+async function distanciaDaEntrega(lojaId, destino, agora, mapas = mapasPadrao()) {
+  try {
+    const loja = pinDe(await mapaRepo.pinDaLoja(lojaId));
+    return await mapas.distanciaDoPedido({ loja, destino, agora });
+  } catch (err) {
+    console.warn(`[mapas] distância do pedido não calculada: ${err.message}`);
+    return null;
+  }
+}
+
 /** "Rua das Flores, 120 - Casa 2 (Ref.: perto da praça)" */
 export function formatarEndereco(e) {
   let texto = `${e.rua}, ${e.numero}`;
@@ -280,12 +297,26 @@ export function pedidoPublico(p) {
 }
 
 /**
+ * Mapa da entrega para a equipe (PDV e cupom): link do Google Maps com o pino
+ * do momento da compra e a distância da loja (estimada = linha reta × 1,3).
+ */
+export function entregaNoMapa(p) {
+  const pin = pinDe(p, { lat: 'latitudeEntrega', lng: 'longitudeEntrega' });
+  return {
+    linkMapa: linkDoMapa(pin),
+    distanciaMetros: p.distanciaMetros ?? null,
+    distanciaEstimada: p.distanciaOrigem === 'ESTIMADA',
+  };
+}
+
+/**
  * Pedido como a equipe vê (lista do PDV e eventos do socket): o público +
- * dia operacional, quem registrou e quando encerrou. Nunca vai para o site.
+ * dia operacional, quem registrou, quando encerrou e o mapa da entrega. Nunca vai para o site.
  */
 export function pedidoDaEquipe(p) {
   return {
     ...pedidoPublico(p),
+    ...entregaNoMapa(p),
     dataRef: p.dataRef ? new Date(p.dataRef).toISOString().slice(0, 10) : null,
     registradoPor: p.criadoPor?.nome ?? null,
     finalizadoEm: p.finalizadoEm ?? null,
@@ -363,7 +394,7 @@ export async function estornarVendas(tx, vendas, usuarioId = null) {
  *   canal: 'SITE' | 'WHATSAPP' | 'SALAO',
  *   itens: { produtoId: number, quantidade: number, pesoGramas?: number, observacao?: string | null }[],
  *   cliente?: { id?: number, nome: string, telefone?: string | null } | null,
- *   endereco?: { texto: string, bairroId: number } | null,
+ *   endereco?: { texto: string, bairroId: number, pin?: { latitude: number, longitude: number } | null } | null,
  *   pagamento?: { forma?: string | null, trocoParaCentavos?: number | null },
  *   entrega?: { encomenda?: boolean, agendadoPara?: Date | null, retirarNoBalcao?: boolean },
  *   ajustes?: { descontoCentavos?: number, taxaManualCentavos?: number | null },  // só equipe (WHATSAPP)
@@ -374,6 +405,7 @@ export async function estornarVendas(tx, vendas, usuarioId = null) {
  *   chaveIdempotencia?: string | null,
  *   totalEsperadoCentavos?: number,  // obrigatório no SITE: total que o cliente viu
  *   agora?: Date,
+ *   mapas?: object,  // serviço de mapas (padrão: o do ambiente); distância loja → cliente
  * }} dados
  * @returns {Promise<{ pedido: object, criado: boolean }>} criado=false: mesma chave já tinha pedido
  */
@@ -393,6 +425,7 @@ export async function criarPedido({
   chaveIdempotencia = null,
   totalEsperadoCentavos,
   agora = new Date(),
+  mapas,
 }) {
   if (!Number.isInteger(lojaId)) throw new Error('criarPedido: lojaId obrigatório');
   if (!CANAIS.includes(canal)) throw new ErroHttp(400, 'Canal inválido', { codigo: 'VALIDACAO' });
@@ -429,6 +462,11 @@ export async function criarPedido({
     if (existente) return reaproveitar(existente, cliente, lojaId);
   }
 
+  // Distância loja → cliente, FORA da transação (não segura travas): cache, rota
+  // com tempo limite de 1,5 s ou linha reta × 1,3. Nunca falha o pedido; a taxa
+  // continua a da área de entrega (a por km é do lote dos entregadores).
+  const geo = endereco ? await distanciaDaEntrega(lojaId, endereco.pin ?? null, agora, mapas) : null;
+
   let resultado;
   try {
     resultado = await prisma.$transaction(
@@ -449,6 +487,7 @@ export async function criarPedido({
           chaveIdempotencia,
           totalEsperadoCentavos,
           agora,
+          geo,
         }),
       OPCOES_TRANSACAO,
     );
@@ -573,6 +612,7 @@ async function criarNaTransacao(tx, d) {
       caixaId,
       criadoPorId: d.usuarioId,
       chaveIdempotencia: d.chaveIdempotencia,
+      ...(d.geo ?? {}),
     },
     tx,
   );
@@ -599,7 +639,7 @@ export async function criarPedidoDoSite(
   lojaId,
   cliente,
   { itens, enderecoId, formaPagamento, trocoParaCentavos, chaveIdempotencia, totalEsperadoCentavos },
-  { agora } = {},
+  { agora, mapas } = {},
 ) {
   garantirTelefone(cliente);
   const endereco = await enderecoRepo.buscarDoCliente(cliente.id, enderecoId);
@@ -611,11 +651,12 @@ export async function criarPedidoDoSite(
     canal: 'SITE',
     itens,
     cliente: { id: cliente.id, nome: cliente.nome, telefone: cliente.telefone },
-    endereco: { texto: formatarEndereco(endereco), bairroId: endereco.bairro.id },
+    endereco: { texto: formatarEndereco(endereco), bairroId: endereco.bairro.id, pin: pinDe(endereco) },
     pagamento: { forma: formaPagamento, trocoParaCentavos: trocoParaCentavos ?? null },
     chaveIdempotencia,
     totalEsperadoCentavos,
     agora,
+    mapas,
   });
 }
 
@@ -664,7 +705,7 @@ export async function criarPedidoDoWhatsapp(
     observacao = null,
     pagoAgora = false,
   },
-  { usuarioId, agora } = {},
+  { usuarioId, agora, mapas } = {},
 ) {
   const cliente = await clienteRepo.buscarPorId(clienteId);
   if (!cliente) throw new ErroHttp(422, 'Escolha o cliente', { codigo: 'CLIENTE_INVALIDO' });
@@ -681,7 +722,7 @@ export async function criarPedidoDoWhatsapp(
     canal: 'WHATSAPP',
     itens,
     cliente: { id: cliente.id, nome: cliente.nome, telefone: cliente.telefone },
-    endereco: endereco && { texto: formatarEndereco(endereco), bairroId: endereco.bairro.id },
+    endereco: endereco && { texto: formatarEndereco(endereco), bairroId: endereco.bairro.id, pin: pinDe(endereco) },
     pagamento: { forma: formaPagamento, trocoParaCentavos: trocoParaCentavos ?? null },
     entrega: { encomenda, agendadoPara, retirarNoBalcao },
     ajustes: { descontoCentavos, taxaManualCentavos: taxaEntregaCentavos },
@@ -690,6 +731,7 @@ export async function criarPedidoDoWhatsapp(
     usuarioId,
     chaveIdempotencia,
     agora,
+    mapas,
   });
 }
 

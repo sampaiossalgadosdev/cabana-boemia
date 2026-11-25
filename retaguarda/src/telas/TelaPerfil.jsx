@@ -3,6 +3,8 @@ import { PALETA_SUGESTOES, avaliarCor, normalizarCor, variaveisDoTema } from '@r
 import { api } from '../lib/api.js';
 import { TIPOS_LOGO, problemaDoArquivo } from '../lib/imagem.js';
 import { Confirmar, EstadoCarga, LogoLoja, useAvisar, useCarregar } from '../componentes/comuns.jsx';
+import { MapaPino } from '../componentes/MapaPino.jsx';
+import { pinMudou, pinParaApi } from '../lib/mapa.js';
 
 /** Arquivo → data: URL (a prévia; a CSP da retaguarda libera data: em imagem). */
 const lerComoDataUrl = (arquivo) =>
@@ -26,18 +28,21 @@ export function TelaPerfil({ aoMudarLoja }) {
       <div className="pagina__topo">
         <div>
           <h1 className="pagina__titulo">Perfil da loja</h1>
-          <p className="pagina__sub">Logo e cor da loja na retaguarda, no PDV e no app do cliente.</p>
+          <p className="pagina__sub">Logo e cor da loja na retaguarda, no PDV e no app do cliente; localização da loja no mapa.</p>
         </div>
       </div>
       <EstadoCarga carga={carga}>
         {({ perfil }) => (
-          <FormPerfil
-            perfil={perfil}
-            aoSalvar={async (novo) => {
-              aoMudarLoja?.(novo);
-              await carga.recarregar();
-            }}
-          />
+          <>
+            <FormPerfil
+              perfil={perfil}
+              aoSalvar={async (novo) => {
+                aoMudarLoja?.(novo);
+                await carga.recarregar();
+              }}
+            />
+            <CartaoLocalizacao perfil={perfil} aoSalvar={() => carga.recarregar()} />
+          </>
         )}
       </EstadoCarga>
     </>
@@ -233,5 +238,56 @@ function FormPerfil({ perfil, aoSalvar }) {
       </section>
       <Confirmar pedido={confirmar} aoFechar={() => setConfirmar(null)} />
     </>
+  );
+}
+
+/**
+ * Localização da loja (pino): origem da distância até cada cliente, que aparece
+ * no pedido do PDV. Busca pelo endereço (servidor) e ajuste arrastando no mapa.
+ */
+function CartaoLocalizacao({ perfil, aoSalvar }) {
+  const avisar = useAvisar();
+  const config = useCarregar(() => api.mapa.config());
+  const salvo = perfil.latitude != null ? { latitude: perfil.latitude, longitude: perfil.longitude } : null;
+  const [pino, setPino] = useState(salvo);
+  const [salvando, setSalvando] = useState(false);
+  useEffect(() => setPino(salvo), [perfil.latitude, perfil.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
+  const mudou = pinMudou(salvo, pino);
+
+  async function salvar() {
+    setSalvando(true);
+    try {
+      await api.perfil.localizacao(pinParaApi(pino));
+      avisar(pino ? 'Localização da loja salva.' : 'Pino da loja removido.');
+      await aoSalvar();
+    } catch (err) {
+      avisar(err.message, 'erro');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <section className="cartao" style={{ padding: 16, display: 'grid', gap: 12, marginTop: 16 }}>
+      <div>
+        <h2 className="cartao__titulo" style={{ margin: 0 }}>Localização da loja</h2>
+        <p className="suave" style={{ margin: '4px 0 0' }}>
+          De onde saem as entregas. Com ela, cada pedido mostra no PDV a distância até o cliente.
+        </p>
+      </div>
+      <EstadoCarga carga={config}>
+        {(c) => <MapaPino pino={pino} aoMudar={setPino} config={c} buscar={(t) => api.mapa.buscar(t)} textoInicial={perfil.endereco ?? ''} />}
+      </EstadoCarga>
+      <div className="acoes">
+        <button type="button" className="botao botao--primario" disabled={!mudou || salvando} onClick={salvar}>
+          {salvando ? 'Salvando…' : 'Salvar localização'}
+        </button>
+        {mudou && (
+          <button type="button" className="botao" disabled={salvando} onClick={() => setPino(salvo)}>
+            Desfazer
+          </button>
+        )}
+      </div>
+    </section>
   );
 }

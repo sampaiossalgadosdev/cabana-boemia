@@ -181,6 +181,13 @@ export function chaveNfceParaApi(valor) {
   return { chaveNfce: digitos };
 }
 
+/** Só o link do Google Maps com o pino ("Abrir no mapa"); qualquer outro endereço é recusado. */
+const LINK_MAPA = /^https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=-?\d{1,2}(\.\d{1,6})?,-?\d{1,3}(\.\d{1,6})?$/;
+export function linkMapaValido(valor) {
+  if (typeof valor !== 'string' || !LINK_MAPA.test(valor)) throw new ErroEntrada('Link do mapa inválido');
+  return valor;
+}
+
 export function validarMinutos(valor) {
   if (valor === null || valor === undefined || valor === '') return null;
   if (!Number.isInteger(valor) || valor < TEMPO_MIN || valor > TEMPO_MAX) {
@@ -198,10 +205,11 @@ export function validarMinutos(valor) {
  *   listarImpressoras: () => Promise<string[]>,
  *   versao: string,
  *   loja: ReturnType<typeof import('./loja.js').criarEstadoLoja>,
+ *   abrirExterno?: (url: string) => Promise<void>,  // shell.openExternal (navegador/app do Maps)
  * }} deps
  * @returns {Record<string, (...args: any[]) => Promise<unknown>>}
  */
-export function criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao, loja, consultarCep = criarConsultaCep() }) {
+export function criarHandlers({ config, api, tempoReal, agente, listarImpressoras, versao, loja, consultarCep = criarConsultaCep(), abrirExterno = async () => {} }) {
   function parar() {
     tempoReal.desligar();
     agente.desligar();
@@ -393,6 +401,12 @@ export function criarHandlers({ config, api, tempoReal, agente, listarImpressora
       ),
 
     'cep:consultar': async (cep) => consultarCep(String(cep ?? '')),
+
+    // "Abrir no mapa" do pedido: só o link do Google Maps com o pino, no navegador do Windows.
+    'mapa:abrir': async (link) => {
+      await abrirExterno(linkMapaValido(link));
+      return true;
+    },
 
     'tempo:obter': async () => api.requisitar('GET', '/equipe/config/tempo-estimado'),
 

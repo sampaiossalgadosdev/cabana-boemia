@@ -324,6 +324,8 @@ h3 {
 @media (max-width: 860px) {
   .estrutura {
     grid-template-columns: minmax(0, 1fr);
+    /* Página curta: sem isto o grid estica a barra de cima até completar a altura. */
+    align-content: start;
     background: var(--cor-fundo);
   }
 
@@ -1448,4 +1450,87 @@ textarea.entrada {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px 20px;
+}
+
+/*
+ * Estilo do Taaki Delivery: sem loja aberta (login, ADMIN na plataforma).
+ * As cores vêm das variáveis (src/lib/tema.js, TEMA_TAAKI); aqui só o que não
+ * é cor: logo do Taaki em círculo, títulos na fonte da marca, cartões brancos.
+ */
+.login__marca {
+  display: none;
+}
+[data-tema='taaki'] h1,
+[data-tema='taaki'] .pagina__titulo,
+[data-tema='taaki'] .dialogo__titulo,
+[data-tema='taaki'] .login__marca,
+[data-tema='taaki'] .menu__loja {
+  font-family: 'Bricolage Grotesque', var(--fonte-base);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+[data-tema='taaki'] .menu__logo {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 0;
+  background: none;
+  border: 0;
+}
+[data-tema='taaki'] .menu__logo img,
+[data-tema='taaki'] .login__logo {
+  width: 96px;
+  height: 96px;
+  max-height: none;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 3px var(--cor-primaria), 0 10px 30px rgb(242 107 29 / 30%);
+}
+[data-tema='taaki'] .menu__loja {
+  margin: 0 4px 16px;
+  font-size: 19px;
+}
+[data-tema='taaki'] .login {
+  background:
+    radial-gradient(520px 340px at 85% 0%, rgb(242 107 29 / 22%), transparent 70%),
+    radial-gradient(420px 300px at 0% 100%, rgb(253 149 2 / 10%), transparent 70%),
+    var(--cor-menu);
+}
+[data-tema='taaki'] .login__cartao {
+  background: var(--cor-superficie);
+  border-top-color: var(--cor-primaria);
+}
+[data-tema='taaki'] .login__logo {
+  margin: 0 auto 12px;
+}
+[data-tema='taaki'] .login__marca {
+  display: block;
+  margin: 0 0 4px;
+  text-align: center;
+  font-size: 24px;
+  color: var(--cor-texto);
+}
+[data-tema='taaki'] .menu__item[aria-current='page'] {
+  background: rgb(255 255 255 / 10%);
+  color: var(--cor-menu-texto);
+  border-left-color: var(--cor-primaria);
+}
+[data-tema='taaki'] .entrada:focus {
+  border-color: var(--cor-primaria);
+  box-shadow: 0 0 0 3px rgb(242 107 29 / 25%);
+}
+[data-tema='taaki'] .etiqueta--ouro,
+[data-tema='taaki'] .nota {
+  background: var(--cor-primaria-suave);
+  color: #8a3a0b;
+}
+/* Tons creme fixos da Cabana trocados pelos neutros do Taaki. */
+[data-tema='taaki'] .tabela th,
+[data-tema='taaki'] .dialogo__rodape,
+[data-tema='taaki'] .secao-categoria,
+[data-tema='taaki'] .horarios__cabecalho {
+  background: #f8fafc;
+}
+[data-tema='taaki'] .etiqueta:not([class*='etiqueta--']),
+[data-tema='taaki'] .dialogo__fechar:hover {
+  background: var(--cor-creme);
 }

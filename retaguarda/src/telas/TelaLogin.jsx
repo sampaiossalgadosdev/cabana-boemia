@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { sessao } from '../lib/api.js';
 import { Campo, LogoLoja } from '../componentes/comuns.jsx';
-import { TEMA_PADRAO } from '@restaurante/shared/cores';
+import { temaDaLoja } from '../lib/tema.js';
 
 export function TelaLogin({ aoEntrar }) {
   const [email, setEmail] = useState('');
@@ -25,10 +25,14 @@ export function TelaLogin({ aoEntrar }) {
     }
   }
 
+  // O login é da plataforma (dono, atendente e ADMIN entram por aqui): sempre o estilo do Taaki.
+  const taaki = temaDaLoja(null);
+
   return (
     <main className="login">
       <form className="login__cartao" onSubmit={entrar} noValidate>
-        <LogoLoja className="login__logo" nome={TEMA_PADRAO.nome} />
+        <LogoLoja className="login__logo" nome={taaki.nome} logoUrl={taaki.logoUrl} />
+        <p className="login__marca">{taaki.nome}</p>
         <h1 className="login__titulo">Retaguarda</h1>
         {erro && (
           <div className="alerta" role="alert">

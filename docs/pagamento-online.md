@@ -236,7 +236,7 @@ Respostas do dono (2026-11-25). **Onde divergirem do texto das etapas acima, val
 1. **Taxa por km**: loja com entregador da plataforma passa a cobrar R$ 1,00 + R$ 0,90/km (`shared/src/taxaKm.js`) **neste lote**, no lugar da taxa da área. Loja com motoboy próprio continua com a taxa da área, que é dela.
 2. **Modo de entrega**: só o ADMIN define, em Lojas. Toda loja começa como motoboy próprio (`modoEntrega = LOJA`), a Cabana inclusive.
 3. **Site da Cabana**: pagamento online só no app. O site continua só na entrega.
-4. **Desconto da plataforma**: neste lote só entra o **frete grátis na primeira compra** (um por telefone, só em loja com entregador da plataforma, bancado pelo dono da plataforma). Não criar cupom nem desconto em produto. O livro-razão deixa o tipo "crédito da loja" preparado, sem uso por enquanto.
+4. **Desconto da plataforma**: neste lote só entra o **frete grátis na primeira compra** (campanha: um por telefone, bancado pelo dono da plataforma), que vale **nos dois tipos de loja** (corrigido em 2026-11-25; antes limitava ao entregador da plataforma). Regras de custo na decisão 16. Não criar cupom nem desconto em produto. O tipo "crédito da loja" do livro-razão passa a ser usado pela campanha em loja com motoboy próprio (decisão 16).
 5. **Expiração do Pix**: mandar ao Mercado Pago o mínimo permitido (30 minutos) e cancelar nós mesmos o pagamento no Mercado Pago aos 15 minutos.
 6. **Número do dia**: só na aprovação. O número pode ficar opcional no banco (nulo enquanto aguarda pagamento).
 7. **Pix expirado**: status novo `EXPIRADO`, fora do relatório de cancelados.
@@ -250,8 +250,14 @@ Respostas do dono (2026-11-25). **Onde divergirem do texto das etapas acima, val
 13. **E-mail do pagador**: se o cliente não tiver e-mail, pedir uma vez no checkout do Pix/cartão e salvar no cadastro. Não inventar e-mail.
 14. **Pedidos do PDV**: delivery lançado pelo PDV em loja com entregador da plataforma usa o entregador, e a loja deve a taxa no fechamento.
 15. **Fechamento**: semana de segunda a domingo pelo dia operacional, fechada automaticamente. O ADMIN marca "quitado", com data e observação.
-16. **Frete grátis da loja**: quem banca é o dono da plataforma. Em loja com entregador da plataforma, a taxa continua sendo da plataforma: no pagamento online ela sai da parte da loja no split; em dinheiro, a loja deve a taxa no fechamento.
-    - **Pendente de confirmação**: "quem banca é a plataforma" e "a taxa sai da parte da loja / a loja deve a taxa" parecem dizer coisas opostas, e a regra fixa da seção 2 diz que, com frete grátis, a comissão enviada é zero. Leitura provável: o frete grátis configurado **pela loja** é custo da loja (comissão = taxa cheia, cliente não paga a taxa); o frete grátis da **campanha** (primeira compra, decisão 4) é custo da plataforma (comissão zero). Confirmar antes da etapa 2.
+16. **Frete grátis (regra final, confirmada em 2026-11-25)**. Refina a regra fixa da seção 2 ("frete grátis = comissão zero"), que passa a valer só para a campanha.
+    - **Frete grátis que a loja configura** (`Loja.freteGratis*`): custo da loja; o cliente não paga a taxa.
+      - Loja com entregador da plataforma: a comissão enviada ao Mercado Pago é a **taxa cheia** (sai da parte da loja). Em dinheiro, a loja deve a taxa cheia no fechamento.
+      - Loja com motoboy próprio: nada muda (a taxa já é da loja).
+    - **Frete grátis da campanha** (primeira compra, um por telefone): custo da plataforma; vale nos dois tipos de loja.
+      - Loja com entregador da plataforma: comissão **zero** (o campo é omitido). A plataforma paga o entregador normalmente (os 95% continuam gravados no pedido).
+      - Loja com motoboy próprio: o cliente não paga a taxa, e a taxa da área que a loja cobraria vira **crédito da loja** no fechamento semanal. Vale para qualquer forma de pagamento.
+    - **Os dois no mesmo pedido**: vale o da loja (custo da loja) e a campanha **não é consumida**; o cliente continua com a primeira compra grátis para o próximo pedido.
 17. **Desconectar com Pix pendente**: cancelar os Pix pendentes no Mercado Pago e os pedidos aguardando pagamento, e avisar antes de confirmar a desconexão.
 18. **Retaguarda**: tela nova "Pagamento online".
 19. **Relatório e caixa**: separar "pago online" das formas pagas na entrega.

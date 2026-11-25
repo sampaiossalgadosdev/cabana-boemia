@@ -8,6 +8,7 @@ import { criarRotasLegais } from './routes/legal.routes.js';
 import { criarRotasTaaki } from './routes/taaki.routes.js';
 import { emailDoTitular } from './lib/controlador.js';
 import { lerHostsTaaki, lerDestinosDoApp, origensPermitidas } from './lib/dominios.js';
+import { lerConfigLanding } from './lib/landing.js';
 import { naoEncontrado } from './middlewares/naoEncontrado.js';
 import { tratarErro } from './middlewares/erro.js';
 import { servirSpa, DIST_SITE, DIST_RETAGUARDA, CSP_SITE, CSP_RETAGUARDA } from './lib/estaticos.js';
@@ -38,6 +39,7 @@ export const PREFIXO_API = '/api';
  *   `distSite` / `distRetaguarda`: builds servidos em / e /admin (testes usam pastas próprias).
  *   `hostsTaaki`: hosts do Taaki (padrão: TAAKI_HOSTS; ver lib/dominios.js), onde / é a landing.
  *   `destinosApp`: destinos de /app nos hosts do Taaki (padrão: TAAKI_APP_URL / TAAKI_APP_URL_IOS).
+ *   `landingTaaki`: modo da landing (padrão: TAAKI_APP_LANCADO, TAAKI_FAQ_IPHONE, TAAKI_INSTAGRAM_URL).
  */
 export function criarApp({
   corsOrigins = lerOrigensCors(process.env.CORS_ORIGINS),
@@ -56,6 +58,7 @@ export function criarApp({
   distRetaguarda = DIST_RETAGUARDA,
   hostsTaaki = lerHostsTaaki(process.env.TAAKI_HOSTS),
   destinosApp = lerDestinosDoApp(),
+  landingTaaki = lerConfigLanding(),
 } = {}) {
   const app = express();
   const origens = origensPermitidas(corsOrigins, hostsTaaki);
@@ -102,7 +105,7 @@ export function criarApp({
   app.use(criarRotasExclusao({ limiteSolicitacoes }));
   app.use(criarRotasLegais({ email: emailTitular }));
   // Hosts do Taaki: landing em /, /app, /parceiro; o site da Cabana não aparece ali.
-  app.use(criarRotasTaaki({ hosts: hostsTaaki, destinosApp, email: emailTitular ?? emailDoTitular() }));
+  app.use(criarRotasTaaki({ hosts: hostsTaaki, destinosApp, email: emailTitular ?? emailDoTitular(), landing: landingTaaki }));
   servirSpa(app, { prefixo: '/admin', dist: distRetaguarda, csp: CSP_RETAGUARDA });
   servirSpa(app, { prefixo: '/', dist: distSite, csp: CSP_SITE });
 

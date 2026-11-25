@@ -110,34 +110,39 @@ Commits previstos:
 - `feat(api): pedidos aguardando pagamento e expirados fora do PDV`
 - `docs: etapa 2 do pagamento online`
 
-### Etapa 3 — OAuth da loja
+### Etapa 3 — OAuth da loja, módulo do Mercado Pago e modo de entrega
 
-Objetivo: o dono conecta, vê o estado e desconecta a conta Mercado Pago; a API renova o token sozinha.
+Objetivo: a loja conecta a própria conta Mercado Pago, o token é renovado sozinho, o ADMIN escolhe o modo de entrega e as pendências pequenas da Etapa 2 são resolvidas. Sem Pix, sem webhook, sem telas do app. Texto revisto em 2026-11-25.
 
 API:
-- `api/src/lib/mercadoPago.js`: cliente HTTP com `fetch` injetável (como `lib/mapas.js`), tempo limite, sem log de token. Nesta etapa: `urlDeAutorizacao`, `trocarCodigo`, `renovar`.
-- `api/src/services/contaMp.service.js`: conectar, desconectar, renovar, `tokenDaLoja(lojaId)` (decifra na hora, renova se vence em menos de 30 dias).
-- `GET /retaguarda/mercadopago` (DONO; ADMIN com `X-Loja`) → `{ conectada, situacao, mpUserId (mascarado), conectadaEm, expiraEm, pagamentoOnlineAtivo }`.
-- `POST /retaguarda/mercadopago/conectar` → `{ url }` com `state` aleatório, guardado só como hash, de uso único, válido por 10 min, ligado à loja, ao usuário e à origem de onde veio (só hosts permitidos).
-- `GET /mercadopago/oauth/retorno?code&state` (pública, fora do `/retaguarda`, `no-store`): confere o `state`, troca o código, grava cifrado, redireciona para `/admin/` na origem guardada com `?mp=conectada` ou `?mp=erro`.
-- `POST /retaguarda/mercadopago/desconectar`: apaga os tokens, `situacao = DESCONECTADA`, desliga `pagamentoOnlineAtivo` (pedidos já aprovados não são afetados; Pix pendente da loja: ver pergunta 17).
-- `PUT /retaguarda/mercadopago/ativo { ativo }`: liga/desliga o pagamento online da loja (só com conta ativa).
-- Rotina diária de renovação (`iniciarRenovacaoDiaria` no `server.js`, timer `unref`, como as outras): renova o que vence em menos de 30 dias; falha marca `RENOVACAO_FALHOU` e desliga o pagamento online da loja (o app deixa de oferecer).
-- Plataforma (ADMIN): `GET /plataforma/lojas` ganha o estado da conexão e o `modoEntrega`; `PATCH /plataforma/lojas/:id` aceita `modoEntrega` (pergunta 2).
+- `api/src/lib/mercadoPago.js`: **único** ponto de saída para a API do Mercado Pago (Decisão da Etapa 3, item 1), com `fetch` injetável e tempo limite, sem logar token nem code. Nesta etapa: `montarUrlAutorizacao`, `trocarCodePorToken`, `renovarToken`. Um teste confere que nenhum outro arquivo de `api/src` fala com `mercadopago.com`.
+- State do OAuth: `lojaId`, `usuarioId`, origem da retaguarda e expiração de 10 minutos, assinado por HMAC-SHA256 com um segredo próprio (pergunta 1).
+- `GET /retaguarda/pagamento-online` (DONO; ADMIN com `X-Loja`): situação (`NAO_CONECTADA` | `CONECTADA` | `EXPIRADA` | `DESCONECTADA`), id da conta, `conectadaEm`, `expiraEm`, `pagamentoOnlineAtivo`, flag global, pagamentos pendentes.
+- `POST /retaguarda/pagamento-online/conectar` → `{ url }` (https://auth.mercadopago.com.br/authorization com `client_id`, `response_type=code`, `platform_id=mp`, `redirect_uri` = `MP_REDIRECT_URI`, `state`).
+- `GET /api/mercadopago/oauth/retorno?code&state` (pública): confere o state, troca o code, grava os tokens cifrados, `mpUserId`, `publicKey`, `expiraEm`; mesma conta já conectada a outra loja = recusa; redireciona para `/admin/pagamento-online?mp=conectada|erro&motivo=…` na origem guardada no state.
+- `POST /retaguarda/pagamento-online/desconectar` (com `confirmar`; sem ele devolve a contagem dos pendentes para o aviso): apaga os tokens, marca `DESCONECTADA`, desliga `pagamentoOnlineAtivo`; ponto pronto (`cancelarPendentesDaLoja`) para a Etapa 4 cancelar os Pix pendentes e expirar os pedidos.
+- `PUT /retaguarda/pagamento-online/ativo { ativo }`: só com a conexão `CONECTADA` e a flag global ligada.
+- Rotina diária de renovação (`iniciarRenovacaoDiaria` no `server.js`): vence em menos de 30 dias = renova com `refresh_token` e grava o refresh NOVO; falha = `EXPIRADA`, desliga `pagamentoOnlineAtivo` e grava um alerta para o ADMIN (pergunta 3).
+- `PATCH /plataforma/lojas/:id` aceita `modoEntrega` (só ADMIN). Mudar para `PLATAFORMA` com frete grátis ligado abaixo do piso = 409 `FRETE_GRATIS_ABAIXO_DO_PISO` (com o mínimo e o piso), a menos que venha `freteGratisPiso: 'SUBIR' | 'DESLIGAR'`; a loja nunca fica gravada violando o piso.
+- Pendências da Etapa 2 resolvidas agora: "primeira compra" olha também os pedidos FINALIZADOS do telefone; o telefone da campanha vira hash (HMAC-SHA256); taxa digitada no PDV recusada em loja `PLATAFORMA`.
 
 Retaguarda:
-- `TelaPerfil.jsx` (ou tela nova "Pagamento online", conforme a pergunta 18): cartão com o estado, "Conectar Mercado Pago", "Desconectar" com confirmação e o interruptor "Aceitar pagamento online no app".
-- `TelaLojas.jsx` (ADMIN): modo de entrega e estado da conexão.
-- `retaguarda/src/lib/mercadoPago.js` (lógica pura da tela, testada).
+- Tela nova "Pagamento online" (menu da loja): situação, "Conectar", "Desconectar" (com o aviso dos pendentes) e o interruptor do pagamento online (só habilitado com a conexão ativa e a flag ligada); mensagem de volta do Mercado Pago.
+- Lojas (ADMIN): campo "Entrega" (motoboy próprio / entregadores do Taaki) e, ao cair no piso, o diálogo "subir o mínimo para R$ X" ou "desligar o frete grátis"; situação da conexão na lista.
 
-Testes: `api/test/mercadopago-oauth.test.js` com `fetch` falso (state reutilizado, vencido, de outra loja; código recusado; renovação; falha de renovação desliga; token nunca aparece em resposta nem em log; DONO de outra loja = 403); retaguarda `test/mercadoPago.test.js`.
+Variáveis (vazias no `.env.example` e no `api/.env.railway`): `MP_CLIENT_ID`, `MP_CLIENT_SECRET`, `MP_REDIRECT_URI` e os segredos da pergunta 1.
+
+Testes: módulo único (nenhum outro arquivo chama o Mercado Pago); `modoEntrega` só pelo ADMIN e o piso; state válido, adulterado, expirado e de outra loja; DONO de outra loja barrado; callback com troca mockada; tokens gravados cifrados; mesma conta em duas lojas; desconectar; renovação com sucesso e com falha; primeira compra com pedido anterior; hash do telefone; taxa manual recusada em `PLATAFORMA`.
 
 Commits previstos:
-- `feat(api): cliente HTTP do Mercado Pago (OAuth)`
+- `feat(api): módulo único do Mercado Pago (OAuth)`
 - `feat(api): conectar, desconectar e renovar a conta Mercado Pago da loja`
-- `feat(api): modo de entrega e conexão na plataforma`
-- `feat(retaguarda): conectar a conta Mercado Pago e ligar o pagamento online`
-- `docs: passo a passo do aplicativo no Mercado Pago (app/CONFIGURACAO_PAGAMENTO.md)`
+- `feat(api): modo de entrega da loja pelo ADMIN com o piso do frete grátis`
+- `feat(api): campanha só para quem nunca teve pedido finalizado e telefone em hash`
+- `feat(api): taxa digitada no PDV recusada em loja com entregador da plataforma`
+- `feat(retaguarda): tela "Pagamento online"`
+- `feat(retaguarda): modo de entrega na tela Lojas`
+- `docs: etapa 3 do pagamento online`
 
 ### Etapa 4 — Pix no app, webhook, conciliação e expiração
 
@@ -310,3 +315,26 @@ Respostas do dono às perguntas da Etapa 2. Valem sobre o texto da Etapa 2 onde 
 7. **Status do pagamento**: acrescentar `CANCELADO` e `REEMBOLSO_PARCIAL`.
 8. **Enums** em maiúsculas, no padrão dos atuais.
 9. **Formas de pagamento**: função no shared, campo novo `formasPagamento` no `/publico/lojas/:slug/config` (só acrescentado) e o `criarPedido` recusando forma que não vale para o tipo da loja. O app não muda nesta etapa.
+
+### Decisões da Etapa 3 (2026-11-25)
+
+1. **Módulo único do Mercado Pago**: todas as chamadas à API do Mercado Pago (OAuth, pagamentos, preferências, estornos, consultas, cancelamentos) ficam em um só módulo da API (`api/src/lib/mercadoPago.js`), com funções nossas (`montarUrlAutorizacao`, `trocarCodePorToken`, `renovarToken`; depois `criarPix`, `consultarPagamento`, `cancelarPagamento`, `estornar`, `criarPreferencia`). Nenhum outro arquivo chama a API direto. Motivo: a API de Payments (`/v1/payments`) aparece no painel do Mercado Pago como "será descontinuada em breve"; uma migração para a API de Orders deve mexer só nesse módulo.
+
+Respostas às pendências da Etapa 2:
+2. **Separar app e site** (Etapa 4): criar a origem/canal `APP`, distinta de `SITE`, no pedido. Também resolve o PDV mostrar "Site" para pedido do app. Pino obrigatório, campanha e pagamento online valem só para `APP`.
+3. **PDV em loja `PLATAFORMA`**: só dinheiro na entrega; retirada no balcão e "pago agora" aceitam todas as formas (confirmado).
+4. **Taxa zero** não consome a campanha (confirmado).
+5. **Trava de 50%** arredondada para baixo (confirmado).
+6. **"Primeira compra"**: o telefone só tem direito se nunca usou a campanha **e** não tem nenhum pedido `FINALIZADO` anterior (Etapa 3).
+7. **Telefone da campanha em hash**: a tabela da campanha guarda HMAC-SHA256 do telefone (segredo em variável de ambiente), não o telefone em texto; o que estiver em texto é migrado (Etapa 3). **Anotar na política de privacidade da Etapa 4.**
+8. **Taxa digitada no PDV em loja `PLATAFORMA`**: não permitida. A taxa é a da área, com origem `AREA`, porque é da plataforma e a loja não pode mudar. Em loja `PROPRIO`, continua como hoje (Etapa 3).
+9. **Piso ao mudar para `PLATAFORMA`**: o ADMIN vê o aviso e escolhe subir o mínimo para o piso ou desligar o frete grátis da loja; a loja nunca é salva violando o piso (Etapa 3).
+
+Respostas às perguntas da Etapa 3:
+10. **Segredos novos**: `MP_STATE_SECRET` (assina o state do OAuth) e `CAMPANHA_TELEFONE_SECRET` (hash do telefone da campanha), com no mínimo 32 caracteres e diferentes dos segredos JWT. `MP_STATE_SECRET` é exigido para conectar e, com `PAGAMENTO_ONLINE_ATIVO=sim`, para a API subir; `CAMPANHA_TELEFONE_SECRET` passa a ser exigido quando a reserva da campanha for ligada na criação do pedido (Etapa 4).
+11. **Retorno do OAuth**: o state guarda o endereço de origem da retaguarda; só vale `https://taakidelivery.com.br` (e `localhost` em desenvolvimento). Fora da lista = `https://taakidelivery.com.br/parceiro`. **`cabana.managerpix.com.br` não é mais usado**: a retaguarda agora é só `taakidelivery.com.br/parceiro`.
+12. **Alertas para o ADMIN**: tabela genérica, rota do ADMIN e tela "Alertas" na plataforma já na Etapa 3, com "marcar como resolvido" e contador de alertas abertos no menu. As etapas 4 a 6 só acrescentam tipos.
+13. **Conectar com a flag global desligada**: permitido se a chave de cifra (e o segredo do state) estiver configurada; só o interruptor do pagamento online fica travado.
+14. **Conta desconectada** pode ser conectada a outra loja; só bloqueia a conta CONECTADA ou EXPIRADA em outra loja.
+15. **PKCE**: fica sem por enquanto (só o state assinado). **Melhoria futura**: ligar o PKCE no aplicativo do Mercado Pago e mandar o `code_verifier`.
+16. **Trava da taxa na tela do PDV** (loja `PLATAFORMA`): fica para a **Etapa 5**; na Etapa 3 só a API recusa.

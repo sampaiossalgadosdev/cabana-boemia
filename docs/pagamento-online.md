@@ -56,35 +56,42 @@ Plano escrito em 2026-11-25, a partir da `main` em `08886ef` (merge do lote do m
 
 ### Etapa 2 — Base
 
-Objetivo: banco, regras puras e criptografia, sem nenhuma chamada ao Mercado Pago e sem mudar comportamento visível (tudo nasce desligado).
+Objetivo: banco, status, flags, criptografia e cálculo do split, sem nenhuma chamada ao Mercado Pago, sem telas novas e sem mudar a criação do pedido (que passa a usar o split na etapa 4). Com a flag desligada, tudo fica como hoje. Texto revisto em 2026-11-25 conforme as Decisões.
 
-Modelos e migration (`api/prisma/migrations/<data>_pagamento_online_base`, só aditiva, com os CHECKs no SQL como nas outras):
-- `StatusPedido` ganha `AGUARDANDO_PAGAMENTO` (migration própria só com o valor do enum, porque precisa de commit antes do uso, como foi com `ADMIN`) e, conforme a resposta à pergunta 7, `EXPIRADO`.
-- Enums novos: `ModoEntrega` (`PLATAFORMA`, `LOJA`), `ModoPagamento` (`NA_ENTREGA`, `ONLINE`), `MeioOnline` (`PIX`, `CARTAO`), `StatusPagamentoOnline` (`PENDENTE`, `APROVADO`, `RECUSADO`, `EXPIRADO`, `CANCELADO`, `ESTORNADO`, `ESTORNO_PARCIAL`, `CONTESTADO`).
-- `Loja`: `modoEntrega` (padrão `LOJA`: a Cabana e a loja de teste continuam como hoje), `pagamentoOnlineAtivo` (padrão false).
-- `ContaMercadoPago` (uma por loja, `lojaId` único): `mpUserId`, `accessTokenCifrado`, `refreshTokenCifrado`, `publicKey`, `expiraEm`, `escopo`, `conectadaEm`, `conectadaPorId`, `renovadaEm`, `situacao` (`ATIVA`, `RENOVACAO_FALHOU`, `DESCONECTADA`), `ultimoErro`.
-- `Pedido`: `modoEntrega`, `modoPagamento`, `meioOnline`, `taxaEntregaCheiaCentavos` (a taxa antes do frete grátis), `freteGratisPlataforma` (Boolean), `repasseEntregadorCentavos` (95%), `partePlataformaCentavos` (5%), `comissaoMarketplaceCentavos` (o que foi enviado ao Mercado Pago; 0 = campo não enviado), `pagoOnlineEm`, `expiraPagamentoEm`. CHECKs: repasse + parte = taxa cheia quando `modoEntrega = PLATAFORMA`, ambos nulos quando `LOJA`; comissão ≤ total; `ONLINE` exige `meioOnline`.
-- O CHECK atual `pagoEm exige forma e caixaId` não é tocado: o pagamento online usa `pagoOnlineEm` (sem caixa), para não mexer no "pago agora" do PDV.
-- `PagamentoOnline`: `pedidoId`, `lojaId`, `meio`, `mpPagamentoId` (Pix) ou `mpPreferenciaId` (cartão), `chaveIdempotencia` (UUID enviado no `X-Idempotency-Key`), `valorCentavos`, `comissaoCentavos`, `status`, `statusDetalheMp`, `qrCode`/`ticketUrl` (Pix), `initPoint` (cartão), `expiraEm`, `aprovadoEm`, `estornadoCentavos`, `criadoEm`. Índice único em `mpPagamentoId`.
-- `EventoWebhookMp` (dedupe e auditoria): `idNotificacao`/`requestId`, `tipo`, `dataId`, `recebidoEm`, `processadoEm`, `resultado`. Sem dados pessoais.
+Migrations (não destrutivas; os CHECKs no SQL, como nas outras):
+- `<data>_pagamento_online_status`: só os valores novos do enum `StatusPedido` (`AGUARDANDO_PAGAMENTO`, `EXPIRADO`), em migration própria porque o Postgres exige commit antes de usar o valor (como foi com `ADMIN`).
+- `<data>_pagamento_online_base`:
+  - `Loja.modoEntrega` (`PLATAFORMA` | `PROPRIO`, padrão `PROPRIO`: todas as lojas existentes, a Cabana inclusive; só o ADMIN altera, na etapa 3) e `Loja.pagamentoOnlineAtivo` (padrão false).
+  - `ConexaoMercadoPago` (uma por loja): `lojaId` único, `mpUserId`, `accessTokenCifrado`, `refreshTokenCifrado`, `publicKey`, `expiraEm`, `status` (`CONECTADA` | `EXPIRADA` | `DESCONECTADA`), `conectadaEm`.
+  - `Pagamento`: `pedidoId`, `metodo` (`PIX` | `CARTAO_ONLINE`), `status` (`PENDENTE` | `APROVADO` | `RECUSADO` | `EXPIRADO` | `REEMBOLSADO` | `REEMBOLSO_PENDENTE`), `mpPaymentId` e `mpPreferenceId` (únicos), `valorTotalCentavos`, `valorPlataformaCentavos` (o que vai no split; 0 = campo omitido), `idempotencyKey` (única), `expiraEm`, `pixQrCode`, `pixQrCodeBase64`, `dadosMp` (JSON com os campos relevantes da resposta, sem dado pessoal além do necessário), `criadoEm`, `atualizadoEm`.
+  - `EventoWebhook`: dedupe (chave única) e auditoria, sem dado pessoal.
+  - `Pedido`: `numeroDia` opcional (nulo enquanto aguarda pagamento; atribuído só na aprovação, Decisão 6; o único `[lojaId, dataRef, numeroDia]` continua valendo para os números preenchidos), `origemFreteGratis` (`NENHUM` | `LOJA` | `CAMPANHA`, padrão `NENHUM`), `valorEntregadorCentavos` e `valorPlataformaEntregaCentavos` (só com entregador da plataforma; CHECK: os dois ou nenhum).
+  - `UsoCampanhaFreteGratis`: `telefone` único (um por telefone), `pedidoId`, `situacao` e datas. Só conta como usado quando o pedido é aprovado ou concluído; expirado ou cancelado não consome.
+  - `LancamentoLoja` (livro-razão): `lojaId`, `pedidoId` opcional, `tipo` (`TAXA_ENTREGA_DINHEIRO` | `CREDITO_CAMPANHA` | `AJUSTE_MANUAL` | `ESTORNO`), `valorCentavos` com sinal, `observacao`, `fechamentoId` opcional, `criadoEm`.
+  - `FechamentoSemanal`: `lojaId`, `inicio`, `fim` (segunda a domingo pelo dia operacional, Decisão 15), `saldoCentavos`, `status` (`ABERTO` | `AGUARDANDO_PAGAMENTO` | `QUITADO`), `quitadoEm`, `observacao`.
+  - E-mail do cliente (Decisão 13): `Cliente.email` já existe; nada a criar.
 
-Regras puras e libs:
-- `shared/src/split.js` (testado): `dividirTaxaEntrega(taxaCheia)` → `{ entregador, plataforma }` com 95% arredondado ao centavo (regra de arredondamento: pergunta 12) e a plataforma com o resto (a soma bate sempre); `comissaoMarketplace({ modoEntrega, taxaCobrada })` → centavos (0 = não enviar); `centavosParaReais` exato (string com 2 casas, sem ponto flutuante).
-- `api/src/lib/cifra.js` (testado): `cifrar`/`decifrar` AES-256-GCM, IV aleatório de 12 bytes, formato `v1:<iv>:<tag>:<dados>` em base64url, chave de 32 bytes de `PAGAMENTO_CHAVE_CRIPTO`; o prefixo de versão permite trocar a chave depois. `server.js` recusa iniciar com `PAGAMENTO_ONLINE` ligado e chave ausente ou inválida (como faz com os segredos JWT).
-- `api/src/lib/pagamentoOnline.js`: leitura das variáveis e `pagamentoOnlineDisponivel(loja, conta)`.
-- `criarPedido` passa a gravar `modoEntrega`, `taxaEntregaCheiaCentavos` e, para `PLATAFORMA`, repasse e parte. Cálculo da taxa conforme a pergunta 1 (por km ou área).
+Código:
+- `shared/src/split.js` (puro): recebe subtotal, `modoEntrega`, a taxa (por km via `taxaKm.js` em `PLATAFORMA`, da área em `PROPRIO`), o frete grátis da loja e a elegibilidade da campanha; devolve o valor cobrado do cliente, `origemFreteGratis`, o valor da plataforma no split, `valorEntregador` (95% meio para cima) e `valorPlataformaEntrega`, e o crédito da loja (taxa da área quando é campanha em loja `PROPRIO`). Segue as Decisões 4, 12 e 16 (os dois frete grátis juntos: vale o da loja e a campanha não é consumida).
+- `shared/src/formasPagamento.js` (puro): formas por tipo de loja e disponibilidade do online (Decisão 11).
+- `api/src/lib/cifra.js`: AES-256-GCM com `TOKEN_ENCRYPTION_KEY` (hex de 32 bytes); `server.js` não sobe com `PAGAMENTO_ONLINE_ATIVO` ligado e a chave ausente ou inválida.
+- `api/src/lib/pagamentoOnline.js`: leitura da flag e `pagamentoOnlineDisponivel(loja, conexao)` (flag ligada + `pagamentoOnlineAtivo` + conexão `CONECTADA`).
+- Service da campanha (reservar, confirmar, liberar) com as transições testadas; ligado à criação e à aprovação do pedido na etapa 4.
+- Pedidos `AGUARDANDO_PAGAMENTO` e `EXPIRADO` fora do PDV (lista do dia, inclusive "Todos"), da fila de impressão, do fechamento de caixa e do relatório de cancelados.
 
-Variáveis (só os nomes no `.env.example` e no `api/.env.railway`, vazias): `PAGAMENTO_ONLINE`, `PAGAMENTO_CHAVE_CRIPTO`, `MP_CLIENT_ID`, `MP_CLIENT_SECRET`, `MP_REDIRECT_URI`, `MP_WEBHOOK_SECRET`. `test/env-example.test.js` e `test/env-railway.test.js` já acusam variável faltando.
+Variáveis (só os nomes, vazias, no `.env.example` e no `api/.env.railway`): `PAGAMENTO_ONLINE_ATIVO`, `TOKEN_ENCRYPTION_KEY`. As do Mercado Pago (`MP_*`) entram na etapa 3, quando forem lidas pelo código (o teste do `.env.example` só aceita variável lida).
 
-Testes: `shared/test/split.test.js`; `api/test/cifra.test.js` (ida e volta, tag adulterada, chave errada); migration (CHECKs com combinações inválidas, inclusive o caso de NULL que passou no lote do mapa); `criarPedido` grava repasse/parte com e sem frete grátis; tudo igual com as flags desligadas.
+Testes: cifra (ida e volta, chave errada falha, dado adulterado falha); split em todos os casos (`PLATAFORMA` e `PROPRIO`; sem frete grátis; frete grátis da loja; campanha; os dois juntos; arredondamento 95/5); campanha só consumida na aprovação, não consumida em expirado ou cancelado, uma por telefone; formas por tipo de loja; flag desligada mantém o comportamento atual; `AGUARDANDO_PAGAMENTO` e `EXPIRADO` fora do PDV e do caixa; CHECKs da migration (com o caso de NULL).
 
 Commits previstos:
-- `feat(api): status AGUARDANDO_PAGAMENTO no enum do pedido`
-- `feat(api): modelos do pagamento online (conta Mercado Pago, pagamento, webhook) e modo de entrega`
-- `feat(shared): divisão da taxa de entrega e comissão do marketplace`
-- `feat(api): cifra dos tokens da loja (AES-256-GCM)`
-- `feat(api): pedido grava modo de entrega, taxa cheia e repasse do entregador`
-- `docs: variáveis do pagamento online`
+- `feat(api): status AGUARDANDO_PAGAMENTO e EXPIRADO no pedido`
+- `feat(api): modelos do pagamento online (conexão, pagamento, webhook, campanha, livro-razão, fechamento)`
+- `feat(shared): cálculo do split e da taxa de entrega por modo de entrega`
+- `feat(shared): formas de pagamento por tipo de loja`
+- `feat(api): cifra dos tokens da loja (AES-256-GCM) e flag do pagamento online`
+- `feat(api): campanha de frete grátis da primeira compra (reserva, uso, liberação)`
+- `feat(api): pedidos aguardando pagamento e expirados fora do PDV`
+- `docs: etapa 2 do pagamento online`
 
 ### Etapa 3 — OAuth da loja
 
@@ -266,3 +273,23 @@ Respostas do dono (2026-11-25). **Onde divergirem do texto das etapas acima, val
 22. **"Recebi o dinheiro"**: é o próprio "Finalizar" do PDV com outro nome nos pedidos em dinheiro com entregador da plataforma.
 
 Outros: o `app/assets/brand/logo.jpg` fora do git fica como está.
+
+### Decisões da Etapa 2 (2026-11-25)
+
+Respostas do dono às perguntas da Etapa 2. Valem sobre o texto da Etapa 2 onde divergirem.
+
+1. **Campanha (reserva e uso)**: reservar na criação do pedido; contar como usada na aprovação do pagamento online ou na finalização do pedido pago na entrega; liberar se o pedido expirar ou for cancelado (inclusive cancelamento pelo ADMIN depois do aceite).
+2. **Telefone da campanha**: só vale o telefone verificado por código. Sem telefone verificado, não ganha a campanha nesta etapa.
+   - **Pendência da Etapa 4**: o app deve oferecer "verifique seu telefone para ganhar frete grátis na primeira compra" no checkout.
+3. **Canal da campanha**: só no app. Não vale em pedido do PDV nem do site.
+4. **Sem pino em loja com entregador da plataforma**:
+   - App: exigir o pino no mapa para entregar em loja `PLATAFORMA`; sem pino, o checkout pede para marcar o endereço no mapa (validação no app: Etapa 4). Nesta etapa, o `criarPedido` recusa pedido do cliente sem pino em loja `PLATAFORMA`.
+   - PDV: usa a taxa da área da loja como reserva. A taxa continua sendo da plataforma (95/5 igual) e o pedido grava de onde veio a taxa (`KM` ou `AREA`) para auditoria.
+   - O `split.js` recebe a taxa já resolvida e a origem dela; ele não decide entre km e área.
+5. **Comissão maior que o total**, as duas proteções:
+   - Retaguarda: em loja `PLATAFORMA`, o pedido mínimo do frete grátis da loja não pode ser menor que um valor global configurável (padrão R$ 20,00), com aviso explicando o motivo.
+   - Trava no `split.js`: se mesmo assim a taxa passar de 50% do valor cobrado do cliente, o valor no split fica limitado a 50% do valor cobrado e a diferença vira débito da loja no livro-razão (tipo novo `TAXA_ENTREGA_COMPLEMENTO`), com alerta para o ADMIN.
+6. **Dia operacional** do pedido pago online: o da aprovação, junto com o número.
+7. **Status do pagamento**: acrescentar `CANCELADO` e `REEMBOLSO_PARCIAL`.
+8. **Enums** em maiúsculas, no padrão dos atuais.
+9. **Formas de pagamento**: função no shared, campo novo `formasPagamento` no `/publico/lojas/:slug/config` (só acrescentado) e o `criarPedido` recusando forma que não vale para o tipo da loja. O app não muda nesta etapa.

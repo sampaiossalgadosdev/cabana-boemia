@@ -479,6 +479,25 @@ describe('mapas: serviço, endereço, pedido, loja e rotas (banco)', { skip: sem
     assert.equal(bc.distanciaMetros, null);
   });
 
+  test('excluir a conta apaga o pino e a distância dos pedidos (a posição da loja fica)', async () => {
+    const outro = await prisma.cliente.create({ data: { googleId: 'mapa-excluir', nome: 'Zé', telefone: '43999990001' } });
+    const e = await prisma.endereco.create({ data: { clienteId: outro.id, rua: 'Rua H', numero: '4', bairroId: centro.id, principal: true, ...CASA } });
+    await prisma.loja.update({ where: { id: lojaCabana.id }, data: LOJA });
+    const r = await api('POST', '/cliente/pedidos', {
+      token: gerarTokenCliente(outro),
+      corpo: { enderecoId: e.id, formaPagamento: 'PIX', chaveIdempotencia: randomUUID(), itens: [{ produtoId: xBacon.id, quantidade: 1 }], totalEsperadoCentavos: xBacon.precoCentavos + 500 },
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.corpo));
+    await prisma.pedido.update({ where: { id: r.corpo.pedido.id }, data: { status: 'FINALIZADO', finalizadoEm: SABADO_20H } });
+    const excluir = await api('DELETE', '/cliente/me', { token: gerarTokenCliente(outro), corpo: {} });
+    assert.equal(excluir.status, 200, JSON.stringify(excluir.corpo));
+    const p = await prisma.pedido.findUnique({ where: { id: r.corpo.pedido.id } });
+    assert.deepEqual(
+      [p.nomeCliente, p.latitudeEntrega, p.longitudeEntrega, p.distanciaMetros, p.distanciaOrigem, p.latitudeLoja],
+      ['Cliente excluído', null, null, null, null, LOJA.latitude],
+    );
+  });
+
   test('banco: CHECKs do pino (os dois ou nenhum, faixas) e da distância (exige as posições e a origem)', async () => {
     await assert.rejects(prisma.endereco.create({ data: { clienteId: cliente.id, rua: 'R', numero: '1', bairroId: centro.id, latitude: -23 } }));
     await assert.rejects(prisma.loja.update({ where: { id: lojaCabana.id }, data: { latitude: 91, longitude: 0 } }));

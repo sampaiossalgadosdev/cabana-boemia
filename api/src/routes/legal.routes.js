@@ -54,11 +54,12 @@ export function paginaPrivacidade(email, c = CONTROLADOR) {
     <li><strong>Conta</strong>: nome e e-mail, recebidos do Google ou da Apple quando você entra. Com a Apple, o e-mail pode ser um endereço de retransmissão criado por ela.</li>
     <li><strong>Telefone</strong> (celular), que você informa para receber o pedido.</li>
     <li><strong>Endereços de entrega</strong>: rua, número, complemento, ponto de referência e bairro.</li>
-    <li><strong>Histórico de pedidos</strong>: itens, observações, valores, forma de pagamento, troco, data e hora, endereço e loja.</li>
+    <li><strong>Localização do endereço no mapa</strong> (latitude e longitude do pino), que você confirma no app: pela busca do endereço digitado, tocando ou arrastando o pino no mapa, ou pelo botão <strong>"Usar minha localização"</strong>. Nesse caso o app lê a localização do aparelho (GPS) <strong>uma vez, só quando você toca no botão</strong> e só com o app aberto, para posicionar o pino; nunca em segundo plano, e não guardamos o histórico de onde você esteve.</li>
+    <li><strong>Histórico de pedidos</strong>: itens, observações, valores, forma de pagamento, troco, data e hora, endereço (com a localização do pino no momento do pedido), loja e a distância da loja até o endereço.</li>
     <li><strong>Registros de acesso</strong>: endereço IP e data e hora de quando você entra na conta, quando o app renova a sua sessão, quando envia um pedido e quando exclui a conta.</li>
     <li><strong>Seus aceites e escolhas</strong>: a versão destes documentos que você aceitou e quando, e se você quer receber ofertas e novidades (com data e endereço IP de cada escolha).</li>
   </ul>
-  <p>Não coletamos localização do aparelho, contatos, fotos nem dados de cartão, e o app não usa identificador de publicidade nem rastreia você em outros apps ou sites. O pagamento é feito na entrega, direto com a loja.</p>
+  <p>Não coletamos a localização do aparelho em segundo plano, contatos, fotos nem dados de cartão, e o app não usa identificador de publicidade nem rastreia você em outros apps ou sites. O pagamento é feito na entrega, direto com a loja.</p>
 </section>
 <section>
   <h2>2. Para que usamos</h2>
@@ -66,6 +67,7 @@ export function paginaPrivacidade(email, c = CONTROLADOR) {
     <li>Criar e manter a sua conta e identificar você nos próximos pedidos (execução do contrato).</li>
     <li>Enviar o pedido à loja, para ela preparar, entregar e falar com você sobre ele (execução do contrato).</li>
     <li>Mostrar o seu histórico e permitir repetir pedidos (execução do contrato).</li>
+    <li>Marcar no mapa o lugar exato da entrega e calcular a distância da loja até o endereço, para a entrega chegar ao lugar certo (execução do contrato).</li>
     <li>Cumprir obrigações legais, como a guarda de registros de acesso e de registros fiscais (obrigação legal).</li>
     <li>Proteger a plataforma contra fraude e abuso, por exemplo limitando tentativas de login (legítimo interesse).</li>
     <li>Guardar a prova do seu aceite destes documentos e das suas escolhas de comunicação (obrigação legal e exercício de direitos).</li>
@@ -76,8 +78,9 @@ export function paginaPrivacidade(email, c = CONTROLADOR) {
 <section>
   <h2>3. Com quem compartilhamos</h2>
   <ul>
-    <li><strong>A loja do seu pedido</strong> recebe somente o seu <strong>nome, telefone, endereço de entrega e os itens do pedido</strong> (com as observações e a forma de pagamento escolhida), com o <strong>único fim de preparar e entregar aquele pedido</strong>. A loja <strong>não pode usar esses dados para nenhuma outra finalidade</strong>, como propaganda ou cadastro próprio.</li>
+    <li><strong>A loja do seu pedido</strong> recebe somente o seu <strong>nome, telefone, endereço de entrega e os itens do pedido</strong> (com a localização do endereço no mapa e a distância, as observações e a forma de pagamento escolhida), com o <strong>único fim de preparar e entregar aquele pedido</strong>. A loja <strong>não pode usar esses dados para nenhuma outra finalidade</strong>, como propaganda ou cadastro próprio.</li>
     <li><strong>Google ou Apple</strong>, apenas para confirmar a sua identidade no login.</li>
+    <li><strong>Google (Google Maps Platform)</strong>, para mostrar o mapa no app, achar no mapa o endereço digitado (enviamos só rua, número, bairro e cidade, sem nome nem telefone) e calcular a distância pelas ruas entre a loja e o endereço (enviamos só as duas posições). O Google trata esses dados conforme a política de privacidade dele.</li>
     <li><strong>Hospedagem</strong>: os dados ficam em servidores da Railway (Railway Corporation) nos <strong>Estados Unidos</strong> (região US East). Isso é uma <strong>transferência internacional de dados</strong>, feita para executar o contrato com você e com as garantias do art. 33 da LGPD (contrato com o provedor, que se obriga a proteger os dados, comunicação criptografada e acesso restrito).</li>
     <li><strong>Autoridades</strong>, quando houver obrigação legal ou ordem judicial.</li>
   </ul>
@@ -89,8 +92,8 @@ export function paginaPrivacidade(email, c = CONTROLADOR) {
 <section>
   <h2>5. Por quanto tempo guardamos</h2>
   <ul>
-    <li><strong>Conta, telefone e endereços</strong>: enquanto a conta existir. Ao excluir, são apagados na hora (pelo app) ou em até 15 dias (pelo formulário).</li>
-    <li><strong>Pedidos</strong>: valores, itens e datas pelo prazo exigido pela legislação fiscal e de defesa do consumidor. Se você excluir a conta, os pedidos ficam <strong>sem</strong> seu nome, telefone e endereço.</li>
+    <li><strong>Conta, telefone e endereços</strong> (com a localização no mapa): enquanto a conta existir. Ao excluir, são apagados na hora (pelo app) ou em até 15 dias (pelo formulário).</li>
+    <li><strong>Pedidos</strong>: valores, itens e datas pelo prazo exigido pela legislação fiscal e de defesa do consumidor. Se você excluir a conta, os pedidos ficam <strong>sem</strong> seu nome, telefone, endereço e localização.</li>
     <li><strong>Registros de acesso</strong>: ${RETENCAO_MESES} meses, como exige o Marco Civil da Internet (Lei 12.965/2014, art. 15), mesmo depois da exclusão da conta. Passado esse prazo, são apagados automaticamente.</li>
     <li><strong>Aceites e escolhas de comunicação</strong>: enquanto a conta existir; são apagados com ela.</li>
     <li><strong>Pedidos de exclusão feitos pelo formulário</strong>: até serem atendidos e pelo tempo necessário para comprovar o atendimento.</li>

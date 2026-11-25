@@ -9,7 +9,9 @@
     "./itens": "./src/itens.js",
     "./frete": "./src/frete.js",
     "./horarios": "./src/horarios.js",
-    "./cores": "./src/cores.js"
+    "./cores": "./src/cores.js",
+    "./mapa": "./src/mapa.js",
+    "./taxaKm": "./src/taxaKm.js"
   },
   "scripts": {
     "dev": "echo \"[shared] dev ainda nao configurado\"",

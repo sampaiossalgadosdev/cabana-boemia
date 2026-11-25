@@ -14,6 +14,7 @@ import { horaViradaDe } from './diaOperacional.service.js';
 import { emitirParaEquipe } from '../lib/eventos.js';
 import { freteGratisDaConfig, taxaDeEntrega } from '@restaurante/shared/frete';
 import { linkDoMapa, pinDe } from '@restaurante/shared/mapa';
+import { formaNaEntregaPermitida, formasDePagamento } from '@restaurante/shared/formasPagamento';
 import * as pedidoRepo from '../repositories/pedido.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoRepo from '../repositories/endereco.repository.js';
@@ -525,6 +526,32 @@ function reaproveitar(existente, cliente, lojaId) {
   return { pedido: pedidoPublico(existente), criado: false };
 }
 
+const NOME_FORMA = { PIX: 'Pix', DINHEIRO: 'dinheiro', DEBITO: 'cartão de débito', CREDITO: 'cartão de crédito' };
+
+/**
+ * Regras do entregador da plataforma (docs/pagamento-online.md, Decisão 11 e as da Etapa 2):
+ * - pedido do cliente (app/site) com entrega precisa do pino no mapa (a taxa é por km):
+ *   422 PINO_OBRIGATORIO; o PDV não marca pino e usa a taxa da área como reserva;
+ * - pago na entrega, só dinheiro (o entregador não leva maquininha nem recebe Pix da loja):
+ *   422 FORMA_INDISPONIVEL. Retirada no balcão e "pago agora" no balcão aceitam todas.
+ * Loja com motoboy próprio: nada muda.
+ */
+export function conferirModoEntrega(loja, { canal, endereco, pagamento, pagoAgora = false }) {
+  if (loja?.modoEntrega !== 'PLATAFORMA' || canal === 'SALAO') return;
+  if (canal === 'SITE' && endereco && !endereco.pin) {
+    throw new ErroHttp(422, 'Marque no mapa onde fica o endereço de entrega para pedir nesta loja.', {
+      codigo: 'PINO_OBRIGATORIO',
+    });
+  }
+  const forma = pagamento?.forma;
+  if (forma && !formaNaEntregaPermitida({ modoEntrega: loja.modoEntrega, forma, comEntrega: Boolean(endereco), pagoAgora })) {
+    throw new ErroHttp(422, `${loja.nome} não aceita ${NOME_FORMA[forma] ?? forma} na entrega. Escolha outra forma de pagamento.`, {
+      codigo: 'FORMA_INDISPONIVEL',
+      detalhes: { aceitas: formasDePagamento({ modoEntrega: loja.modoEntrega }).naEntrega },
+    });
+  }
+}
+
 async function criarNaTransacao(tx, d) {
   // 0. "Pago agora": trava o caixa aberto antes de tudo (mesma ordem de travas
   //    da finalização: caixa → resto). O pedido já entra neste caixa.
@@ -580,6 +607,7 @@ async function criarNaTransacao(tx, d) {
     conferirTotalEsperado(d.totalEsperadoCentavos, valores, { taxaBairroCentavos: bairro?.taxaCentavos ?? null, freteGratis });
   }
   validarPagamento(d.pagamento, valores.totalCentavos, { obrigatorio: d.canal !== 'SALAO' });
+  conferirModoEntrega(config, d);
 
   // 5. Baixa atômica do estoque (409 com o nome do que acabou).
   await baixarEstoque(tx, necessidadesDeEstoque(valores.linhas));

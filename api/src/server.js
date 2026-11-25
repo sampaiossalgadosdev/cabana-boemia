@@ -7,6 +7,7 @@ import { credenciaisApple } from './lib/apple.js';
 import { emailDoTitular } from './lib/controlador.js';
 import { lerHostsTaaki, origensPermitidas } from './lib/dominios.js';
 import { ehProducao, problemasNoVerificador } from './lib/verificadorTelefone.js';
+import { problemasNoPagamentoOnline } from './lib/pagamentoOnline.js';
 import { iniciarLimpezaDiaria } from './services/registroAcesso.service.js';
 import { iniciarLimpezaDoCache, mapasPadrao } from './services/mapa.service.js';
 
@@ -18,6 +19,16 @@ if (problemas.length) {
   console.error(
     `Gere um valor com: node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`,
   );
+  process.exit(1);
+}
+
+// Pagamento online ligado sem a chave dos tokens da loja: os tokens não poderiam ser
+// cifrados nem lidos. Não sobe.
+const problemasPagamento = problemasNoPagamentoOnline();
+if (problemasPagamento.length) {
+  console.error('A API não vai iniciar (pagamento online):');
+  for (const p of problemasPagamento) console.error(`  - ${p}`);
+  console.error(`Gere a chave com: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`);
   process.exit(1);
 }
 

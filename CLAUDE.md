@@ -74,6 +74,9 @@ Restaurante Cabana Boemia (Abatiá-PR). Monorepo npm workspaces `restaurante`: `
 - **PDV**: lista com "· ~1,3 km (estimada)" depois do bairro; detalhe com "Distância: …" e **"Abrir no mapa"** (IPC `mapa:abrir`: o main só aceita o link do Google Maps com o pino, `linkMapaValido`, e abre com `shell.openExternal`) ou "Sem pino no mapa"; tela Impressora com "QR code do mapa no cupom de entrega"; "Imprimir teste" com QR. Conferido no Electron real (2026-11-25, lançador de teste com `appData` temporário, API de dev, modo .txt): lista, detalhe e cupom com a distância estimada e o link.
 - Pendências do lote: chaves no Google Cloud/Railway/EAS (`app/CONFIGURACAO_MAPAS.md`), build do versionCode 5, teste no aparelho (mapa, GPS, permissão), QR na térmica física, Segurança dos dados do Play com a localização (rascunho em `app/PUBLICACAO.md`), revisão jurídica do texto novo da política, migração para `AdvancedMarkerElement` na retaguarda, cache do geocoding (hoje cada busca conta).
 
+## Pagamento online (planejado, 2026-11-25)
+- Mercado Pago Split 1:1 (Pix no app, cartão pelo Checkout Pro, livro-razão e fechamento semanal): plano por etapas e decisões do dono em `docs/pagamento-online.md`.
+
 ## Stack
 - Node 24, Express 4, PostgreSQL + Prisma 5, Socket.IO, React + Vite, Electron, node:test.
 - Camadas da API: routes → controllers → services → repositories.

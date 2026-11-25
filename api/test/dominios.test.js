@@ -129,14 +129,14 @@ describe('separação por host: Taaki x Cabana', () => {
     }
   });
 
-  test('/app redireciona para o Google Play; /parceiro para a retaguarda', async () => {
+  test('antes do lançamento /app leva ao "Em breve"; /parceiro para a retaguarda', async () => {
     for (const host of HOSTS_TAAKI_PADRAO) {
-      const app = await pedir(porta, '/app', { host, cabecalhos: { 'User-Agent': ANDROID } });
-      assert.equal(app.status, 302, host);
-      assert.equal(app.headers.location, APP_URL_PADRAO);
-      assert.equal(app.headers['cache-control'], 'no-store');
-      // Sem destino próprio do iPhone, o iPhone vai para o mesmo lugar.
-      assert.equal((await pedir(porta, '/app', { host, cabecalhos: { 'User-Agent': IOS } })).headers.location, APP_URL_PADRAO);
+      for (const ua of [ANDROID, IOS]) {
+        const app = await pedir(porta, '/app', { host, cabecalhos: { 'User-Agent': ua } });
+        assert.equal(app.status, 302, host);
+        assert.equal(app.headers.location, '/#em-breve', host);
+        assert.equal(app.headers['cache-control'], 'no-store');
+      }
       const parceiro = await pedir(porta, '/parceiro', { host });
       assert.equal(parceiro.status, 302, host);
       assert.equal(parceiro.headers.location, '/admin/');
@@ -146,9 +146,25 @@ describe('separação por host: Taaki x Cabana', () => {
     }
   });
 
-  test('/app configurável: TAAKI_APP_URL e TAAKI_APP_URL_IOS', async () => {
+  test('app lançado: /app vai para o Google Play (o iPhone também, sem TAAKI_APP_URL_IOS)', async () => {
+    const s = http.createServer(criarApp({ log: false, distSite: site, distRetaguarda: admin, hostsTaaki: ['t.test'], destinosApp: lerDestinosDoApp({}), landingTaaki: lerConfigLanding({ TAAKI_APP_LANCADO: 'sim' }) }));
+    await new Promise((resolve) => s.listen(0, resolve));
+    try {
+      const p = s.address().port;
+      for (const ua of [ANDROID, IOS]) {
+        const r = await pedir(p, '/app', { host: 't.test', cabecalhos: { 'User-Agent': ua } });
+        assert.equal(r.status, 302);
+        assert.equal(r.headers.location, APP_URL_PADRAO);
+        assert.equal(r.headers['cache-control'], 'no-store');
+      }
+    } finally {
+      await new Promise((resolve) => s.close(resolve));
+    }
+  });
+
+  test('/app configurável (app lançado): TAAKI_APP_URL e TAAKI_APP_URL_IOS', async () => {
     const destinosApp = lerDestinosDoApp({ TAAKI_APP_URL: 'https://app.exemplo.com/baixar', TAAKI_APP_URL_IOS: 'https://apps.apple.com/app/id1' });
-    const s = http.createServer(criarApp({ log: false, distSite: site, distRetaguarda: admin, hostsTaaki: ['t.test'], destinosApp }));
+    const s = http.createServer(criarApp({ log: false, distSite: site, distRetaguarda: admin, hostsTaaki: ['t.test'], destinosApp, landingTaaki: lerConfigLanding({ TAAKI_APP_LANCADO: 'sim' }) }));
     await new Promise((resolve) => s.listen(0, resolve));
     try {
       const p = s.address().port;
@@ -308,6 +324,13 @@ describe('landing do Taaki: modo "Em breve" e conteúdo', () => {
     assert.match(c, /Taaki Delivery · Abatiá-PR/);
     const ano = new Intl.DateTimeFormat('en', { timeZone: 'America/Sao_Paulo', year: 'numeric' }).format(new Date());
     assert.match(c, new RegExp(`© ${ano} Taaki Delivery`));
+  });
+
+  test('FAQ: lojas sem promessa e as 4 formas de pagamento na entrega', async () => {
+    const c = (await landingCom({})).corpo;
+    assert.match(c, /<summary>Quais lojas estão no Taaki\?<\/summary><p>As lojas parceiras de Abatiá aparecem direto no app\.<\/p>/);
+    assert.match(c, /<summary>Como eu pago\?<\/summary><p>Por enquanto, o pagamento é feito na entrega: Pix, dinheiro, cartão de débito ou cartão de crédito\.<\/p>/);
+    assert.doesNotMatch(c, /formas aceitas|Novas lojas/i);
   });
 
   test('não promete o que o app não tem nem inventa números', async () => {

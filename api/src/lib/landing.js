@@ -330,7 +330,7 @@ export function paginaLanding({
     ['pino', 'Feito aqui', 'Um app da nossa região, para valorizar o comércio local.'],
     ['grade', 'Tudo num lugar só', 'Várias lojas no mesmo app, sem salvar um número de WhatsApp para cada uma.'],
     ['nota', 'Sem confusão no pedido', 'O pedido chega escrito para a loja, sem áudio, sem mensagem perdida.'],
-    ['dinheiro', 'Pague na entrega', 'Nas formas aceitas por cada loja.'],
+    ['dinheiro', 'Pague na entrega', 'Pagamento na entrega, direto com a loja.'],
   ];
   const vantagens = [
     ['impressora', 'Pedidos organizados no caixa', 'Chegam no sistema de caixa (PDV) do seu computador e saem impressos.'],
@@ -343,8 +343,8 @@ export function paginaLanding({
     ? `Mande um e-mail para <a href="${contatoParceiro}">${escapar(email)}</a> ou veja a seção <a href="#parceiros">Para parceiros</a>.`
     : 'Veja a seção <a href="#parceiros">Para parceiros</a>.';
   const perguntas = [
-    ['Quais lojas estão no Taaki?', 'As lojas parceiras de Abatiá aparecem direto no app. Novas lojas estão entrando.'],
-    ['Como eu pago?', 'Por enquanto, o pagamento é feito na entrega, nas formas aceitas por cada loja.'],
+    ['Quais lojas estão no Taaki?', 'As lojas parceiras de Abatiá aparecem direto no app.'],
+    ['Como eu pago?', 'Por enquanto, o pagamento é feito na entrega: Pix, dinheiro, cartão de débito ou cartão de crédito.'],
     ['O app funciona no iPhone?', escapar(textoIphone)],
     [
       'Como faço para excluir minha conta?',

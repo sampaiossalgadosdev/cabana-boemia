@@ -11,7 +11,8 @@
     "./horarios": "./src/horarios.js",
     "./cores": "./src/cores.js",
     "./mapa": "./src/mapa.js",
-    "./taxaKm": "./src/taxaKm.js"
+    "./taxaKm": "./src/taxaKm.js",
+    "./split": "./src/split.js"
   },
   "scripts": {
     "dev": "echo \"[shared] dev ainda nao configurado\"",

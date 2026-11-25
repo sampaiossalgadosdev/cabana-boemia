@@ -12,7 +12,8 @@
     "./cores": "./src/cores.js",
     "./mapa": "./src/mapa.js",
     "./taxaKm": "./src/taxaKm.js",
-    "./split": "./src/split.js"
+    "./split": "./src/split.js",
+    "./formasPagamento": "./src/formasPagamento.js"
   },
   "scripts": {
     "dev": "echo \"[shared] dev ainda nao configurado\"",

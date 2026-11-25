@@ -56,7 +56,7 @@ function FormConfig({ config, aoSalvar }) {
     if (digitouMinimo && !(minimo > 0)) erro.freteGratisMinimoCentavos = 'Valor inválido, ex.: 69,00';
     else if (f.freteGratisAtivo && !digitouMinimo) erro.freteGratisMinimoCentavos = 'Informe a partir de quanto o frete é grátis';
     else if (f.freteGratisAtivo && pisoPlataforma && minimo < pisoPlataforma) {
-      erro.freteGratisMinimoCentavos = `Nesta loja o frete grátis precisa começar em pelo menos ${formatarReais(pisoPlataforma)}.`;
+      erro.freteGratisMinimoCentavos = `No frete grátis a loja paga a taxa dos entregadores do Taaki. Para a taxa não ficar maior que o pedido, comece em pelo menos ${formatarReais(pisoPlataforma)}.`;
     }
     setErros(erro);
     if (Object.keys(erro).length) return;

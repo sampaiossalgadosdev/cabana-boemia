@@ -118,9 +118,19 @@ export const api = {
     cor: (corPrimaria) => put('/retaguarda/perfil/cor', { corPrimaria }),
     logo: (arquivo) => put('/retaguarda/perfil/logo', arquivo),
     voltarAoPadrao: () => post('/retaguarda/perfil/padrao'),
+    localizacao: (pino) => put('/retaguarda/perfil/localizacao', pino),
+  },
+  // Mapa do pino da loja (chave web e busca pelo servidor).
+  mapa: {
+    config: () => get('/retaguarda/mapa/config'),
+    buscar: (texto) => post('/retaguarda/mapa/geocodificar', { texto }),
   },
   // Só ADMIN (plataforma).
   plataforma: {
+    mapas: {
+      config: () => get('/plataforma/mapas/config'),
+      buscar: (texto) => post('/plataforma/mapas/geocodificar', { texto }),
+    },
     lojas: {
       listar: () => get('/plataforma/lojas'),
       criar: (dados) => post('/plataforma/lojas', dados),

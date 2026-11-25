@@ -4,6 +4,8 @@ import { api } from '../lib/api.js';
 import { errosPorCampo, formatarWhatsapp } from '../lib/formatar.js';
 import { Campo, Dialogo, EstadoCarga, Interruptor, LogoLoja, useAvisar, useCarregar } from '../componentes/comuns.jsx';
 import { problemaDoArquivo } from '../lib/imagem.js';
+import { MapaPino } from '../componentes/MapaPino.jsx';
+import { pinMudou, pinParaApi } from '../lib/mapa.js';
 
 const VAZIA = {
   slug: '',
@@ -130,9 +132,13 @@ function FormLoja({ loja, aoFechar, aoSalvar }) {
   const [erros, setErros] = useState({});
   const [erroGeral, setErroGeral] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [pino, setPino] = useState(null);
+  const configMapa = useCarregar(() => api.plataforma.mapas.config());
+  const pinoSalvo = !nova && loja?.latitude != null ? { latitude: loja.latitude, longitude: loja.longitude } : null;
 
   useEffect(() => {
     if (!loja) return;
+    setPino(nova || loja.latitude == null ? null : { latitude: loja.latitude, longitude: loja.longitude });
     setErros({});
     setErroGeral('');
     setArquivo(null);
@@ -177,6 +183,8 @@ function FormLoja({ loja, aoFechar, aoSalvar }) {
       corFundo: normalizarCor(f.corFundo),
       ordem: Number(f.ordem || 0),
       ativa: f.ativa,
+      // Pino só vai quando mudou (ausente = não mexe).
+      ...(pinMudou(pinoSalvo, pino) && pinParaApi(pino)),
     };
     if (nova) {
       dados.corPrimaria = avaliacao.cor;
@@ -247,6 +255,22 @@ function FormLoja({ loja, aoFechar, aoSalvar }) {
         {texto('razaoSocial', 'Razão social', { max: 150 })}
         {texto('documento', 'CPF ou CNPJ', { max: 18, inputMode: 'numeric' })}
         {texto('endereco', 'Endereço', { max: 200, inteiro: true })}
+        <div className="campo inteiro">
+          <span className="campo__rotulo">Localização da loja (pino)</span>
+          {loja && configMapa.dados ? (
+            <MapaPino
+              key={nova ? 'nova' : loja.id}
+              pino={pino}
+              aoMudar={setPino}
+              config={configMapa.dados}
+              buscar={(t) => api.plataforma.mapas.buscar(t)}
+              textoInicial={f.endereco}
+            />
+          ) : (
+            <span className="suave">{configMapa.erro ? configMapa.erro.message : 'Carregando…'}</span>
+          )}
+          {erros.latitude && <span className="campo__erro">{erros.latitude}</span>}
+        </div>
         {texto('whatsapp', 'WhatsApp', { max: 20, inputMode: 'tel', placeholder: '(43) 99999-0000' })}
         {texto('ordem', 'Ordem na vitrine', { max: 4, inputMode: 'numeric' })}
         <Campo rotulo="Descrição (aparece no app)" erro={erros.descricao} className="inteiro">

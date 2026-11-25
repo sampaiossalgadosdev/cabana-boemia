@@ -222,6 +222,50 @@ h3 {
   color: var(--previa-texto);
   font-weight: 700;
 }
+/* Pino da loja no mapa (Perfil da loja e Lojas da plataforma). */
+.mapa-pino {
+  display: grid;
+  gap: 8px;
+}
+.mapa-pino__busca {
+  display: flex;
+  gap: 8px;
+}
+.mapa-pino__busca .entrada {
+  flex: 1;
+  min-width: 0;
+}
+.mapa-pino__mapa {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 320px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  overflow: hidden;
+  background: var(--cor-fundo);
+}
+.mapa-pino__campos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.mapa-pino__rodape {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+@media (max-width: 560px) {
+  .mapa-pino__busca,
+  .mapa-pino__campos {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+  .mapa-pino__mapa {
+    height: 260px;
+  }
+}
 .logo-atual {
   display: grid;
   place-items: center;

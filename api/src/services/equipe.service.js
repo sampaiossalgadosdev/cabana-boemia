@@ -15,6 +15,7 @@ import * as enderecoService from './endereco.service.js';
 import { bairroParaLoja } from './bairro.service.js';
 import { OPCOES_TRANSACAO, pedidoDaEquipe, STATUS_ABERTOS, ehDaLoja } from './pedido.service.js';
 import { exigirCaixaAberto } from './caixa.service.js';
+import { usarCampanha } from './campanha.service.js';
 import { desfazVerificacaoSeMudou } from './cliente.service.js';
 import { calcularTempoEstimado, manualDeHoje, saldoDisponivel, temSaldo } from './publico.service.js';
 
@@ -80,6 +81,8 @@ export async function finalizarPedido(lojaId, id, { formaPagamento }, agora = ne
       const situacao = s?.status === 'CANCELADO' ? 'cancelado' : 'finalizado';
       throw new ErroHttp(409, `Pedido já está ${situacao}`, { codigo: 'PEDIDO_ENCERRADO' });
     }
+    // Pago na entrega: a reserva do frete grátis da primeira compra vira uso.
+    await usarCampanha(tx, id, agora);
     return pedidoRepo.buscarPorId(id, tx);
   }, OPCOES_TRANSACAO);
 

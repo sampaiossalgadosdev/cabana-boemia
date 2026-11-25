@@ -27,6 +27,7 @@ import { taxaDaLoja } from './bairro.service.js';
 import { mapasPadrao } from './mapa.service.js';
 import * as mapaRepo from '../repositories/mapa.repository.js';
 import { limparChave, problemaNaChave } from '../lib/nfce.js';
+import { liberarCampanha } from './campanha.service.js';
 
 export const CANAIS = ['SITE', 'WHATSAPP', 'SALAO'];
 export const FORMAS_PAGAMENTO = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'];
@@ -817,6 +818,8 @@ export async function cancelarPedido(lojaId, id, { usuarioId = null, agora = new
     }
 
     await estornarVendas(tx, await pedidoRepo.vendasDoPedido(id, tx), usuarioId);
+    // Frete grátis da primeira compra volta para o telefone (reservado ou já usado).
+    await liberarCampanha(tx, id);
 
     const pedido = await pedidoRepo.buscarPorId(id, tx);
     const trabalho =

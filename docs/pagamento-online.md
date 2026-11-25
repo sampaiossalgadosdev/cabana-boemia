@@ -54,7 +54,24 @@ Plano escrito em 2026-11-25, a partir da `main` em `08886ef` (merge do lote do m
 
 ## 4. Etapas
 
-### Etapa 2 — Base
+### Etapa 2 — Base (CONCLUÍDA em 2026-11-25, branch `feat/pagamento-online`)
+
+**Feito** (o texto abaixo foi o plano; onde diverge, vale isto e as Decisões da Etapa 2):
+- Migrations `20261126120000_pagamento_online_status` (`AGUARDANDO_PAGAMENTO`, `EXPIRADO`) e `20261126120100_pagamento_online_base` (só aditiva, menos `numeroDia` que aceita nulo só nesses dois status), aplicadas no banco de dev com `migrate diff` sem diferença. Modelos `ConexaoMercadoPago`, `Pagamento`, `EventoWebhook`, `UsoCampanhaFreteGratis`, `LancamentoLoja` (com `TAXA_ENTREGA_COMPLEMENTO`; trigger: só inserção, só pode ganhar o fechamento) e `FechamentoSemanal`; `Loja.modoEntrega` (`PROPRIO` padrão) e `pagamentoOnlineAtivo`; `Pedido.origemFreteGratis`, `origemTaxaEntrega` (`KM` | `AREA`), `valorEntregadorCentavos`, `valorPlataformaEntregaCentavos`.
+- `shared/src/split.js` (`calcularSplit`, `dividirTaxaEntrega`) e `shared/src/formasPagamento.js`.
+- `api/src/lib/cifra.js` (AES-256-GCM, `TOKEN_ENCRYPTION_KEY`) e `api/src/lib/pagamentoOnline.js` (`PAGAMENTO_ONLINE_ATIVO`, `FRETE_GRATIS_MINIMO_PLATAFORMA_CENTAVOS`); a API não sobe com a flag ligada e a chave inválida.
+- `api/src/services/campanha.service.js` (elegível, reservar, usar, liberar); finalizar usa, cancelar libera.
+- Pedidos aguardando pagamento e expirados fora do PDV (`ehDaLoja` e lista do dia); o expirado não bloqueia a exclusão da conta.
+- `criarPedido`: em loja `PLATAFORMA`, pedido do cliente sem pino = 422 `PINO_OBRIGATORIO` e, pago na entrega, só dinheiro (422 `FORMA_INDISPONIVEL`; retirada e "pago agora" aceitam todas). `formasPagamento` na config pública.
+- Piso do frete grátis da loja `PLATAFORMA` (API e retaguarda › Configurações, conferido no Chrome a 390 e 1280 px).
+
+**Pendências para as próximas etapas** (anotadas aqui para não se perderem):
+- Etapa 3: ao o ADMIN mudar uma loja para `PLATAFORMA`, conferir o piso do frete grátis já ligado (hoje só o `PUT /retaguarda/config` confere).
+- Etapa 4: app e site usam o mesmo canal `SITE`. Pagamento online e campanha "só no app" precisam de uma forma de distinguir o app (canal novo ou campo de origem). Até lá, o site numa loja `PLATAFORMA` leva `PINO_OBRIGATORIO` (o site não marca pino).
+- Etapa 4: a criação liga a reserva da campanha, a aprovação o uso e a expiração a liberação (as funções existem); o `split.js` entra no `criarPedido`, que grava origem da taxa e divisão 95/5.
+- Etapa 4: taxa digitada no PDV (`taxaEntregaCentavos`) em loja `PLATAFORMA`: definir se vale e com que origem.
+- Etapa 4: o app oferece "verifique seu telefone para ganhar frete grátis na primeira compra" no checkout.
+
 
 Objetivo: banco, status, flags, criptografia e cálculo do split, sem nenhuma chamada ao Mercado Pago, sem telas novas e sem mudar a criação do pedido (que passa a usar o split na etapa 4). Com a flag desligada, tudo fica como hoje. Texto revisto em 2026-11-25 conforme as Decisões.
 

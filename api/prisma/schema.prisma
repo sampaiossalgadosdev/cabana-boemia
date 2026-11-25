@@ -31,12 +31,14 @@ enum CanalPedido {
 }
 
 enum StatusPedido {
+  AGUARDANDO_PAGAMENTO // pago online: espera a aprovação; fora do PDV, da fila e do caixa
   ABERTO
   CONFIRMADO
   EM_PREPARO // delivery/encomenda: só uso interno do PDV (o cliente não vê)
   SAIU_ENTREGA
   FINALIZADO
   CANCELADO
+  EXPIRADO // pagamento online não aprovado no prazo; fora do relatório de cancelados
 }
 
 enum FormaPagamento {

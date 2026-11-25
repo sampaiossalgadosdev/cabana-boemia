@@ -15,6 +15,8 @@ import { useEstilos, useTema } from '../tema/tema.js';
 import { Botao } from './basicos.js';
 import { Campo, Opcao, TextoErro, Titulo } from './formulario.js';
 import { FormEndereco } from './FormEndereco.js';
+import { MapaPino, temMapa } from './MapaPino.js';
+import { corpoDoEndereco, precisaConfirmarPino } from '../logica/mapa.js';
 
 /**
  * Depois do login e do telefone (como Finalizacao.jsx do site): endereço
@@ -24,6 +26,8 @@ import { FormEndereco } from './FormEndereco.js';
  * (/publico/lojas/:slug/bairros); endereço em bairro onde ela não entrega
  * aparece desabilitado com o motivo, e o 422 BAIRRO_FORA_DA_AREA da API
  * mostra a mensagem e leva à troca de endereço.
+ * Endereço sem pino (antigo ou salvo sem mapa): depois de "Confirmar dados" pede
+ * para confirmar no mapa, sem bloquear ("Agora não" segue sem pino).
  */
 export function Finalizacao({ onEditarTelefone }) {
   const s = useEstilos(criarEstilos);
@@ -38,7 +42,10 @@ export function Finalizacao({ onEditarTelefone }) {
   const [bairros, setBairros] = useState([]);
   const [enderecoId, setEnderecoId] = useState(null);
   const [modoEndereco, setModoEndereco] = useState(null); // null | 'escolher' | 'novo'
-  const [etapa, setEtapa] = useState('confirmar'); // 'confirmar' | 'pagamento'
+  const [etapa, setEtapa] = useState('confirmar'); // 'confirmar' | 'pino' | 'pagamento'
+  // Endereços em que a pessoa tocou "Agora não" no pino (só neste checkout).
+  const [pinoPulado, setPinoPulado] = useState(() => new Set());
+  const comMapa = useMemo(() => temMapa(), []);
   const [forma, setForma] = useState('');
   const [precisaTroco, setPrecisaTroco] = useState(false);
   const [trocoTexto, setTrocoTexto] = useState('');
@@ -166,9 +173,31 @@ export function Finalizacao({ onEditarTelefone }) {
       <View>
         <Titulo>{`Confirme seus dados, ${cliente.nome.split(' ')[0]}`}</Titulo>
         {cartaoDados}
-        <Botao titulo="Confirmar dados" onPress={() => setEtapa('pagamento')} bloco estilo={{ marginTop: 16 }} />
+        <Botao
+          titulo="Confirmar dados"
+          onPress={() => setEtapa(comMapa && precisaConfirmarPino(endereco) && !pinoPulado.has(endereco.id) ? 'pino' : 'pagamento')}
+          bloco
+          estilo={{ marginTop: 16 }}
+        />
         <Botao titulo="Não é você? Sair" variante="texto" onPress={sair} bloco estilo={{ marginTop: 4 }} />
       </View>
+    );
+  }
+
+  if (etapa === 'pino') {
+    return (
+      <ConfirmarPino
+        endereco={endereco}
+        chamar={chamar}
+        aoConfirmar={(atualizado) => {
+          setEnderecos((lista) => lista.map((e) => (e.id === atualizado.id ? atualizado : e)));
+          setEtapa('pagamento');
+        }}
+        aoPular={() => {
+          setPinoPulado((p) => new Set(p).add(endereco.id));
+          setEtapa('pagamento');
+        }}
+      />
     );
   }
 
@@ -282,6 +311,50 @@ export function Finalizacao({ onEditarTelefone }) {
         bloco
         estilo={{ marginTop: 16 }}
       />
+    </View>
+  );
+}
+
+/**
+ * Endereço sem pino: abre o mapa já buscando pelo texto salvo. "Confirmar local"
+ * grava o pino no endereço (o texto não muda); "Agora não" segue sem pino.
+ */
+function ConfirmarPino({ endereco, chamar, aoConfirmar, aoPular }) {
+  const [pino, setPino] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+  const campos = {
+    rua: endereco.rua,
+    numero: endereco.numero,
+    complemento: endereco.complemento ?? '',
+    referencia: endereco.referencia ?? '',
+    bairroId: endereco.bairro.id,
+  };
+
+  const confirmar = async () => {
+    setSalvando(true);
+    setErro('');
+    try {
+      const { endereco: atualizado } = await chamar((token) => api.atualizarEndereco(token, endereco.id, corpoDoEndereco(campos, pino)));
+      aoConfirmar(atualizado);
+    } catch (e) {
+      setErro(e?.status ? e.message : ERRO_GENERICO);
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <View>
+      <Titulo subtitulo={`${textoEndereco(endereco)} · ${endereco.bairro.nome}`}>Confirme no mapa onde entregar</Titulo>
+      <MapaPino
+        pino={pino}
+        aoMudar={setPino}
+        aoBuscar={() => chamar((token) => api.geocodificarEndereco(token, campos))}
+        buscarAoAbrir
+      />
+      <TextoErro>{erro}</TextoErro>
+      <Botao titulo={salvando ? 'Salvando…' : 'Confirmar local'} onPress={confirmar} carregando={salvando} desabilitado={!pino} bloco estilo={{ marginTop: 16 }} />
+      <Botao titulo="Agora não" variante="texto" onPress={aoPular} bloco estilo={{ marginTop: 4 }} />
     </View>
   );
 }

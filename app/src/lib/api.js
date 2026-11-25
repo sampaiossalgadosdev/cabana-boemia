@@ -207,6 +207,13 @@ export const criarEndereco = (token, dados) => requisitar('POST', '/cliente/ende
 export const atualizarEndereco = (token, id, dados) =>
   requisitar('PUT', `/cliente/enderecos/${id}`, { token, corpo: dados });
 
+/**
+ * POST /cliente/mapa/geocodificar { rua, numero, bairroId } → { pin, aproximado, motivo }.
+ * A busca é pelo servidor (a chave do Geocoding nunca vem ao app); sem pino = posicionar à mão.
+ */
+export const geocodificarEndereco = (token, { rua, numero, bairroId }) =>
+  requisitar('POST', '/cliente/mapa/geocodificar', { token, corpo: { rua, numero, bairroId } });
+
 /** DELETE /cliente/enderecos/:id → 204 */
 export const removerEndereco = (token, id) => requisitar('DELETE', `/cliente/enderecos/${id}`, { token });
 

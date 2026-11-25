@@ -235,6 +235,8 @@ describe('rotas públicas do site', { skip: semBancoDeTeste }, () => {
       whatsapp: '5543999990000',
       googleClientId: process.env.GOOGLE_CLIENT_ID,
       freteGratis: null,
+      // Pagamento online desligado e motoboy próprio: as formas de hoje.
+      formasPagamento: { naEntrega: ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'], online: [] },
     });
   });
 });

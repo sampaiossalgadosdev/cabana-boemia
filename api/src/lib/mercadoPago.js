@@ -24,13 +24,43 @@ const TEMPO_LIMITE_MS = 10_000;
 
 /** Falha numa chamada ao Mercado Pago (rede, tempo esgotado ou resposta recusada). */
 export class ErroMercadoPago extends Error {
-  /** @param {string} mensagem @param {{ status?: number | null, codigo?: string | null }} [dados] */
-  constructor(mensagem, { status = null, codigo = null } = {}) {
+  /** @param {string} mensagem @param {{ status?: number | null, codigo?: string | null, detalhe?: string | null }} [dados] */
+  constructor(mensagem, { status = null, codigo = null, detalhe = null } = {}) {
     super(mensagem);
     this.name = 'ErroMercadoPago';
     this.status = status;
     this.codigo = codigo;
+    /** `message` + códigos e descrições do `cause` da resposta (curto, sem e-mail nem números longos). */
+    this.detalhe = detalhe;
   }
+}
+
+/** Tamanho máximo do detalhe do erro (log e `Pagamento.dadosMp`). */
+export const TAMANHO_DETALHE_ERRO = 200;
+
+/**
+ * Detalhe de uma recusa do Mercado Pago para o log e o `dadosMp`: o `message` e os `code`/`description`
+ * do `cause` (ex.: "Collector user without key enabled for QR render [13253: ...]"). Só esses campos
+ * (nunca o corpo inteiro); e-mails e sequências de 6+ dígitos (CPF, telefone, conta) viram "***",
+ * por segurança, caso o Mercado Pago repita algum dado do pedido no texto. Até 200 caracteres.
+ * @returns {string | null}
+ */
+export function detalheDoErro(dados) {
+  if (!dados || typeof dados !== 'object') return null;
+  const partes = [];
+  if (typeof dados.message === 'string' && dados.message.trim() && dados.message !== dados.error) partes.push(dados.message.trim());
+  const causas = (Array.isArray(dados.cause) ? dados.cause : dados.cause ? [dados.cause] : [])
+    .filter((c) => c && typeof c === 'object')
+    .map((c) => [c.code, c.description].filter((v) => v != null && String(v).trim() !== '').join(': '))
+    .filter(Boolean);
+  if (causas.length) partes.push(`[${causas.join('; ')}]`);
+  if (!partes.length) return null;
+  const limpo = partes
+    .join(' ')
+    .replace(/[^\s@]+@[^\s@]+/g, '***')
+    .replace(/\d{6,}/g, '***')
+    .replace(/\s+/g, ' ');
+  return limpo.length > TAMANHO_DETALHE_ERRO ? `${limpo.slice(0, TAMANHO_DETALHE_ERRO - 1)}…` : limpo;
 }
 
 /** Credenciais do aplicativo (marketplace) no Mercado Pago, lidas do ambiente. */
@@ -195,6 +225,7 @@ export function criarClienteMercadoPago({ fetch: buscar = globalThis.fetch, conf
       throw new ErroMercadoPago(`Mercado Pago recusou (${res.status})`, {
         status: res.status,
         codigo: typeof bruto === 'string' ? bruto.slice(0, 60) : null,
+        detalhe: detalheDoErro(dados),
       });
     }
     return dados;

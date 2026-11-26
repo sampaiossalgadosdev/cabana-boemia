@@ -201,7 +201,8 @@ const nfceSchema = z.object({
 });
 
 const finalizarSchema = z.object({
-  formaPagamento: z.enum(FORMAS_PAGAMENTO, { error: 'Informe a forma de pagamento' }),
+  // Pedido pago online finaliza sem forma (Decisão 9); os outros exigem (o service confere).
+  formaPagamento: z.enum(FORMAS_PAGAMENTO, { error: 'Informe a forma de pagamento' }).optional(),
 });
 
 /** Inteiro de 1 a 240; null, "" ou ausente = voltar ao padrão. */
@@ -220,8 +221,12 @@ const tempoSchema = z.object({
     .transform((v) => v ?? null),
 });
 
-/** @param {() => Date} [relogio] fonte do "agora" (injetável nos testes) */
-export function criarEquipeController(relogio = () => new Date(), mapas) {
+/**
+ * @param {() => Date} [relogio] fonte do "agora" (injetável nos testes)
+ * @param {object} [mapas] serviço de mapas
+ * @param {object} [pagamentos] serviço do pagamento online (cancelar com estorno; testes simulam o Mercado Pago)
+ */
+export function criarEquipeController(relogio = () => new Date(), mapas, pagamentos) {
   return {
     /** Bairros onde ESTA loja entrega (área ativa, bairro ativo na cidade), com a taxa dela. */
     async bairros(req, res) {
@@ -251,7 +256,13 @@ export function criarEquipeController(relogio = () => new Date(), mapas) {
     async alterarStatus(req, res) {
       const { id } = validar(idSchema, req.params);
       const { status } = validar(statusSchema, req.body ?? {});
-      res.json({ pedido: await pedidoService.alterarStatus(req.lojaId, id, status) });
+      res.json({ pedido: await pedidoService.alterarStatus(req.lojaId, id, status, relogio()) });
+    },
+
+    /** Aceite da loja de um pedido pago online (Decisão 1 da Etapa 5). */
+    async aceitarPedido(req, res) {
+      const { id } = validar(idSchema, req.params);
+      res.json({ pedido: await pedidoService.aceitarPedido(req.lojaId, id, relogio()) });
     },
 
     async alterarAgendamento(req, res) {
@@ -262,7 +273,8 @@ export function criarEquipeController(relogio = () => new Date(), mapas) {
 
     async cancelarPedido(req, res) {
       const { id } = validar(idSchema, req.params);
-      res.json({ pedido: await pedidoService.cancelarPedido(req.lojaId, id, { usuarioId: req.usuario.id, agora: relogio() }) });
+      // Pago online: recusa com estorno (antes do aceite) ou 409 (depois); os outros, como sempre.
+      res.json({ pedido: await pagamentos.cancelarPelaLoja(req.lojaId, id, { usuarioId: req.usuario.id, agora: relogio() }) });
     },
 
     async criarPedido(req, res) {

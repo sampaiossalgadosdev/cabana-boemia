@@ -52,3 +52,107 @@ export async function travarPedido(pedidoId, db) {
   const [linha] = await db.$queryRaw`SELECT "status"::text AS "status", "lojaId" FROM "Pedido" WHERE "id" = ${pedidoId} FOR UPDATE`;
   return linha ?? null;
 }
+
+// ───────── Etapa 5: estornos ─────────
+
+/** Trava a linha do pedido com o que o cancelamento confere (loja, dono, aceite, meio). */
+export async function travarPedidoParaCancelar(pedidoId, db) {
+  const [linha] = await db.$queryRaw`
+    SELECT "status"::text AS "status", "lojaId", "clienteId", "aceitoEm", "meioOnline"::text AS "meioOnline"
+    FROM "Pedido" WHERE "id" = ${pedidoId} FOR UPDATE`;
+  return linha ?? null;
+}
+
+/** Trava a linha do pagamento (tentar de novo e resolver por fora não se cruzam). */
+export async function travarPagamento(id, db) {
+  const [linha] = await db.$queryRaw`SELECT "id", "status"::text AS "status" FROM "Pagamento" WHERE "id" = ${id} FOR UPDATE`;
+  return linha ?? null;
+}
+
+const COM_PAGAMENTO = { pagamento: { include: COM_PEDIDO } };
+
+export function criarEstorno(dados, db = prisma) {
+  return db.estorno.create({ data: dados, include: COM_PAGAMENTO });
+}
+
+export function buscarEstorno(id, db = prisma) {
+  return db.estorno.findUnique({ where: { id }, include: COM_PAGAMENTO });
+}
+
+/** O estorno ainda em aberto do pagamento (processando ou que falhou), o mais recente. */
+export function estornoAberto(pagamentoId, db = prisma) {
+  return db.estorno.findFirst({
+    where: { pagamentoId, status: { in: ['PROCESSANDO', 'FALHOU'] } },
+    orderBy: { id: 'desc' },
+    include: COM_PAGAMENTO,
+  });
+}
+
+/** Muda o estorno só se ele estiver num dos status dados. Devolve o count. */
+export async function atualizarEstornoSeEm(id, status, dados, db = prisma) {
+  const { count } = await db.estorno.updateMany({ where: { id, status: { in: status } }, data: dados });
+  return count;
+}
+
+/** Pagamentos aprovados depois de o pedido expirar que ainda não foram estornados. */
+export function aEstornar(db = prisma) {
+  return db.pagamento.findMany({ where: { status: 'A_ESTORNAR' }, orderBy: { id: 'asc' }, include: COM_PEDIDO });
+}
+
+/**
+ * Pedidos pagos online, abertos, sem o aceite da loja e aprovados até `limite`, que ainda não
+ * tiveram o alerta PEDIDO_SEM_ACEITE (aberto ou resolvido: um por pedido).
+ */
+export function semAceiteDesde(limite, db = prisma) {
+  return db.pedido.findMany({
+    where: {
+      meioOnline: { not: null },
+      aceitoEm: null,
+      status: { in: ['ABERTO', 'CONFIRMADO', 'EM_PREPARO', 'SAIU_ENTREGA'] },
+      pagamentos: { some: { status: 'APROVADO', aprovadoEm: { lte: limite } } },
+      alertas: { none: { tipo: 'PEDIDO_SEM_ACEITE' } },
+    },
+    select: { id: true, lojaId: true, numeroDia: true, loja: { select: { nome: true } } },
+  });
+}
+
+/** Status de pagamento que aparecem na tela "Pagamentos online" do ADMIN. */
+export const STATUS_PAGOS = ['APROVADO', 'REEMBOLSADO', 'REEMBOLSO_PARCIAL', 'REEMBOLSO_PENDENTE', 'A_ESTORNAR', 'CONTESTADO'];
+/** Os que pedem ação do ADMIN. */
+export const STATUS_DE_ACAO = ['REEMBOLSO_PENDENTE', 'A_ESTORNAR', 'CONTESTADO'];
+
+/** Lista para o ADMIN (mais novos primeiro, até 100), com o pedido, a loja e os estornos. */
+export function listarParaAdmin({ status, lojaId, pedidoId, numeroDia }, db = prisma) {
+  return db.pagamento.findMany({
+    where: {
+      status: { in: status },
+      ...((lojaId || pedidoId || numeroDia) && {
+        pedido: { ...(lojaId && { lojaId }), ...(pedidoId && { id: pedidoId }), ...(numeroDia && { numeroDia }) },
+      }),
+    },
+    orderBy: { id: 'desc' },
+    take: 100,
+    include: {
+      pedido: {
+        select: {
+          id: true,
+          numeroDia: true,
+          dataRef: true,
+          status: true,
+          aceitoEm: true,
+          criadoEm: true,
+          finalizadoEm: true,
+          canceladoEm: true,
+          nomeCliente: true,
+          totalCentavos: true,
+          meioOnline: true,
+          loja: { select: { id: true, nome: true, slug: true } },
+        },
+      },
+      estornos: {
+        orderBy: { id: 'asc' },
+        include: { usuario: { select: { nome: true } }, resolvidoPor: { select: { nome: true } } },
+      },
+    },
+  });
+}

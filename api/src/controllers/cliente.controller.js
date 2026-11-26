@@ -256,6 +256,12 @@ export function criarClienteController(
       res.json(await pagamentos.situacaoParaCliente(req.cliente.id, id, relogio()));
     },
 
+    /** Cancelar pelo app o pedido pago online que a loja ainda não aceitou (estorno total). */
+    async cancelarPedido(req, res) {
+      const { id } = validar(idSchema, req.params);
+      res.json({ pedido: await pagamentos.cancelarPeloCliente(req.cliente.id, id, relogio()) });
+    },
+
     /** E-mail do pagador (pedido uma vez antes do Pix, quando a conta não tem). */
     async definirEmail(req, res) {
       const { email } = validar(emailSchema, req.body ?? {});

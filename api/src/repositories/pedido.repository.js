@@ -48,6 +48,15 @@ export const SELECT_PEDIDO = {
   finalizadoEm: true,
   canceladoEm: true,
   criadoPor: { select: { nome: true } },
+  // Pago online (Etapa 5): meio, aceite da loja, entrega da plataforma e o último pagamento.
+  meioOnline: true,
+  aceitoEm: true,
+  valorEntregadorCentavos: true,
+  pagamentos: {
+    orderBy: { id: 'desc' },
+    take: 1,
+    select: { status: true, aprovadoEm: true, valorReembolsadoCentavos: true },
+  },
   itens: { where: { canceladoEm: null }, select: SELECT_ITEM, orderBy: { id: 'asc' } },
 };
 
@@ -183,7 +192,7 @@ export async function finalizarSeAberto(id, { formaPagamento, trocoParaCentavos,
 }
 
 export function buscarStatus(id, db = prisma) {
-  return db.pedido.findUnique({ where: { id }, select: { id: true, lojaId: true, status: true, canal: true, pagoEm: true } });
+  return db.pedido.findUnique({ where: { id }, select: { id: true, lojaId: true, status: true, canal: true, pagoEm: true, meioOnline: true, aceitoEm: true, clienteId: true } });
 }
 
 /** Atualiza só se ainda estiver aberto (UPDATE condicionado ao status). Devolve o count. */

@@ -46,6 +46,41 @@ export const FORMAS_PAGAMENTO = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'];
 export const PAGAMENTOS_ONLINE = ['PIX'];
 /** Prazo do Pix para o cliente (Decisão 5): cancelamos nós mesmos aos 15 minutos. */
 export const PRAZO_PIX_MS = 15 * 60 * 1000;
+/** Meio pedido no corpo → `Pedido.meioOnline` / `Pagamento.metodo`. */
+const MEIO_ONLINE = { PIX: 'PIX', CARTAO: 'CARTAO_ONLINE' };
+
+/**
+ * Situação do pagamento online para a equipe e o cliente (Etapa 5), a partir do status do
+ * último `Pagamento`. Nulo = pago na entrega.
+ */
+const SITUACAO_DO_PAGAMENTO = {
+  PENDENTE: 'AGUARDANDO',
+  APROVADO: 'PAGO',
+  REEMBOLSADO: 'ESTORNADO',
+  REEMBOLSO_PARCIAL: 'ESTORNADO_PARCIAL',
+  REEMBOLSO_PENDENTE: 'ESTORNO_PENDENTE',
+  A_ESTORNAR: 'ESTORNO_PENDENTE',
+  CONTESTADO: 'CONTESTADO',
+  RECUSADO: 'NAO_PAGO',
+  EXPIRADO: 'NAO_PAGO',
+  CANCELADO: 'NAO_PAGO',
+};
+
+/** `{ meio, situacao, aprovadoEm, valorEstornadoCentavos }` do pedido pago online, ou null. */
+export function pagamentoOnlineDoPedido(p) {
+  if (!p.meioOnline) return null;
+  const ultimo = p.pagamentos?.[0] ?? null;
+  return {
+    meio: p.meioOnline,
+    situacao: ultimo ? (SITUACAO_DO_PAGAMENTO[ultimo.status] ?? 'AGUARDANDO') : 'AGUARDANDO',
+    aprovadoEm: ultimo?.aprovadoEm ?? null,
+    valorEstornadoCentavos: ultimo?.valorReembolsadoCentavos ?? 0,
+  };
+}
+
+/** O cliente ainda pode cancelar pelo app: pago online, pago, aberto e sem o aceite da loja. */
+export const clientePodeCancelar = (p) =>
+  pagamentoOnlineDoPedido(p)?.situacao === 'PAGO' && STATUS_ABERTOS.includes(p.status) && !p.aceitoEm;
 
 /** Pedido feito pelo próprio cliente (site ou app): mesmas regras de cardápio, horário e total. */
 export const ehCanalDoCliente = (canal) => canal === 'SITE' || canal === 'APP';
@@ -312,6 +347,10 @@ export function pedidoPublico(p) {
     retirarNoBalcao: p.retirarNoBalcao ?? false,
     observacao: p.observacao ?? null,
     criadoEm: p.criadoEm,
+    // Pago online (Etapa 5): meio, situação (pago, estornado…), aceite da loja e se o cliente ainda cancela pelo app.
+    pagamentoOnline: pagamentoOnlineDoPedido(p),
+    aceitoEm: p.aceitoEm ?? null,
+    podeCancelar: clientePodeCancelar(p),
     // Loja do pedido (histórico do app multi-loja; o site atual ignora).
     ...(p.loja && { loja: { nome: p.loja.nome, slug: p.loja.slug, logoUrl: p.loja.logoUrl ?? null } }),
     itens: p.itens.map((i) => ({
@@ -353,6 +392,8 @@ export function pedidoDaEquipe(p) {
     finalizadoEm: p.finalizadoEm ?? null,
     canceladoEm: p.canceladoEm ?? null,
     chaveNfce: p.chaveNfce ?? null,
+    // Entrega pelos entregadores do Taaki (o PDV troca "Finalizar" por "Recebi o dinheiro").
+    entregaPlataforma: p.valorEntregadorCentavos != null,
   };
 }
 
@@ -779,6 +820,7 @@ async function criarNaTransacao(tx, d) {
       totalCentavos: valores.totalCentavos,
       formaPagamento: d.pagamentoOnline ? 'PIX' : (d.pagamento?.forma ?? null),
       trocoParaCentavos: d.pagamentoOnline ? null : (d.pagamento?.trocoParaCentavos ?? null),
+      meioOnline: d.pagamentoOnline ? MEIO_ONLINE[d.pagamentoOnline] : null,
       mesaRotulo: d.mesaRotulo,
       // Encomenda tem horário marcado: sem "tempo estimado".
       tempoEstimadoMin: config && !d.entrega.encomenda ? calcularTempoEstimado(config, d.agora) : null,
@@ -824,7 +866,7 @@ async function criarNaTransacao(tx, d) {
     const { id: pagamentoId } = await pagamentoRepo.criar(
       {
         pedidoId,
-        metodo: 'PIX',
+        metodo: MEIO_ONLINE[d.pagamentoOnline],
         status: 'PENDENTE',
         valorTotalCentavos: valores.totalCentavos,
         valorPlataformaCentavos: split.valorPlataformaSplitCentavos,
@@ -1042,12 +1084,40 @@ function pedidoEncerrado(status) {
  * Só pedido do site/WhatsApp (comanda do salão = 404); UPDATE condicionado
  * ao status aberto (já encerrado = 409 PEDIDO_ENCERRADO).
  */
-export async function alterarStatus(lojaId, id, status) {
+export async function alterarStatus(lojaId, id, status, agora = new Date()) {
   if (!STATUS_ANDAMENTO.includes(status)) throw new ErroHttp(400, 'Status inválido', { codigo: 'VALIDACAO' });
   const pedido = await prisma.$transaction(async (tx) => {
     const atual = await pedidoRepo.buscarStatus(id, tx);
     if (!ehDaLoja(atual, lojaId) || atual.canal === 'SALAO') throw pedidoNaoEncontrado();
-    if ((await pedidoRepo.atualizarSeAberto(id, { status }, STATUS_ABERTOS, tx)) === 0) throw pedidoEncerrado(atual.status);
+    // Pago online: Em preparo ou Saiu para entrega também é o aceite da loja (Decisão 1 da Etapa 5).
+    const aceite = atual.meioOnline && !atual.aceitoEm && status !== 'ABERTO' ? { aceitoEm: agora } : {};
+    if ((await pedidoRepo.atualizarSeAberto(id, { status, ...aceite }, STATUS_ABERTOS, tx)) === 0) throw pedidoEncerrado(atual.status);
+    return pedidoRepo.buscarPorId(id, tx);
+  }, OPCOES_TRANSACAO);
+  const equipe = pedidoDaEquipe(pedido);
+  emitirParaEquipe(lojaId, 'pedido:atualizado', equipe);
+  return equipe;
+}
+
+/**
+ * Aceite da loja de um pedido pago online (Decisão 1 da Etapa 5). Depois dele o cliente não
+ * cancela pelo app e a loja não cancela no PDV (só o ADMIN). Pedido pago na entrega = 409
+ * `SEM_ACEITE`; já aceito = devolve como está (idempotente); encerrado = 409.
+ */
+export async function aceitarPedido(lojaId, id, agora = new Date()) {
+  const pedido = await prisma.$transaction(async (tx) => {
+    const atual = await pedidoRepo.buscarStatus(id, tx);
+    if (!ehDaLoja(atual, lojaId)) throw pedidoNaoEncontrado();
+    if (!atual.meioOnline) {
+      throw new ErroHttp(409, 'Só pedido pago online precisa de aceite', { codigo: 'SEM_ACEITE' });
+    }
+    if (!atual.aceitoEm) {
+      const { count } = await tx.pedido.updateMany({
+        where: { id, status: { in: STATUS_ABERTOS }, aceitoEm: null },
+        data: { aceitoEm: agora },
+      });
+      if (count === 0 && !STATUS_ABERTOS.includes((await pedidoRepo.buscarStatus(id, tx)).status)) throw pedidoEncerrado(atual.status);
+    }
     return pedidoRepo.buscarPorId(id, tx);
   }, OPCOES_TRANSACAO);
   const equipe = pedidoDaEquipe(pedido);
@@ -1098,25 +1168,43 @@ export function somarDevolucoes(vendas) {
  */
 export async function cancelarPedido(lojaId, id, { usuarioId = null, agora = new Date() } = {}) {
   const { pedido, trabalho } = await prisma.$transaction(async (tx) => {
-    const count = await pedidoRepo.cancelarSeAberto(lojaId, id, agora, STATUS_ABERTOS, tx);
-    if (count === 0) {
-      const atual = await pedidoRepo.buscarStatus(id, tx);
-      if (!ehDaLoja(atual, lojaId)) throw pedidoNaoEncontrado();
-      throw pedidoEncerrado(atual.status);
+    const atual = await pedidoRepo.buscarStatus(id, tx);
+    // Pago online cancela pelo serviço de pagamentos (estorno; pagamento.service.cancelarPelaLoja).
+    if (ehDaLoja(atual, lojaId) && atual.meioOnline) {
+      throw new ErroHttp(409, 'Pedido pago online: cancele pelo painel (o valor volta ao cliente).', { codigo: 'CANCELAR_COM_ESTORNO' });
     }
-
-    await estornarVendas(tx, await pedidoRepo.vendasDoPedido(id, tx), usuarioId);
-    // Frete grátis da primeira compra volta para o telefone (reservado ou já usado).
-    await liberarCampanha(tx, id);
-
-    const pedido = await pedidoRepo.buscarPorId(id, tx);
-    const trabalho =
-      pedido.canal === 'SALAO'
-        ? null
-        : await pedidoRepo.criarTrabalhoImpressao({ lojaId, pedidoId: id, tipo: 'CANCELAMENTO', status: 'PENDENTE' }, tx);
-    return { pedido, trabalho };
+    return cancelarNaTransacao(tx, lojaId, id, { usuarioId, agora });
   }, OPCOES_TRANSACAO);
+  return avisarCancelamento(lojaId, pedido, trabalho);
+}
 
+/**
+ * Núcleo do cancelamento, dentro da transação de quem chama (também o do pagamento online,
+ * que acrescenta o estorno): status (condicionado), estoque, campanha e cupom.
+ * @returns {Promise<{ pedido: object, trabalho: object | null }>}
+ */
+export async function cancelarNaTransacao(tx, lojaId, id, { usuarioId = null, agora = new Date() } = {}) {
+  const count = await pedidoRepo.cancelarSeAberto(lojaId, id, agora, STATUS_ABERTOS, tx);
+  if (count === 0) {
+    const atual = await pedidoRepo.buscarStatus(id, tx);
+    if (!ehDaLoja(atual, lojaId)) throw pedidoNaoEncontrado();
+    throw pedidoEncerrado(atual.status);
+  }
+
+  await estornarVendas(tx, await pedidoRepo.vendasDoPedido(id, tx), usuarioId);
+  // Frete grátis da primeira compra volta para o telefone (reservado ou já usado).
+  await liberarCampanha(tx, id);
+
+  const pedido = await pedidoRepo.buscarPorId(id, tx);
+  const trabalho =
+    pedido.canal === 'SALAO'
+      ? null
+      : await pedidoRepo.criarTrabalhoImpressao({ lojaId, pedidoId: id, tipo: 'CANCELAMENTO', status: 'PENDENTE' }, tx);
+  return { pedido, trabalho };
+}
+
+/** Depois do commit: `pedido:atualizado` (e o cupom de cancelamento). Devolve o pedido da equipe. */
+export function avisarCancelamento(lojaId, pedido, trabalho) {
   const equipe = pedidoDaEquipe(pedido);
   emitirParaEquipe(lojaId, 'pedido:atualizado', equipe);
   if (trabalho) emitirParaEquipe(lojaId, 'impressao:nova', trabalho);

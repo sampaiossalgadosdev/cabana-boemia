@@ -228,6 +228,11 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
       if (!p) throw new ErroMercadoPago('não encontrado', { status: 404 });
       return { ...p.r };
     },
+    async estornar(token, id, dados) {
+      mp.chamadas.push({ tipo: 'estornar', token, id, dados });
+      mp.mudar(id, { status: 'refunded', valorReembolsadoCentavos: mp.pagamentos.get(String(id)).r.valorCentavos });
+      return { id: `r-${id}`, status: 'approved', valorCentavos: null };
+    },
     async cancelarPagamento(token, id) {
       mp.chamadas.push({ tipo: 'cancelar', token, id });
       const p = mp.pagamentos.get(String(id));
@@ -747,13 +752,14 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     // A campanha volta para o telefone.
     assert.equal((await previa(c)).corpo.previa.origemFreteGratis, 'CAMPANHA');
 
-    // Aprovação atrasada: o pedido não revive; pagamento A_ESTORNAR e alerta.
+    // Aprovação atrasada: o pedido não revive; alerta e estorno total automático (Etapa 5).
     mp.mudar(mpPaymentId, { status: 'approved' });
     await notificar(notificacaoDePagamento(mpPaymentId));
     const depois = await pedidoNoBanco(pedidoId);
     assert.equal(depois.status, 'EXPIRADO');
     assert.equal(depois.numeroDia, null);
-    assert.equal(depois.pagamentos[0].status, 'A_ESTORNAR');
+    assert.equal(depois.pagamentos[0].status, 'REEMBOLSADO');
+    assert.ok(chamadasDe('estornar').some((x) => x.id === mpPaymentId && x.token === TOKEN_LOJA && x.dados.valorCentavos == null));
     assert.equal(await prisma.alertaPlataforma.count({ where: { tipo: 'PAGO_APOS_EXPIRAR', pedidoId } }), 1);
     assert.equal(eventos.length, 0);
     assert.equal(await estoquePao(), pao);

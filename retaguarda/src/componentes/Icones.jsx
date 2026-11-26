@@ -120,6 +120,20 @@ export const IconeLixo = (p) => (
   </Svg>
 );
 
+export const IconeCartao = (p) => (
+  <Svg {...p}>
+    <rect x="3" y="6" width="18" height="12" rx="2" />
+    <path d="M3 10h18M7 15h3" />
+  </Svg>
+);
+
+export const IconeSino = (p) => (
+  <Svg {...p}>
+    <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16z" />
+    <path d="M10 20a2 2 0 0 0 4 0" />
+  </Svg>
+);
+
 export const IconeMegafone = (p) => (
   <Svg {...p}>
     <path d="M3 10v4h3l7 4V6L6 10H3z" />

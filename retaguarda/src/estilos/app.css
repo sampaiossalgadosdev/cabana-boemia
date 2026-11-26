@@ -321,6 +321,11 @@ h3 {
   height: 20px;
 }
 
+/* Contador de alertas abertos (menu da plataforma). */
+.menu__contador {
+  margin-left: auto;
+}
+
 .menu__rodape {
   margin-top: auto;
   padding: 12px 4px 0;

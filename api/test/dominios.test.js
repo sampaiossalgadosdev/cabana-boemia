@@ -204,7 +204,10 @@ describe('separação por host: Taaki x Cabana', () => {
       ['/taaki/compartilhar.jpg', /^image\/jpeg/],
       ['/taaki/icone-180.png', /^image\/png/],
       ['/taaki/favicon.svg', /^image\/svg\+xml/],
-      ['/taaki/titulos.woff2', /^font\/woff2/],
+      ['/taaki/montserrat-800.woff2', /^font\/woff2/],
+      ['/taaki/poppins-400.woff2', /^font\/woff2/],
+      ['/taaki/poppins-600.woff2', /^font\/woff2/],
+      ['/taaki/poppins-700.woff2', /^font\/woff2/],
     ]) {
       const r = await pedir(porta, rota, { host });
       assert.equal(r.status, 200, rota);
@@ -270,7 +273,7 @@ describe('landing do Taaki: modo "Em breve" e conteúdo', () => {
       assert.equal(r.status, 200, String(valor));
       assert.doesNotMatch(r.corpo, /href="\/app"/, `nenhum link para /app (${valor})`);
       // Hero e chamada final, com o selo.
-      assert.equal(r.corpo.match(/href="#em-breve">Quero pedir<span class="selo">Em breve na Google Play<\/span>/g)?.length, 2, String(valor));
+      assert.equal(r.corpo.match(/href="#em-breve">Quero pedir<span class="selo">Em breve na Google Play e na App Store<\/span>/g)?.length, 2, String(valor));
       assert.match(r.corpo, /class="topo-pedir" href="#em-breve">Pedir agora/);
       assert.match(r.corpo, /<section class="em-breve" id="em-breve"/);
       assert.match(r.corpo, /fase de testes/);
@@ -283,7 +286,7 @@ describe('landing do Taaki: modo "Em breve" e conteúdo', () => {
       const r = await landingCom({ TAAKI_APP_LANCADO: valor });
       assert.equal(r.corpo.match(/class="botao [^"]+" href="\/app">Quero pedir<\/a>/g)?.length, 2, valor);
       assert.match(r.corpo, /class="topo-pedir" href="\/app">Pedir agora/, valor);
-      assert.doesNotMatch(r.corpo, /#em-breve|id="em-breve"|Em breve na Google Play|fase de testes/, valor);
+      assert.doesNotMatch(r.corpo, /#em-breve|id="em-breve"|Em breve na Google Play|App Store|fase de testes/, valor);
     }
   });
 
@@ -326,10 +329,18 @@ describe('landing do Taaki: modo "Em breve" e conteúdo', () => {
     assert.match(c, new RegExp(`© ${ano} Taaki Delivery`));
   });
 
-  test('FAQ: lojas sem promessa e as 4 formas de pagamento na entrega', async () => {
+  test('fontes: só Montserrat e Poppins', async () => {
+    const c = (await landingCom({})).corpo;
+    const familias = new Set([...c.matchAll(/font-family:"([^"]+)"/g)].map((m) => m[1]));
+    assert.deepEqual([...familias].sort(), ['Montserrat', 'Poppins']);
+    assert.doesNotMatch(c, /Bricolage|system-ui|Segoe UI|Roboto/);
+  });
+
+  test('FAQ: lojas sem promessa e pagamento no app pelo Mercado Pago', async () => {
     const c = (await landingCom({})).corpo;
     assert.match(c, /<summary>Quais lojas estão no Taaki\?<\/summary><p>As lojas parceiras de Abatiá aparecem direto no app\.<\/p>/);
-    assert.match(c, /<summary>Como eu pago\?<\/summary><p>Por enquanto, o pagamento é feito na entrega: Pix, dinheiro, cartão de débito ou cartão de crédito\.<\/p>/);
+    assert.match(c, /<summary>Como eu pago\?<\/summary><p>O pagamento é feito no próprio app, na hora de finalizar o pedido, de forma segura pelo Mercado Pago\.<\/p>/);
+    assert.doesNotMatch(c, /direto com a loja|Pague na entrega|pagamento é feito na entrega|Pagamento na entrega/i);
     assert.doesNotMatch(c, /formas aceitas|Novas lojas/i);
   });
 
@@ -341,8 +352,6 @@ describe('landing do Taaki: modo "Em breve" e conteúdo', () => {
         /rastre/i,
         /no mapa/i,
         /entregador/i,
-        /(pix|cart[ãa]o)[^.]{0,20}(pelo|no) app/i,
-        /pague (pelo|no) app/i,
         /milhares|centenas/i,
         /avalia[çc]/i,
         /depoimento/i,

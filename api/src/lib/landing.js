@@ -3,13 +3,14 @@
  *
  * HTML e CSS gerados aqui, mobile first, **sem nenhum script** (o "Em breve" é
  * uma âncora, o FAQ é <details>, o iPhone é detectado no servidor em /app).
- * Recursos só do próprio servidor (logo, ícones, imagem de compartilhamento e a
- * fonte dos títulos, Bricolage Grotesque 800, do pacote @fontsource, OFL).
+ * Recursos só do próprio servidor (logo, ícones, imagem de compartilhamento e as
+ * fontes: só Montserrat nos títulos e Poppins no texto, dos pacotes @fontsource, OFL).
  *
  * Regras do texto (decisão do dono): nenhum número, depoimento, avaliação, nome
- * de loja ou logo de parceiro inventado; nada que o app ainda não tem (Pix ou
- * cartão pelo app, entregadores da plataforma, rastreio no mapa, status do
- * pedido para o cliente). Conferido em test/dominios.test.js.
+ * de loja ou logo de parceiro inventado; nada que o app ainda não tem
+ * (entregadores da plataforma, rastreio no mapa, status do pedido para o
+ * cliente). O pagamento é no app, ao finalizar o pedido, pelo Mercado Pago
+ * (decisão do dono, 2026-11-26). Conferido em test/dominios.test.js.
  */
 import { CORES_TAAKI as C, escapar } from './paginaPublica.js';
 import { linkHttps } from './dominios.js';
@@ -22,7 +23,18 @@ export const CAMINHO_LOGO_TAAKI = '/taaki/logo.jpg';
 export const CAMINHO_FAVICON_TAAKI = '/taaki/favicon.svg';
 export const CAMINHO_ICONE_TAAKI = '/taaki/icone-180.png';
 export const CAMINHO_COMPARTILHAR_TAAKI = '/taaki/compartilhar.jpg';
-export const CAMINHO_FONTE_TAAKI = '/taaki/titulos.woff2';
+/**
+ * Fontes da landing (só estas duas, decisão do dono): Montserrat 800 nos títulos e
+ * Poppins 400/600/700 no texto. Caminho público → arquivo latim do @fontsource.
+ */
+export const FONTES_TAAKI = {
+  '/taaki/montserrat-800.woff2': { pacote: '@fontsource/montserrat', arquivo: 'montserrat-latin-800-normal.woff2', familia: 'Montserrat', peso: 800 },
+  '/taaki/poppins-400.woff2': { pacote: '@fontsource/poppins', arquivo: 'poppins-latin-400-normal.woff2', familia: 'Poppins', peso: 400 },
+  '/taaki/poppins-600.woff2': { pacote: '@fontsource/poppins', arquivo: 'poppins-latin-600-normal.woff2', familia: 'Poppins', peso: 600 },
+  '/taaki/poppins-700.woff2': { pacote: '@fontsource/poppins', arquivo: 'poppins-latin-700-normal.woff2', familia: 'Poppins', peso: 700 },
+};
+/** Pré-carregadas no <head> (as da primeira dobra). */
+const FONTES_PRECARREGAR = ['/taaki/montserrat-800.woff2', '/taaki/poppins-400.woff2'];
 
 /** Favicon: o pino laranja sobre o azul-marinho (nítido a 16 px, ao contrário do logo). */
 export const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${C.marinho}"/><path d="M32 9c-9.6 0-17.4 7.6-17.4 17C14.6 38.6 32 55 32 55s17.4-16.4 17.4-29C49.4 16.6 41.6 9 32 9z" fill="${C.laranja}"/><circle cx="32" cy="26.5" r="6.6" fill="${C.marinho}"/></svg>`;
@@ -58,7 +70,7 @@ const ICONES = {
   pino: '<path d="M12 21s7-6.2 7-11.5a7 7 0 0 0-14 0C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
   grade: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
   nota: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9.5 12h6M9.5 16h6"/>',
-  dinheiro: '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5v5M17.5 9.5v5"/>',
+  cadeado: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><path d="M12 14.5v2.5"/>',
   impressora: '<path d="M7 9V4h10v5"/><rect x="3.5" y="9" width="17" height="7" rx="2"/><path d="M7 14h10v6H7z"/>',
   ajustes: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   relogio: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
@@ -70,14 +82,16 @@ const icone = (nome, classe = 'icone') =>
   `<svg class="${classe}" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONES[nome]}</svg>`;
 
 const ESTILO = `
-@font-face{font-family:"Bricolage Grotesque";src:url(${CAMINHO_FONTE_TAAKI}) format("woff2");font-weight:800;font-style:normal;font-display:swap}
+${Object.entries(FONTES_TAAKI)
+  .map(([url, f]) => `@font-face{font-family:"${f.familia}";src:url(${url}) format("woff2");font-weight:${f.peso};font-style:normal;font-display:swap}`)
+  .join('\n')}
 :root{--marinho:${C.marinho};--marinho-2:#13213D;--laranja:${C.laranja};--laranja-claro:${C.laranjaClaro};--branco:${C.branco};
 --laranja-texto:${C.laranjaTexto};--suave-escuro:${C.textoSuaveEscuro};--suave:#4B5568;--fundo:#F5F7FA;--borda:#DCE2EA;
---titulo:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--alto-topo:60px}
+--titulo:"Montserrat",sans-serif;--alto-topo:60px}
 *,*::before,*::after{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-padding-top:calc(var(--alto-topo) + 12px)}
 @media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
-body{margin:0;background:var(--branco);color:var(--marinho);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-x:hidden}
+body{margin:0;background:var(--branco);color:var(--marinho);font:16px/1.6 "Poppins",sans-serif;overflow-x:hidden}
 img,svg{display:block;max-width:100%}
 a{color:inherit}
 h1,h2,h3{font-family:var(--titulo);font-weight:800;line-height:1.1;letter-spacing:-.02em;margin:0}
@@ -95,14 +109,14 @@ a:focus-visible,summary:focus-visible{outline:3px solid var(--laranja-claro);out
 .marca span{font-family:var(--titulo);font-weight:800;font-size:17px;letter-spacing:-.01em;white-space:nowrap}
 .topo-parceiro{font-size:14px;font-weight:600;color:var(--suave-escuro);text-decoration:none;padding:8px 4px;white-space:nowrap}
 .topo-parceiro:hover{color:var(--branco);text-decoration:underline}
-.topo-pedir{padding:9px 14px;border-radius:999px;background:var(--laranja);color:var(--marinho);font-weight:800;font-size:14px;text-decoration:none;white-space:nowrap}
+.topo-pedir{padding:9px 14px;border-radius:999px;background:var(--laranja);color:var(--marinho);font-weight:700;font-size:14px;text-decoration:none;white-space:nowrap}
 .topo-pedir:hover{background:var(--laranja-claro)}
 @media (max-width:429px){.topo .marca-resto{display:none}}
 
 /* Botões */
 .botoes{display:grid;gap:12px}
 .botao{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px 10px;min-height:54px;padding:12px 22px;border-radius:14px;
-font-weight:800;font-size:17px;text-decoration:none;text-align:center;border:2px solid transparent;transition:background-color .15s,border-color .15s}
+font-weight:700;font-size:17px;text-decoration:none;text-align:center;border:2px solid transparent;transition:background-color .15s,border-color .15s}
 .botao .icone{width:20px;height:20px}
 .botao--principal{background:var(--laranja);color:var(--marinho)}
 .botao--principal:hover{background:var(--laranja-claro)}
@@ -110,7 +124,7 @@ font-weight:800;font-size:17px;text-decoration:none;text-align:center;border:2px
 .botao--contorno:hover{border-color:var(--branco);background:rgba(255,255,255,.07)}
 .botao--escuro{background:var(--marinho);color:var(--branco)}
 .botao--escuro:hover{background:var(--marinho-2)}
-.selo{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.01em;background:var(--marinho);color:var(--laranja-claro);white-space:nowrap}
+.selo{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.01em;background:var(--marinho);color:var(--laranja-claro);white-space:normal;max-width:100%}
 .botao--escuro .selo{background:var(--laranja);color:var(--marinho)}
 
 /* Hero */
@@ -122,14 +136,12 @@ background-image:radial-gradient(520px 340px at 85% 0%,rgba(242,107,29,.22),tran
 .hero h1 em{font-style:normal;color:var(--laranja-claro)}
 .hero .botoes{margin-top:24px}
 .hero-sub{margin-top:12px;font-size:18px;color:var(--suave-escuro);max-width:34em}
-.hero-nota{margin-top:14px;font-size:14px;color:var(--suave-escuro);display:flex;align-items:center;gap:8px}
-.hero-nota .icone{width:18px;height:18px;color:var(--laranja-claro);flex:none}
 
 /* Seções */
 .secao{padding:56px 0}
 .secao--clara{background:var(--fundo)}
 .secao--escura{background:var(--marinho);color:var(--branco)}
-.rotulo{display:inline-block;margin-bottom:10px;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--laranja-texto)}
+.rotulo{display:inline-block;margin-bottom:10px;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--laranja-texto)}
 .secao--escura .rotulo{color:var(--laranja-claro)}
 .secao h2{font-size:clamp(28px,7vw,42px);max-width:20em}
 .intro{margin-top:12px;font-size:17px;color:var(--suave);max-width:38em}
@@ -223,13 +235,15 @@ background-image:radial-gradient(520px 340px at 85% 0%,rgba(242,107,29,.22),tran
   .erro404 .envelope{grid-template-columns:1fr;gap:20px;padding-top:96px;padding-bottom:96px}
 }`;
 
+export const TEXTO_EM_BREVE = 'Em breve na Google Play e na App Store';
+
 /** "Quero pedir" e "Pedir agora": /app com o app lançado; senão a seção "Em breve". */
 function destinoPedir(appLancado, pagina = '') {
   return appLancado ? '/app' : `${pagina}#em-breve`;
 }
 
 function botaoPedir({ appLancado, classe = 'botao--principal' }) {
-  const selo = appLancado ? '' : '<span class="selo">Em breve na Google Play</span>';
+  const selo = appLancado ? '' : `<span class="selo">${TEXTO_EM_BREVE}</span>`;
   return `<a class="botao ${classe}" href="${destinoPedir(appLancado)}">Quero pedir${selo}</a>`;
 }
 
@@ -283,13 +297,13 @@ ${og}
 <link rel="icon" href="${CAMINHO_FAVICON_TAAKI}" type="image/svg+xml">
 <link rel="icon" href="${CAMINHO_ICONE_TAAKI}" type="image/png" sizes="180x180">
 <link rel="apple-touch-icon" href="${CAMINHO_ICONE_TAAKI}">
-<link rel="preload" href="${CAMINHO_FONTE_TAAKI}" as="font" type="font/woff2" crossorigin>
+${FONTES_PRECARREGAR.map((url) => `<link rel="preload" href="${url}" as="font" type="font/woff2" crossorigin>`).join('\n')}
 <style>${ESTILO}</style></head>`;
 }
 
 export const TITULO_LANDING = 'Taaki Delivery · O delivery de Abatiá, num app só';
 export const DESCRICAO_LANDING =
-  'Veja o cardápio das lojas de Abatiá, faça seu pedido pelo app e receba na sua casa. Pagamento na entrega.';
+  'Veja o cardápio das lojas de Abatiá, faça seu pedido pelo app e receba na sua casa. Pagamento seguro pelo Mercado Pago.';
 
 /**
  * @param {{ email?: string | null, appLancado?: boolean, textoIphone?: string,
@@ -312,9 +326,9 @@ export function paginaLanding({
   const emBreve = appLancado
     ? ''
     : `<section class="em-breve" id="em-breve" aria-labelledby="titulo-em-breve"><div class="envelope">
-  <span class="rotulo">Em breve na Google Play</span>
+  <span class="rotulo">${TEXTO_EM_BREVE}</span>
   <h2 id="titulo-em-breve">O app está em fase de testes</h2>
-  <p>O Taaki Delivery ainda não está disponível para baixar. Estamos terminando os testes antes de publicar na Google Play, e o lançamento será anunciado no nosso Instagram.</p>
+  <p>O Taaki Delivery ainda não está disponível para baixar. Estamos terminando os testes antes de publicar na Google Play e na App Store, e o lançamento será anunciado no nosso Instagram.</p>
   <div class="acoes">
     ${instagramUrl ? `<a class="botao botao--escuro" href="${escapar(instagramUrl)}" rel="noopener">Seguir no Instagram</a>` : ''}
     <a class="link-forte" href="#parceiros">Tem uma loja? Veja como ser parceiro</a>
@@ -330,7 +344,7 @@ export function paginaLanding({
     ['pino', 'Feito aqui', 'Um app da nossa região, para valorizar o comércio local.'],
     ['grade', 'Tudo num lugar só', 'Várias lojas no mesmo app, sem salvar um número de WhatsApp para cada uma.'],
     ['nota', 'Sem confusão no pedido', 'O pedido chega escrito para a loja, sem áudio, sem mensagem perdida.'],
-    ['dinheiro', 'Pague na entrega', 'Pagamento na entrega, direto com a loja.'],
+    ['cadeado', 'Pagamento seguro', 'Você paga no app ao finalizar o pedido, com a segurança do Mercado Pago.'],
   ];
   const vantagens = [
     ['impressora', 'Pedidos organizados no caixa', 'Chegam no sistema de caixa (PDV) do seu computador e saem impressos.'],
@@ -344,7 +358,7 @@ export function paginaLanding({
     : 'Veja a seção <a href="#parceiros">Para parceiros</a>.';
   const perguntas = [
     ['Quais lojas estão no Taaki?', 'As lojas parceiras de Abatiá aparecem direto no app.'],
-    ['Como eu pago?', 'Por enquanto, o pagamento é feito na entrega: Pix, dinheiro, cartão de débito ou cartão de crédito.'],
+    ['Como eu pago?', 'O pagamento é feito no próprio app, na hora de finalizar o pedido, de forma segura pelo Mercado Pago.'],
     ['O app funciona no iPhone?', escapar(textoIphone)],
     [
       'Como faço para excluir minha conta?',
@@ -365,7 +379,6 @@ ${topo({ appLancado })}
       ${botaoPedir({ appLancado })}
       <a class="botao botao--contorno" href="/parceiro">Sou parceiro</a>
     </div>
-    <p class="hero-nota">${icone('dinheiro')}Pagamento na entrega, direto com a loja.</p>
   </div>
 </div></section>
 ${emBreve}

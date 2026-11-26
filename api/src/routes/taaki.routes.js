@@ -6,11 +6,11 @@ import { createRequire } from 'node:module';
 import {
   CAMINHO_COMPARTILHAR_TAAKI,
   CAMINHO_FAVICON_TAAKI,
-  CAMINHO_FONTE_TAAKI,
   CAMINHO_ICONE_TAAKI,
   CAMINHO_LOGO_TAAKI,
   CSP_LANDING,
   FAVICON_SVG,
+  FONTES_TAAKI,
   lerConfigLanding,
   paginaLanding,
   paginaNaoEncontradaTaaki,
@@ -38,8 +38,10 @@ const ARQUIVOS = {
   [CAMINHO_LOGO_TAAKI]: path.join(ASSETS, 'logo-taaki-320.jpg'),
   [CAMINHO_ICONE_TAAKI]: path.join(ASSETS, 'taaki-icone-180.png'),
   [CAMINHO_COMPARTILHAR_TAAKI]: path.join(ASSETS, 'taaki-compartilhar-1024x500.jpg'),
-  // Fonte dos títulos (Bricolage Grotesque 800, latim, OFL), do pacote @fontsource da API.
-  [CAMINHO_FONTE_TAAKI]: createRequire(import.meta.url).resolve('@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-800-normal.woff2'),
+  // Fontes (Montserrat e Poppins, latim, OFL), dos pacotes @fontsource da API.
+  ...Object.fromEntries(
+    Object.entries(FONTES_TAAKI).map(([url, f]) => [url, createRequire(import.meta.url).resolve(`${f.pacote}/files/${f.arquivo}`)]),
+  ),
 };
 
 /** Caminhos que continuam iguais em todos os hosts. */

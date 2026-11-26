@@ -17,6 +17,7 @@ export const TIPOS_ALERTA = {
   CHARGEBACK: 'Contestação (chargeback)',
   ESTORNO_EXTERNO: 'Estornado fora do Taaki',
   PEDIDO_SEM_ACEITE: 'Pedido sem aceite da loja',
+  FECHAMENTO_ATRASADO: 'Fechamento atrasado',
 };
 
 /**
@@ -53,6 +54,11 @@ export function TelaAlertas({ aoMudarLoja, ir }) {
                     {ALERTAS_DE_PAGAMENTO.includes(a.tipo) && ir && (
                       <button type="button" className="botao botao--pequeno" onClick={() => ir('pagamentos')}>
                         Pagamentos online
+                      </button>
+                    )}
+                    {(a.tipo === 'FECHAMENTO_ATRASADO' || a.tipo === 'TAXA_ENTREGA_COMPLEMENTO') && ir && (
+                      <button type="button" className="botao botao--pequeno" onClick={() => ir('financeiro')}>
+                        Financeiro
                       </button>
                     )}
                     <button

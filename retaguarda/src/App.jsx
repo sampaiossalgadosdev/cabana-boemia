@@ -22,6 +22,7 @@ import {
   IconeSair,
   IconeCartao,
   IconeSino,
+  IconeCofre,
 } from './componentes/Icones.jsx';
 import { TelaLogin } from './telas/TelaLogin.jsx';
 import { TelaCardapioDoDia } from './telas/TelaCardapioDoDia.jsx';
@@ -40,6 +41,8 @@ import { TelaAnuncios } from './telas/TelaAnuncios.jsx';
 import { TelaPagamentoOnline } from './telas/TelaPagamentoOnline.jsx';
 import { TelaAlertas } from './telas/TelaAlertas.jsx';
 import { TelaPagamentosAdmin } from './telas/TelaPagamentosAdmin.jsx';
+import { TelaFechamento } from './telas/TelaFechamento.jsx';
+import { TelaFinanceiro } from './telas/TelaFinanceiro.jsx';
 
 const ICONES = {
   'cardapio-do-dia': IconeCardapioDia,
@@ -59,6 +62,8 @@ const ICONES = {
   'pagamento-online': IconeCartao,
   alertas: IconeSino,
   pagamentos: IconeCartao,
+  fechamento: IconeCofre,
+  financeiro: IconeCofre,
 };
 
 const COMPONENTES = {
@@ -79,6 +84,8 @@ const COMPONENTES = {
   'pagamento-online': TelaPagamentoOnline,
   alertas: TelaAlertas,
   pagamentos: TelaPagamentosAdmin,
+  fechamento: TelaFechamento,
+  financeiro: TelaFinanceiro,
 };
 
 export function App() {

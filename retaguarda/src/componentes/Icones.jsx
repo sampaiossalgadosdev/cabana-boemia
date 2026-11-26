@@ -140,3 +140,11 @@ export const IconeMegafone = (p) => (
     <path d="M17 9a4 4 0 0 1 0 6M7 14l1 5h3l-1-4" />
   </Svg>
 );
+
+export const IconeCofre = (p) => (
+  <Svg {...p}>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 9v-1M7 19v2M17 19v2" />
+  </Svg>
+);

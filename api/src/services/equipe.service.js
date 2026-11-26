@@ -16,6 +16,7 @@ import { bairroParaLoja } from './bairro.service.js';
 import { OPCOES_TRANSACAO, pedidoDaEquipe, pagamentoOnlineDoPedido, STATUS_ABERTOS, STATUS_FORA_DO_PDV, ehDaLoja } from './pedido.service.js';
 import { exigirCaixaAberto } from './caixa.service.js';
 import { usarCampanha } from './campanha.service.js';
+import { lancarNaFinalizacao } from './livroRazao.service.js';
 import { desfazVerificacaoSeMudou } from './cliente.service.js';
 import { calcularTempoEstimado, manualDeHoje, saldoDisponivel, temSaldo } from './publico.service.js';
 
@@ -100,6 +101,9 @@ export async function finalizarPedido(lojaId, id, { formaPagamento }, agora = ne
     }
     // Pago na entrega: a reserva do frete grátis da primeira compra vira uso.
     await usarCampanha(tx, id, agora);
+    // Livro-razão: taxa do entregador do Taaki recebida pela loja ("Recebi o dinheiro") e
+    // crédito da campanha em loja com motoboy próprio (Etapa 6).
+    await lancarNaFinalizacao(tx, id, agora);
     return pedidoRepo.buscarPorId(id, tx);
   }, OPCOES_TRANSACAO);
 

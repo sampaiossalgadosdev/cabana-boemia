@@ -30,6 +30,7 @@ import { mapasPadrao } from './mapa.service.js';
 import * as mapaRepo from '../repositories/mapa.repository.js';
 import { limparChave, problemaNaChave } from '../lib/nfce.js';
 import { campanhaElegivel, liberarCampanha, reservarCampanha } from './campanha.service.js';
+import { estornarDoPedido } from './livroRazao.service.js';
 import { calcularSplit } from '@restaurante/shared/split';
 import { taxaPorKm } from '@restaurante/shared/taxaKm';
 import { lerConfigMapas } from '../lib/mapas.js';
@@ -836,6 +837,8 @@ async function criarNaTransacao(tx, d) {
       origemTaxaEntrega: split.origemTaxaEntrega,
       valorEntregadorCentavos: split.valorEntregadorCentavos,
       valorPlataformaEntregaCentavos: split.valorPlataformaEntregaCentavos,
+      // Taxa antes do frete grátis: base do crédito da campanha no livro-razão (Etapa 6).
+      taxaEntregaCheiaCentavos: d.endereco ? split.taxaCheiaCentavos : null,
       ...(d.geo ?? {}),
     },
     tx,
@@ -1194,6 +1197,8 @@ export async function cancelarNaTransacao(tx, lojaId, id, { usuarioId = null, ag
   await estornarVendas(tx, await pedidoRepo.vendasDoPedido(id, tx), usuarioId);
   // Frete grátis da primeira compra volta para o telefone (reservado ou já usado).
   await liberarCampanha(tx, id);
+  // Livro-razão: desfaz o que o pedido já lançou (ex.: complemento da trava no Pix aprovado).
+  await estornarDoPedido(tx, id, { usuarioId, agora });
 
   const pedido = await pedidoRepo.buscarPorId(id, tx);
   const trabalho =

@@ -26,6 +26,7 @@ import { emitirParaEquipe } from '../lib/eventos.js';
 import { formatarDinheiro } from '@restaurante/shared/cupom';
 import { horaViradaDe } from './diaOperacional.service.js';
 import { usarCampanha, liberarCampanha } from './campanha.service.js';
+import { lancarComplemento } from './livroRazao.service.js';
 import { alertarUmaVez, criarAlerta } from './alerta.service.js';
 import {
   avisarCancelamento,
@@ -272,6 +273,8 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
           data: { status: 'CONFIRMADO', numeroDia, dataRef: paraCampoData(dia), formaPagamento: 'PIX', trocoParaCentavos: null },
         });
         await usarCampanha(tx, pagamento.pedidoId, agora);
+        // Livro-razão: a parte da taxa que a trava de 50% deixou fora do split (Decisão 2 da Etapa 6).
+        await lancarComplemento(tx, pagamento.pedidoId, pagamento.valorPlataformaCentavos, agora);
         await tx.pagamento.update({
           where: { id: pagamento.id },
           data: { status: 'APROVADO', aprovadoEm: agora, dadosMp: resumoMp(r), consultadoEm: agora, mpPaymentId: r.id },

@@ -7,6 +7,7 @@ const SELECT = {
   criadoEm: true,
   resolvidoEm: true,
   pedidoId: true,
+  fechamentoId: true,
   loja: { select: { id: true, nome: true, slug: true } },
   resolvidoPor: { select: { nome: true } },
 };

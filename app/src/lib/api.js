@@ -238,6 +238,9 @@ export const buscarPrevia = (token, { itens, enderecoId, lojaSlug }) =>
 /** GET /cliente/pedidos/:id/pagamento → { pedido, pagamento } (a tela do Pix consulta a cada 5 s). */
 export const situacaoDoPagamento = (token, pedidoId) => requisitar('GET', `/cliente/pedidos/${pedidoId}/pagamento`, { token });
 
+/** Cancela o pedido pago online que a loja ainda não aceitou (o valor volta pelo Mercado Pago). */
+export const cancelarPedido = (token, pedidoId) => requisitar('POST', `/cliente/pedidos/${pedidoId}/cancelar`, { token });
+
 /** PUT /cliente/email → { cliente } (e-mail do pagador do Pix, pedido uma vez). */
 export const salvarEmail = (token, email) => requisitar('PUT', '/cliente/email', { token, corpo: { email } });
 

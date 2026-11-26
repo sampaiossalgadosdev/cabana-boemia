@@ -111,3 +111,49 @@ describe('pagamento pelo app (Pix)', () => {
     assert.equal('trocoParaCentavos' in pix, false);
   });
 });
+
+describe('pago online: e-mail recusado, cancelar antes do aceite e estorno (Etapa 5)', async () => {
+  const m = await import('../src/logica/pagamento.js');
+  const reais = (c) => `R$ ${(c / 100).toFixed(2).replace('.', ',')}`;
+  const pedido = (extra = {}, pagamento = {}) => ({
+    status: 'CONFIRMADO',
+    podeCancelar: false,
+    pagamentoOnline: { meio: 'PIX', situacao: 'PAGO', valorEstornadoCentavos: 0, ...pagamento },
+    ...extra,
+  });
+
+  test('e-mail recusado pelo Mercado Pago: mensagem própria, volta ao e-mail e chave nova; os outros erros, a genérica', () => {
+    assert.deepEqual(m.interpretarErroDoPix({ codigo: 'EMAIL_RECUSADO_PAGAMENTO' }), {
+      acao: 'email',
+      novaChave: true,
+      mensagem: 'O Mercado Pago não aceitou este e-mail para pagamento. Confira o e-mail no seu cadastro e tente de novo.',
+    });
+    assert.equal(m.interpretarErroDoPix({ codigo: 'PAGAMENTO_FALHOU' }).mensagem, m.MENSAGEM_FALHA_PIX);
+    assert.notEqual(m.interpretarErroDoPix({ codigo: 'PAGAMENTO_FALHOU' }).acao, 'email');
+  });
+
+  test('aviso do pedido: aguardando aceite; recusado e estornado (Pix na conta, cartão na fatura); pendente', () => {
+    assert.equal(m.avisoDoPedidoOnline(pedido({ podeCancelar: true })).texto, 'Pago. Aguardando a loja aceitar.');
+    assert.equal(m.avisoDoPedidoOnline(pedido()), null, 'aceito: nada a dizer');
+    assert.equal(
+      m.avisoDoPedidoOnline(pedido({ status: 'CANCELADO' }, { situacao: 'ESTORNADO' })).texto,
+      'Pedido cancelado e estornado. O valor do Pix volta para a sua conta.',
+    );
+    assert.equal(
+      m.avisoDoPedidoOnline(pedido({ status: 'CANCELADO' }, { meio: 'CARTAO_ONLINE', situacao: 'ESTORNADO' })).texto,
+      'Pedido cancelado e estornado. O valor volta na fatura do cartão.',
+    );
+    assert.match(m.avisoDoPedidoOnline(pedido({ status: 'CANCELADO' }, { situacao: 'ESTORNO_PENDENTE' })).texto, /devolução do valor está em andamento/);
+    assert.equal(
+      m.avisoDoPedidoOnline(pedido({ status: 'FINALIZADO' }, { situacao: 'ESTORNADO_PARCIAL', valorEstornadoCentavos: 500 }), reais).texto,
+      'R$ 5,00 foram estornados. O valor do Pix volta para a sua conta.',
+    );
+    assert.equal(m.avisoDoPedidoOnline({ status: 'CANCELADO', pagamentoOnline: null }), null, 'pago na entrega');
+  });
+
+  test('erros do cancelar: aceito no meio, encerrado, outros', () => {
+    assert.match(m.mensagemDoCancelamento({ codigo: 'PEDIDO_JA_ACEITO' }), /já aceitou/);
+    assert.equal(m.mensagemDoCancelamento({ codigo: 'PEDIDO_ENCERRADO' }), 'Este pedido já foi encerrado.');
+    assert.match(m.mensagemDoCancelamento(new TypeError('Network')), /Network|conexão/);
+  });
+});

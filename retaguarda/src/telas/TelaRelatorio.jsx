@@ -13,6 +13,7 @@ import {
 import { EstadoCarga, useAvisar, useCarregar } from '../componentes/comuns.jsx';
 
 const NOME_FORMA = { DINHEIRO: 'Dinheiro', PIX: 'Pix', DEBITO: 'Débito', CREDITO: 'Crédito' };
+const NOME_MEIO_ONLINE = { PIX: 'Pix', CARTAO_ONLINE: 'Cartão' };
 const NOME_CANAL = { SITE: 'Site', APP: 'App', WHATSAPP: 'WhatsApp', SALAO: 'Salão' };
 
 async function carregar(data) {
@@ -106,7 +107,9 @@ export function TelaRelatorio() {
 
 function Conteudo({ r, caixas }) {
   const [top, setTop] = useState('quantidade');
-  const maiorForma = Math.max(...r.porFormaPagamento.map((f) => f.totalCentavos));
+  // Pago online (Pix/cartão no app) à parte das formas pagas na entrega (Decisão 19).
+  const online = (r.pagoOnline ?? []).filter((p) => p.quantidade > 0);
+  const maiorForma = Math.max(...r.porFormaPagamento.map((f) => f.totalCentavos), ...online.map((p) => p.totalCentavos));
   const produtos = top === 'quantidade' ? r.topPorQuantidade : r.topPorValor;
 
   return (
@@ -134,12 +137,14 @@ function Conteudo({ r, caixas }) {
         {' · '}
         {r.itensRemovidos.quantidade} item(ns) removido(s) de comandas ({formatarReais(r.itensRemovidos.totalCentavos)})
         {r.descontoCentavos > 0 && ` · Descontos dados no PDV: ${formatarReais(r.descontoCentavos)} (já descontados do total)`}
+        {r.estornosDeFinalizados?.quantidade > 0 &&
+          ` · ${r.estornosDeFinalizados.quantidade} estorno(s) de pedido(s) entregue(s) (${formatarReais(r.estornosDeFinalizados.totalCentavos)})`}
       </p>
 
       <div className="grade-relatorio">
         <section className="cartao">
           <div className="cartao__topo">
-            <h2 className="cartao__titulo">Por forma de pagamento</h2>
+            <h2 className="cartao__titulo">{online.length ? 'Pago na entrega' : 'Por forma de pagamento'}</h2>
           </div>
           <ul className="barras">
             {r.porFormaPagamento.map((f) => (
@@ -155,6 +160,25 @@ function Conteudo({ r, caixas }) {
               </li>
             ))}
           </ul>
+          {online.length > 0 && (
+            <>
+              <h3 className="cartao__titulo" style={{ marginTop: 16 }}>Pago online (fora do caixa)</h3>
+              <ul className="barras">
+                {online.map((p) => (
+                  <li key={p.meio} className="barra" title={`${NOME_MEIO_ONLINE[p.meio]} online: ${p.quantidade} pedido(s), ${formatarReais(p.totalCentavos)}`}>
+                    <span className="barra__rotulo">{NOME_MEIO_ONLINE[p.meio]} online</span>
+                    <span className="barra__trilho">
+                      <span className="barra__marca" style={{ width: `${larguraBarra(p.totalCentavos, maiorForma)}%` }} />
+                    </span>
+                    <span className="barra__valor">
+                      {formatarReais(p.totalCentavos)}
+                      <small>{p.quantidade} ped.</small>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </section>
 
         <section className="cartao">

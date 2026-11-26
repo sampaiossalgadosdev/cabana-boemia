@@ -2,17 +2,28 @@ import { useState } from 'react';
 import { api } from '../lib/api.js';
 import { formatarDataHora } from '../lib/formatar.js';
 import { Confirmar, EstadoCarga, useAvisar, useCarregar } from '../componentes/comuns.jsx';
+import { ALERTAS_DE_PAGAMENTO } from '../lib/pagamentosAdmin.js';
 
 /** Nome de cada tipo de alerta (as próximas etapas acrescentam tipos). */
 export const TIPOS_ALERTA = {
   RENOVACAO_MP_FALHOU: 'Mercado Pago não renovou',
+  PAGAMENTO_DIVERGENTE: 'Pagamento não confere',
+  PAGO_APOS_EXPIRAR: 'Pago depois de expirar',
+  MP_DESVINCULADA: 'Conta Mercado Pago desvinculada',
+  TAXA_ENTREGA_COMPLEMENTO: 'Taxa acima de 50%',
+  PIX_FALHANDO: 'Pix falhando',
+  LOJA_SEM_LOCALIZACAO: 'Loja sem localização',
+  REEMBOLSO_FALHOU: 'Reembolso pendente',
+  CHARGEBACK: 'Contestação (chargeback)',
+  ESTORNO_EXTERNO: 'Estornado fora do Taaki',
+  PEDIDO_SEM_ACEITE: 'Pedido sem aceite da loja',
 };
 
 /**
  * Plataforma (só ADMIN): alertas que pedem ação (ex.: a conexão do Mercado Pago de uma
  * loja não renovou). Resolvidos à mão: o ADMIN age e marca como resolvido.
  */
-export function TelaAlertas({ aoMudarLoja }) {
+export function TelaAlertas({ aoMudarLoja, ir }) {
   const carga = useCarregar(() => api.plataforma.alertas.listar());
   const [confirmar, setConfirmar] = useState(null);
   const avisar = useAvisar();
@@ -38,6 +49,12 @@ export function TelaAlertas({ aoMudarLoja }) {
                 <TabelaAlertas
                   linhas={abertos}
                   acao={(a) => (
+                    <div className="acoes">
+                    {ALERTAS_DE_PAGAMENTO.includes(a.tipo) && ir && (
+                      <button type="button" className="botao botao--pequeno" onClick={() => ir('pagamentos')}>
+                        Pagamentos online
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="botao botao--pequeno botao--primario"
@@ -57,6 +74,7 @@ export function TelaAlertas({ aoMudarLoja }) {
                     >
                       Marcar como resolvido
                     </button>
+                    </div>
                   )}
                 />
               )}

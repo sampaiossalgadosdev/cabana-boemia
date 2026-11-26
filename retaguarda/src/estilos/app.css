@@ -1583,3 +1583,13 @@ textarea.entrada {
 [data-tema='taaki'] .dialogo__fechar:hover {
   background: var(--cor-creme);
 }
+
+/* Pagamentos online (ADMIN): histórico dos estornos em cada pagamento. */
+.lista-estornos {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 0.9em;
+}
+.lista-estornos li + li {
+  margin-top: 4px;
+}

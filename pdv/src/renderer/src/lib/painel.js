@@ -3,7 +3,13 @@
  * destaque da busca. Lógica pura, testada com node:test.
  */
 
-export const CANAIS_PAINEL = ['SITE', 'WHATSAPP'];
+/**
+ * O painel mostra TODOS os canais menos a comanda do salão (que tem a aba própria) e menos os
+ * status que não existem para a equipe (pagamento online ainda não aprovado, ou expirado). Lista
+ * de exclusão, não de inclusão: um canal novo (como o APP) nunca fica invisível de novo.
+ */
+export const CANAIS_FORA_DO_PAINEL = ['SALAO'];
+export const STATUS_OCULTOS = ['AGUARDANDO_PAGAMENTO', 'EXPIRADO'];
 
 /** Status "ainda aberto" (mesma lista da API: pode finalizar ou cancelar). */
 export const STATUS_ABERTOS = ['ABERTO', 'CONFIRMADO', 'EM_PREPARO', 'SAIU_ENTREGA'];
@@ -39,7 +45,7 @@ export const FILTROS_TIPO = [
 ];
 
 export const estaAberto = (p) => STATUS_ABERTOS.includes(p.status);
-export const entraNoPainel = (p) => CANAIS_PAINEL.includes(p?.canal);
+export const entraNoPainel = (p) => Boolean(p?.canal) && !CANAIS_FORA_DO_PAINEL.includes(p.canal) && !STATUS_OCULTOS.includes(p.status);
 
 /** "Delivery #20 - LILIAN" / "Encomenda #18 (Balcão) - DAIANE" */
 export function tituloDoPedido(p) {
@@ -122,8 +128,17 @@ export function aplicarPedido(lista, pedido, dataRef) {
   return [...lista, pedido];
 }
 
-/** Alerta sonoro só para pedido novo do site (o do WhatsApp foi lançado aqui). */
-export const tocaAlerta = (pedido) => pedido?.canal === 'SITE';
+/** Alerta sonoro para pedido novo do cliente (site ou app); o do WhatsApp foi lançado aqui. */
+export const tocaAlerta = (pedido) => pedido?.canal === 'SITE' || pedido?.canal === 'APP';
+
+/** Selo da origem na lista: "App" ou "Site" (o do WhatsApp não tem selo). */
+export const SELO_ORIGEM = { SITE: 'Site', APP: 'App' };
+
+/** "Registrado por: Ana" / "Registrado pelo app" / "Registrado pelo site". */
+export function textoRegistro(p) {
+  if (p.registradoPor) return `Registrado por: ${p.registradoPor}`;
+  return p.canal === 'APP' ? 'Registrado pelo app' : 'Registrado pelo site';
+}
 
 /**
  * Divide `texto` em partes para pôr em negrito o trecho buscado. Compara sem

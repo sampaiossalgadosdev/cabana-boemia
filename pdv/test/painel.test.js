@@ -10,6 +10,9 @@ import {
   prazoDoPedido,
   tituloDoPedido,
   tocaAlerta,
+  entraNoPainel,
+  SELO_ORIGEM,
+  textoRegistro,
 } from '../src/renderer/src/lib/painel.js';
 
 const pedido = (extra = {}) => ({
@@ -96,7 +99,24 @@ describe('painel de delivery', () => {
     assert.equal(aplicarPedido(lista, pedido({ id: 3, dataRef: '2026-11-13' }), '2026-11-14').length, 1);
     assert.equal(aplicarPedido(lista, pedido({ id: 4 }), '2026-11-14').length, 2);
     assert.ok(tocaAlerta({ canal: 'SITE' }));
+    assert.ok(tocaAlerta({ canal: 'APP' }));
     assert.ok(!tocaAlerta({ canal: 'WHATSAPP' }));
+  });
+
+  test('painel: todos os canais menos o salão e os status ocultos; selo e registro por origem', () => {
+    assert.ok(entraNoPainel(pedido({ canal: 'APP' })));
+    assert.ok(entraNoPainel(pedido({ canal: 'SITE' })));
+    assert.ok(entraNoPainel(pedido({ canal: 'WHATSAPP' })));
+    assert.ok(entraNoPainel(pedido({ canal: 'CANAL_DO_FUTURO' })), 'canal novo aparece');
+    assert.ok(!entraNoPainel(pedido({ canal: 'SALAO' })));
+    assert.ok(!entraNoPainel(pedido({ canal: 'APP', status: 'AGUARDANDO_PAGAMENTO' })));
+    assert.ok(!entraNoPainel(pedido({ canal: 'APP', status: 'EXPIRADO' })));
+    assert.equal(SELO_ORIGEM.APP, 'App');
+    assert.equal(SELO_ORIGEM.SITE, 'Site');
+    assert.equal(SELO_ORIGEM.WHATSAPP, undefined);
+    assert.equal(textoRegistro({ canal: 'APP' }), 'Registrado pelo app');
+    assert.equal(textoRegistro({ canal: 'SITE' }), 'Registrado pelo site');
+    assert.equal(textoRegistro({ canal: 'WHATSAPP', registradoPor: 'Ana' }), 'Registrado por: Ana');
   });
 
   test('destaque da busca: sem acento, e dígitos dentro do telefone formatado', () => {

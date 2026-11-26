@@ -8,7 +8,6 @@
 import { criarConsultaCep } from './cep.js';
 
 export const FORMAS_PAGAMENTO = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'];
-export const CANAIS_FILA = 'SITE,WHATSAPP';
 export const TEMPO_MIN = 1;
 export const TEMPO_MAX = 240;
 
@@ -312,11 +311,13 @@ export function criarHandlers({ config, api, tempoReal, agente, listarImpressora
 
     'tempoReal:status': async () => tempoReal.status(),
 
-    'pedidos:fila': async () => api.requisitar('GET', `/equipe/pedidos?dataRef=hoje&canal=${CANAIS_FILA}`),
+    // Sem filtro de canal: a API já tira os pedidos que esperam o pagamento online (e os expirados),
+    // e o renderer tira as comandas do salão. Assim um canal novo nunca fica invisível no painel.
+    'pedidos:fila': async () => api.requisitar('GET', '/equipe/pedidos?dataRef=hoje'),
 
     /** Painel: todos os pedidos do dia operacional (o PDV filtra status, tipo e busca). */
     'pedidos:listar': async (dataRef) =>
-      api.requisitar('GET', `/equipe/pedidos?dataRef=${dataValida(dataRef)}&canal=${CANAIS_FILA}&status=todos`),
+      api.requisitar('GET', `/equipe/pedidos?dataRef=${dataValida(dataRef)}&status=todos`),
 
     'pedidos:status': async (id, status) => {
       if (!STATUS_ANDAMENTO.includes(status)) throw new ErroEntrada('Status inválido');

@@ -27,7 +27,7 @@ export function formatarTelefone(t) {
   return t ?? '';
 }
 
-export const NOME_CANAL = { SITE: 'Site', WHATSAPP: 'WhatsApp', SALAO: 'Salão' };
+export const NOME_CANAL = { SITE: 'Site', APP: 'App', WHATSAPP: 'WhatsApp', SALAO: 'Salão' };
 
 export const NOME_PAGAMENTO = { PIX: 'Pix', DINHEIRO: 'Dinheiro', DEBITO: 'Débito', CREDITO: 'Crédito' };
 export const FORMAS_PAGAMENTO = Object.keys(NOME_PAGAMENTO);

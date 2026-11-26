@@ -456,6 +456,10 @@ input:focus-visible {
   background: var(--cor-vermelho);
   color: var(--cor-primaria-texto);
 }
+.selo--app {
+  background: var(--cor-preto, #111111);
+  color: #ffffff;
+}
 .selo--whatsapp {
   background: #1f7a45;
   color: var(--cor-branco);

@@ -9,6 +9,7 @@ import {
   minimoFreteGratisPlataforma,
   pagamentoOnlineDisponivel,
   pagamentoOnlineLigado,
+  problemaNoSegredo,
   problemasNoPagamentoOnline,
 } from '../src/lib/pagamentoOnline.js';
 import { raizApi } from './helpers/banco.js';
@@ -57,7 +58,7 @@ describe('cifra dos tokens (AES-256-GCM)', () => {
 });
 
 describe('flag PAGAMENTO_ONLINE_ATIVO e disponibilidade por loja', () => {
-  const LIGADA = { PAGAMENTO_ONLINE_ATIVO: 'sim', TOKEN_ENCRYPTION_KEY: CHAVE_HEX };
+  const LIGADA = { PAGAMENTO_ONLINE_ATIVO: 'sim', TOKEN_ENCRYPTION_KEY: CHAVE_HEX, MP_STATE_SECRET: 's'.repeat(40) };
   const loja = { modoEntrega: 'PROPRIO', pagamentoOnlineAtivo: true };
   const conectada = { status: 'CONECTADA' };
 
@@ -68,7 +69,16 @@ describe('flag PAGAMENTO_ONLINE_ATIVO e disponibilidade por loja', () => {
     assert.equal(pagamentoOnlineLigado({ PAGAMENTO_ONLINE_ATIVO: ' SIM ' }), true);
   });
 
-  test('flag ligada exige a chave válida; desligada não exige nada', () => {
+  test('segredos do pagamento online: 32+ caracteres e diferentes dos JWT', () => {
+    const jwt = { JWT_SECRET: 'j'.repeat(40), JWT_REFRESH_SECRET: 'r'.repeat(40), JWT_CLIENTE_SECRET: 'c'.repeat(40) };
+    assert.equal(problemaNoSegredo('MP_STATE_SECRET', { ...jwt, MP_STATE_SECRET: 's'.repeat(32) }), null);
+    assert.match(problemaNoSegredo('MP_STATE_SECRET', jwt), /ausente/);
+    assert.match(problemaNoSegredo('MP_STATE_SECRET', { MP_STATE_SECRET: 's'.repeat(31) }), /curto demais \(31/);
+    assert.match(problemaNoSegredo('CAMPANHA_TELEFONE_SECRET', { ...jwt, CAMPANHA_TELEFONE_SECRET: 'r'.repeat(40) }), /diferente de JWT_REFRESH_SECRET/);
+  });
+
+  test('flag ligada exige a chave válida e o segredo do state; desligada não exige nada', () => {
+    assert.match(problemasNoPagamentoOnline({ ...LIGADA, MP_STATE_SECRET: '' })[0], /MP_STATE_SECRET ausente/);
     assert.deepEqual(problemasNoPagamentoOnline({}), []);
     assert.deepEqual(problemasNoPagamentoOnline({ TOKEN_ENCRYPTION_KEY: 'lixo' }), []);
     assert.deepEqual(problemasNoPagamentoOnline(LIGADA), []);

@@ -9,7 +9,9 @@
  * - Etapa 3 (OAuth da loja): montarUrlAutorizacao, trocarCodePorToken, renovarToken.
  * - Etapa 4 (Pix): criarPix, consultarPagamento, cancelarPagamento (com o token DA LOJA) e
  *   validarAssinaturaWebhook (x-signature com MP_WEBHOOK_SECRET).
- * - Próximas: estornar, criarPreferencia.
+ * - Etapa 5: estornar (total ou parcial, com o token DA LOJA e X-Idempotency-Key) e
+ *   erroNoEmailDoPagador (recusa do Pix por causa do e-mail).
+ * - Próxima: criarPreferencia.
  *
  * Nunca registra token, code nem client_secret em log; o erro leva só o status HTTP e o
  * código do Mercado Pago (`error`), nunca o corpo inteiro.
@@ -63,6 +65,16 @@ export function detalheDoErro(dados) {
   return limpo.length > TAMANHO_DETALHE_ERRO ? `${limpo.slice(0, TAMANHO_DETALHE_ERRO - 1)}…` : limpo;
 }
 
+/**
+ * A recusa do Mercado Pago aponta o e-mail do pagador? (Decisão 0 da Etapa 5: foi a causa do
+ * erro no teste real.) Olha o `message`/`cause` já limpo (`detalhe`) e o código: "email",
+ * "e-mail" ou "payer.email". Os outros erros continuam com a mensagem genérica.
+ */
+export function erroNoEmailDoPagador(err) {
+  if (!(err instanceof ErroMercadoPago)) return false;
+  return /e-?mail/i.test(`${err.codigo ?? ''} ${err.detalhe ?? ''}`);
+}
+
 /** Credenciais do aplicativo (marketplace) no Mercado Pago, lidas do ambiente. */
 export function configMercadoPago(env = process.env) {
   const limpo = (v) => String(v ?? '').trim();
@@ -103,7 +115,7 @@ function comissaoInformada(dados) {
 /**
  * Pagamento do Mercado Pago no nosso formato (só o que usamos; nada do pagador).
  * @returns {{ id: string, status: string, statusDetail: string | null, valorCentavos: number | null,
- *   comissaoCentavos: number | null, referenciaExterna: string | null, collectorId: string | null,
+ *   comissaoCentavos: number | null, valorReembolsadoCentavos: number, referenciaExterna: string | null, collectorId: string | null,
  *   qrCode: string | null, qrCodeBase64: string | null, expiraEm: string | null, aprovadoEm: string | null }}
  */
 export function pagamentoNormalizado(dados) {
@@ -123,6 +135,8 @@ export function pagamentoNormalizado(dados) {
     qrCodeBase64: typeof tx.qr_code_base64 === 'string' ? tx.qr_code_base64 : null,
     expiraEm: typeof dados.date_of_expiration === 'string' ? dados.date_of_expiration : null,
     aprovadoEm: typeof dados.date_approved === 'string' ? dados.date_approved : null,
+    // Quanto já voltou ao comprador (estorno total ou parcial; feito por nós ou direto no Mercado Pago).
+    valorReembolsadoCentavos: emCentavos(dados.transaction_amount_refunded) ?? 0,
   };
 }
 
@@ -280,6 +294,26 @@ export function criarClienteMercadoPago({ fetch: buscar = globalThis.fetch, conf
     /** Situação do pagamento (a fonte da verdade: o webhook só avisa que algo mudou). */
     async consultarPagamento(accessToken, paymentId) {
       return pagamentoNormalizado(await chamarPagamentos('GET', `/v1/payments/${encodeURIComponent(paymentId)}`, accessToken));
+    },
+
+    /**
+     * Estorno de um pagamento aprovado (POST /v1/payments/{id}/refunds) na conta DA LOJA.
+     * Sem `valorCentavos` = total; com ele = parcial (`amount` em reais). A chave de
+     * idempotência é da tentativa (uma nova tentativa usa outra chave).
+     * @returns {Promise<{ id: string, status: string | null, valorCentavos: number | null }>}
+     */
+    async estornar(accessToken, paymentId, { valorCentavos = null, idempotencyKey }) {
+      const corpo = valorCentavos == null ? {} : { amount: emReais(valorCentavos) };
+      const dados = await chamarPagamentos('POST', `/v1/payments/${encodeURIComponent(paymentId)}/refunds`, accessToken, {
+        corpo,
+        idempotencyKey,
+      });
+      if (dados?.id == null) throw new ErroMercadoPago('Resposta do Mercado Pago sem estorno', { codigo: 'RESPOSTA_INVALIDA' });
+      return {
+        id: String(dados.id),
+        status: typeof dados.status === 'string' ? dados.status : null,
+        valorCentavos: emCentavos(dados.amount),
+      };
     },
 
     /** Cancela um Pix ainda pendente (o Mercado Pago só cancela pending/in_process). */

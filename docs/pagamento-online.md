@@ -110,7 +110,22 @@ Commits previstos:
 - `feat(api): pedidos aguardando pagamento e expirados fora do PDV`
 - `docs: etapa 2 do pagamento online`
 
-### Etapa 3 — OAuth da loja, módulo do Mercado Pago e modo de entrega
+### Etapa 3 — OAuth da loja, módulo do Mercado Pago e modo de entrega (CONCLUÍDA em 2026-11-25, branch `feat/pagamento-online`)
+
+**Feito** (vale isto e as Decisões da Etapa 3 onde o plano abaixo divergir):
+- `api/src/lib/mercadoPago.js` (único ponto de saída; teste garante) e `api/src/lib/estadoOauth.js` (state HMAC com `MP_STATE_SECRET`, 10 min; volta só para `https://taakidelivery.com.br` ou localhost fora de produção; senão `https://taakidelivery.com.br/parceiro`).
+- Migration `20261126130000_pagamento_online_conexao`: campanha com `telefoneHash` (HMAC-SHA256 com `CAMPANHA_TELEFONE_SECRET`), índice parcial da conta única (`CONECTADA`/`EXPIRADA`) e `AlertaPlataforma` (tipo `RENOVACAO_MP_FALHOU`).
+- Retaguarda: `GET /retaguarda/pagamento-online`, `POST …/conectar { origem }`, `POST …/desconectar { confirmar }` (sem confirmar devolve os pendentes), `PUT …/ativo { ativo }`; retorno público `GET /api/mercadopago/oauth/retorno` (sem a query no log); renovação diária no `server.js`; `/plataforma/alertas` (listar, contagem, resolvido).
+- `PATCH /plataforma/lojas/:id` com `modoEntrega` e `freteGratisPiso` (`SUBIR` | `DESLIGAR`; sem escolha = 409 `FRETE_GRATIS_ABAIXO_DO_PISO`).
+- Campanha: só sem pedido `FINALIZADO` anterior (telefone ou cliente). PDV: taxa digitada em loja `PLATAFORMA` = 422 `TAXA_MANUAL_PROIBIDA`.
+- Telas "Pagamento online" (loja), "Alertas" (plataforma, com contador no menu) e "Entrega" em Lojas, conferidas no Chrome.
+
+**Para as próximas etapas:**
+- Etapa 4: ligar `cancelarPendentesDaLoja` (cancelar no Mercado Pago e expirar os pedidos) ao desconectar; exigir `CAMPANHA_TELEFONE_SECRET` para a API subir quando a reserva da campanha for ligada; canal `APP`; política de privacidade com o hash do telefone guardado depois da exclusão da conta e com o Mercado Pago.
+- Etapa 5: travar a taxa na tela do PDV em loja `PLATAFORMA` (a API já recusa).
+- Melhoria futura: PKCE no OAuth (ligar no aplicativo do Mercado Pago e mandar o `code_verifier`).
+- O retorno do OAuth depende de `taakidelivery.com.br` (raiz) apontar para o Railway; quem usa a retaguarda por `api.taakidelivery.com.br/admin` volta para `https://taakidelivery.com.br/parceiro` (lista fechada, Decisão 11).
+
 
 Objetivo: a loja conecta a própria conta Mercado Pago, o token é renovado sozinho, o ADMIN escolhe o modo de entrega e as pendências pequenas da Etapa 2 são resolvidas. Sem Pix, sem webhook, sem telas do app. Texto revisto em 2026-11-25.
 

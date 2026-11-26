@@ -339,6 +339,12 @@ export function criarHandlers({ config, api, tempoReal, agente, listarImpressora
       return api.requisitar('PATCH', `/equipe/pedidos/${id}/finalizar`, { formaPagamento });
     },
 
+    /** Pedido pago online: finaliza sem forma e sem caixa (a API confere que é online). */
+    'pedidos:finalizarOnline': async (id) => api.requisitar('PATCH', `/equipe/pedidos/${idValido(id, 'pedido')}/finalizar`, {}),
+
+    /** Aceite da loja de um pedido pago online (Etapa 5). */
+    'pedidos:aceitar': async (id) => api.requisitar('PATCH', `/equipe/pedidos/${idValido(id, 'pedido')}/aceitar`),
+
     'pedidos:cancelar': async (id) => api.requisitar('PATCH', `/equipe/pedidos/${idValido(id, 'pedido')}/cancelar`),
 
     'pedidos:reimprimir': async (id) => api.requisitar('POST', `/equipe/pedidos/${idValido(id, 'pedido')}/reimprimir`),

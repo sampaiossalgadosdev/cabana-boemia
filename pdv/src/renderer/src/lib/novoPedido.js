@@ -270,3 +270,9 @@ export function totaisDoPedido(linhas, { taxaBairroCentavos = 0, freteGratis = n
     totalCentavos: base.subtotalCentavos + taxaEntregaCentavos - desconto,
   };
 }
+
+/**
+ * Loja com os entregadores do Taaki (`modoEntrega` PLATAFORMA, do GET /equipe/cardapio): a taxa
+ * de entrega é da plataforma e fica travada na tela (a API recusa taxa digitada: TAXA_MANUAL_PROIBIDA).
+ */
+export const taxaDaPlataforma = (cardapio) => cardapio?.modoEntrega === 'PLATAFORMA';

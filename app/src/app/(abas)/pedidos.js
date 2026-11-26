@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useCliente } from '../../estado/Cliente.js';
 import { useUltimoPedido } from '../../estado/UltimoPedido.js';
 import { AvisosNaTela } from '../../estado/Avisos.js';
@@ -15,13 +15,38 @@ import { TelaSemInternet } from '../../componentes/TelaSemInternet.js';
 import { useEstilos, useTema } from '../../tema/tema.js';
 import { LogoLoja } from '../../componentes/Loja.js';
 import { LOJA_DA_SACOLA_ANTIGA } from '../../logica/lojas.js';
+import { avisoDoPedidoOnline, mensagemDoCancelamento } from '../../logica/pagamento.js';
 
 const ERRO_GENERICO = 'Não foi possível carregar seus pedidos. Confira sua conexão e tente de novo.';
 
-function CartaoPedido({ pedido, onRepetir }) {
+function CartaoPedido({ pedido, onRepetir, onCancelar }) {
   const s = useEstilos(criarEstilos);
   const cancelado = pedido.status === 'CANCELADO';
   const loja = pedido.loja ?? LOJA_DA_SACOLA_ANTIGA;
+  // Pago online (Etapa 5): aguardando a loja aceitar, ou estornado (para onde o dinheiro volta).
+  const aviso = avisoDoPedidoOnline(pedido, formatarPreco);
+  const [cancelando, setCancelando] = useState(false);
+  const [erroCancelar, setErroCancelar] = useState('');
+
+  const pedirCancelamento = () =>
+    Alert.alert('Cancelar pedido?', `A loja ainda não aceitou o pedido nº ${pedido.numeroDia}. O valor pago volta para você pelo Mercado Pago.`, [
+      { text: 'Voltar', style: 'cancel' },
+      {
+        text: 'Cancelar pedido',
+        style: 'destructive',
+        onPress: async () => {
+          setCancelando(true);
+          setErroCancelar('');
+          try {
+            await onCancelar(pedido);
+          } catch (e) {
+            setErroCancelar(mensagemDoCancelamento(e));
+          } finally {
+            setCancelando(false);
+          }
+        },
+      },
+    ]);
   return (
     <View style={[s.cartao, cancelado && s.cancelado]}>
       <View style={s.lojaLinha}>
@@ -35,11 +60,19 @@ function CartaoPedido({ pedido, onRepetir }) {
         <Text style={s.data}>{dataDoPedido(pedido.criadoEm)}</Text>
       </View>
       <Text style={s.itens}>{resumoItens(pedido.itens)}</Text>
+      {aviso && <Text style={aviso.tipo === 'estorno' ? s.avisoEstorno : s.avisoAguardando}>{aviso.texto}</Text>}
+      {pedido.podeCancelar && (
+        <Botao titulo={cancelando ? 'Cancelando…' : 'Cancelar pedido'} variante="texto" carregando={cancelando} onPress={pedirCancelamento} />
+      )}
+      <TextoErro>{erroCancelar}</TextoErro>
       <View style={s.rodapeCartao}>
         <View style={{ flex: 1 }}>
           <Text style={s.total}>{formatarPreco(pedido.totalCentavos)}</Text>
           <View style={s.linha}>
-            <Text style={s.pagamento}>{pedido.formaPagamento ? rotuloPagamento(pedido.formaPagamento) : ''}</Text>
+            <Text style={s.pagamento}>
+              {pedido.formaPagamento ? rotuloPagamento(pedido.formaPagamento) : ''}
+              {pedido.pagamentoOnline ? ' · pago pelo app' : ''}
+            </Text>
             {cancelado && <Text style={s.selo}>Cancelado</Text>}
           </View>
         </View>
@@ -76,6 +109,15 @@ export default function Pedidos() {
       } catch (e) {
         if (e?.status !== 401) setErro(ERRO_GENERICO);
       }
+    },
+    [chamar],
+  );
+
+  /** Cancela pelo app (só pago online sem aceite) e troca o pedido na lista. Erro: o cartão mostra. */
+  const cancelar = useCallback(
+    async (pedido) => {
+      const r = await chamar((token) => api.cancelarPedido(token, pedido.id));
+      setPedidos((atual) => (atual ?? []).map((p) => (p.id === pedido.id ? { ...p, ...r.pedido } : p)));
     },
     [chamar],
   );
@@ -122,7 +164,7 @@ export default function Pedidos() {
           />
         }
         ListEmptyComponent={<Text style={s.vazio}>Você ainda não fez nenhum pedido.</Text>}
-        renderItem={({ item }) => <CartaoPedido pedido={item} onRepetir={repetir} />}
+        renderItem={({ item }) => <CartaoPedido pedido={item} onRepetir={repetir} onCancelar={cancelar} />}
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         ListFooterComponent={
           <View style={{ paddingBottom: 24 }}>
@@ -175,6 +217,8 @@ const criarEstilos = (t) =>
     total: { fontSize: t.fontes.tamanho.medio, fontWeight: t.fontes.peso.forte, color: t.cores.preco },
     linha: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     pagamento: { fontSize: t.fontes.tamanho.pequeno, color: t.cores.textoSuave },
+    avisoAguardando: { fontSize: t.fontes.tamanho.pequeno, color: t.cores.acaoTexto, fontWeight: t.fontes.peso.forte },
+    avisoEstorno: { fontSize: t.fontes.tamanho.pequeno, color: t.cores.texto, backgroundColor: t.cores.avisoFundo, padding: 8, borderRadius: t.raio.pequeno, overflow: 'hidden' },
     selo: {
       fontSize: 11,
       fontWeight: t.fontes.peso.forte,

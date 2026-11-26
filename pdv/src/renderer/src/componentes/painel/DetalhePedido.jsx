@@ -8,7 +8,21 @@ import {
   formatarPreco,
   formatarTelefone,
 } from '../../lib/formatar.js';
-import { STATUS, STATUS_ANDAMENTO, estaAberto, formatarChaveNfce, problemaNaChaveNfce, tituloDoPedido } from '../../lib/painel.js';
+import {
+  STATUS,
+  STATUS_ANDAMENTO,
+  estaAberto,
+  faixaPagoOnline,
+  formatarChaveNfce,
+  lojaPodeCancelar,
+  pagoOnline,
+  precisaAceite,
+  problemaNaChaveNfce,
+  recebeDinheiro,
+  rotuloFinalizar,
+  seloEstorno,
+  tituloDoPedido,
+} from '../../lib/painel.js';
 import { avaliarAgendamento, dataHoraLocal } from '../../lib/novoPedido.js';
 import { diaOperacional } from '../../lib/caixa.js';
 import { textoDistancia } from '@restaurante/shared/cupom';
@@ -17,6 +31,9 @@ import { textoDistancia } from '@restaurante/shared/cupom';
  * Opções do pedido (diálogo): andamento (Em aberto / Em preparo / Saiu para
  * entrega), horário da encomenda, finalizar (forma de pagamento), reimprimir
  * e cancelar; registrar a chave da NFC-e emitida. Mostra os itens e os valores do pedido.
+ * Pago online (Etapa 5): faixa "não cobrar na entrega", Aceitar/Recusar antes do aceite
+ * (recusar estorna o cliente), sem cancelar depois do aceite e finalizar sem forma nem caixa.
+ * Dinheiro com os entregadores do Taaki: o Finalizar vira "Recebi o dinheiro".
  */
 export function DetalhePedido({ pedido, aoFechar, aoAtualizado }) {
   const dialogo = useRef(null);
@@ -34,6 +51,12 @@ export function DetalhePedido({ pedido, aoFechar, aoAtualizado }) {
 
   const aberto = estaAberto(pedido);
   const status = STATUS[pedido.status] ?? { rotulo: pedido.status, classe: 'aberto' };
+  const online = pagoOnline(pedido);
+  const aceite = precisaAceite(pedido);
+  const dinheiro = recebeDinheiro(pedido);
+  const faixa = faixaPagoOnline(pedido);
+  const estorno = seloEstorno(pedido);
+  const podeCancelar = lojaPodeCancelar(pedido);
 
   async function executar(promessa, { fechar = false, mensagem = '' } = {}) {
     setEnviando(true);
@@ -62,6 +85,14 @@ export function DetalhePedido({ pedido, aoFechar, aoAtualizado }) {
   }
 
   function finalizar() {
+    if (online) {
+      executar(pdv.pedidos.finalizarOnline(pedido.id), { fechar: true });
+      return;
+    }
+    if (dinheiro) {
+      executar(pdv.pedidos.finalizar(pedido.id, 'DINHEIRO'), { fechar: true });
+      return;
+    }
     if (!forma) {
       setErro('Escolha a forma de pagamento');
       return;
@@ -97,7 +128,10 @@ export function DetalhePedido({ pedido, aoFechar, aoAtualizado }) {
         <p className={`status-pedido status-pedido--${status.classe}`}>
           {status.rotulo} · {NOME_CANAL[pedido.canal] ?? pedido.canal}
           {pedido.encomenda && ` · para ${formatarDataHora(pedido.agendadoPara)}`}
+          {estorno && <span className="selo selo--estorno">{estorno}</span>}
         </p>
+        {faixa && <p className="faixa-online" role="note">{faixa}</p>}
+        {aceite && <p className="aviso-aceite">Aguardando o aceite da loja. Depois de aceito, só o Taaki cancela.</p>}
         <div className="detalhe-pedido__cliente">
           {pedido.telefone && <span>{formatarTelefone(pedido.telefone)}</span>}
           {pedido.retirarNoBalcao ? (
@@ -163,7 +197,8 @@ export function DetalhePedido({ pedido, aoFechar, aoAtualizado }) {
           <dt>Pagamento</dt>
           <dd>
             {NOME_PAGAMENTO[pedido.formaPagamento] ?? '—'}
-            {pedido.pagoEm ? ' · já pago' : ' · na entrega'}
+            {online ? ' · pago online' : pedido.pagoEm ? ' · já pago' : ' · na entrega'}
+            {online && pedido.pagamentoOnline.valorEstornadoCentavos > 0 && ` · estornado ${formatarPreco(pedido.pagamentoOnline.valorEstornadoCentavos)}`}
             {troco != null && ` · troco p/ ${formatarPreco(pedido.trocoParaCentavos)} (levar ${formatarPreco(troco)})`}
           </dd>
           {pedido.chaveNfce && (
@@ -213,7 +248,11 @@ export function DetalhePedido({ pedido, aoFechar, aoAtualizado }) {
 
         {acao === 'finalizar' && (
           <div className="detalhe-pedido__acao">
-            {pedido.pagoEm ? (
+            {online ? (
+              <p className="texto-suave">Pago online pelo app. Finalizar marca como entregue (não cobrar nada na entrega).</p>
+            ) : dinheiro ? (
+              <p className="texto-suave">Confirme que recebeu {formatarPreco(pedido.totalCentavos)} em dinheiro do entregador.</p>
+            ) : pedido.pagoEm ? (
               <p className="texto-suave">Já pago em {NOME_PAGAMENTO[pedido.formaPagamento]}. Finalizar marca como entregue.</p>
             ) : (
               <fieldset className="finalizar__formas" disabled={enviando}>
@@ -264,19 +303,22 @@ export function DetalhePedido({ pedido, aoFechar, aoAtualizado }) {
         {acao === 'cancelar' && (
           <div className="detalhe-pedido__acao cancelar">
             <p className="cancelar__pergunta">
-              Cancelar o pedido #{pedido.numeroDia}? O estoque volta e sai um cupom de cancelamento.
-              {pedido.pagoEm && ' Ele já foi pago: devolva o valor ao cliente.'}
+              {online
+                ? `Recusar o pedido #${pedido.numeroDia}? O valor volta ao cliente pelo Mercado Pago, o estoque volta e sai um cupom de cancelamento.`
+                : `Cancelar o pedido #${pedido.numeroDia}? O estoque volta e sai um cupom de cancelamento.`}
+              {!online && pedido.pagoEm && ' Ele já foi pago: devolva o valor ao cliente.'}
             </p>
             <div className="finalizar__acoes">
               <button type="button" className="botao botao--contorno" onClick={() => setAcao(null)} disabled={enviando} autoFocus>Não</button>
               <button type="button" className="botao botao--perigo" disabled={enviando}
                 onClick={() => executar(pdv.pedidos.cancelar(pedido.id), { fechar: true })}>
-                {enviando ? 'Cancelando…' : 'Sim, cancelar'}
+                {enviando ? (online ? 'Recusando…' : 'Cancelando…') : online ? 'Sim, recusar' : 'Sim, cancelar'}
               </button>
             </div>
           </div>
         )}
 
+        {aberto && !podeCancelar && !acao && <p className="texto-suave">Para cancelar, fale com o Taaki.</p>}
         {erro && <p className="erro" role="alert">{erro}</p>}
         {aviso && <p className="pedido__reimpressao" role="status">{aviso}</p>}
 
@@ -294,11 +336,22 @@ export function DetalhePedido({ pedido, aoFechar, aoAtualizado }) {
             {aberto && pedido.encomenda && (
               <button type="button" className="botao botao--contorno" onClick={() => setAcao('horario')}>Alterar horário</button>
             )}
-            {aberto && (
+            {aceite && (
+              <button type="button" className="botao botao--contorno" onClick={() => setAcao('cancelar')}>
+                Recusar (o cliente recebe o valor de volta)
+              </button>
+            )}
+            {aberto && !aceite && podeCancelar && (
               <button type="button" className="botao botao--contorno" onClick={() => setAcao('cancelar')}>Cancelar pedido</button>
             )}
-            {aberto && (
-              <button type="button" className="botao" onClick={() => setAcao('finalizar')}>Finalizar</button>
+            {aberto && aceite && (
+              <button type="button" className="botao" disabled={enviando}
+                onClick={() => executar(pdv.pedidos.aceitar(pedido.id), { mensagem: 'Pedido aceito.' })}>
+                Aceitar
+              </button>
+            )}
+            {aberto && !aceite && (
+              <button type="button" className="botao" onClick={() => setAcao('finalizar')}>{rotuloFinalizar(pedido)}</button>
             )}
           </div>
         )}

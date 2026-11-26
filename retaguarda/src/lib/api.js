@@ -156,6 +156,13 @@ export const api = {
       contagem: () => get('/plataforma/alertas/contagem'),
       resolver: (id) => patch(`/plataforma/alertas/${id}/resolvido`),
     },
+    pagamentos: {
+      listar: ({ acao, pedidoId } = {}) =>
+        get(`/plataforma/pagamentos?acao=${acao ? 'sim' : 'nao'}${pedidoId ? `&pedidoId=${pedidoId}` : ''}`),
+      estornar: (pedidoId, dados) => post(`/plataforma/pedidos/${pedidoId}/estornar`, dados),
+      tentarEstorno: (id) => post(`/plataforma/pagamentos/${id}/tentar-estorno`),
+      resolvido: (id, observacao) => post(`/plataforma/pagamentos/${id}/resolvido`, { observacao }),
+    },
     solicitacoes: {
       listar: () => get('/plataforma/solicitacoes-exclusao'),
       atender: (id) => patch(`/plataforma/solicitacoes-exclusao/${id}/atendida`),

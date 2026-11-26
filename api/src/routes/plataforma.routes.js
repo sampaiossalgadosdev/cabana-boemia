@@ -4,6 +4,8 @@ import { autenticar } from '../middlewares/autenticar.js';
 import { exigirPapel } from '../middlewares/exigirPapel.js';
 import * as c from '../controllers/plataforma.controller.js';
 import { criarLimitadorMapa, criarMapaController } from '../controllers/mapa.controller.js';
+import { criarPagamentosController } from '../controllers/pagamentosAdmin.controller.js';
+import { pagamentosPadrao } from '../services/pagamento.service.js';
 
 /**
  * Rotas da plataforma (Taaki Delivery): só ADMIN (o DONO leva 403), nunca em cache.
@@ -13,15 +15,17 @@ import { criarLimitadorMapa, criarMapaController } from '../controllers/mapa.con
  * - Anúncios do carrossel "Patrocinado" do app (registro da veiculação; sem excluir).
  * - Solicitações de exclusão de conta da página pública /excluir-conta (a
  *   plataforma é a controladora dos dados; atendidas à mão pelo ADMIN).
- * - Alertas para o ADMIN (renovação do Mercado Pago que falhou e, nas próximas etapas,
- *   pagamentos que pedem ação).
+ * - Alertas para o ADMIN (renovação do Mercado Pago que falhou, pagamentos que pedem ação).
+ * - Pagamentos online: cancelar com estorno (total ou parcial, motivo obrigatório), estornar
+ *   pedido finalizado e os reembolsos pendentes (tentar de novo, resolvido por fora).
  */
 /** Corpo cru da imagem (até 500 KB; o tipo é conferido pelos bytes no service). */
 export const corpoImagem = () => express.raw({ type: () => true, limit: '520kb' });
 
-/** @param {{ relogio?: () => Date, mapas?: object }} [opcoes] */
-export function criarPlataformaRoutes({ relogio, mapas } = {}) {
+/** @param {{ relogio?: () => Date, mapas?: object, pagamentos?: object }} [opcoes] */
+export function criarPlataformaRoutes({ relogio, mapas, pagamentos = pagamentosPadrao() } = {}) {
   const anuncios = c.criarAnunciosController(relogio);
+  const pag = criarPagamentosController(pagamentos, relogio);
   const mapa = criarMapaController(mapas);
   const r = Router();
   r.use((req, res, next) => {
@@ -48,6 +52,11 @@ export function criarPlataformaRoutes({ relogio, mapas } = {}) {
   r.get('/alertas', assincrono(c.listarAlertas));
   r.get('/alertas/contagem', assincrono(c.contarAlertas));
   r.patch('/alertas/:id/resolvido', assincrono(c.resolverAlerta));
+  // Pagamentos online (Etapa 5): lista, cancelar/estornar e os reembolsos pendentes.
+  r.get('/pagamentos', assincrono(pag.listar));
+  r.post('/pedidos/:id/estornar', assincrono(pag.estornar));
+  r.post('/pagamentos/:id/tentar-estorno', assincrono(pag.tentarDeNovo));
+  r.post('/pagamentos/:id/resolvido', assincrono(pag.resolvidoPorFora));
   r.get('/solicitacoes-exclusao', assincrono(c.listarSolicitacoesExclusao));
   r.patch('/solicitacoes-exclusao/:id/atendida', assincrono(c.marcarSolicitacaoAtendida));
   return r;

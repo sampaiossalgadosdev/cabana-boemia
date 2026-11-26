@@ -231,3 +231,43 @@ describe('cupom.js: mapa da entrega', () => {
     assert.equal(t.includes('Mapa') || t.includes('Distância'), false);
   });
 });
+
+describe('pagamento online (Etapa 5)', () => {
+  const pedidoOnline = {
+    ...pedidoSite,
+    pedido: {
+      ...pedidoSite.pedido,
+      canal: 'APP',
+      formaPagamento: 'PIX',
+      trocoParaCentavos: null,
+      pagamentoOnline: { meio: 'PIX', situacao: 'PAGO', aprovadoEm: null, valorEstornadoCentavos: 0 },
+    },
+  };
+
+  test('pedido pago online: "Pix - PAGO ONLINE", "NÃO COBRAR NA ENTREGA" e sem troco', () => {
+    const texto = cupomParaTexto(montarCupom(pedidoOnline, { colunas: 48 }), 48);
+    assert.match(texto, /Pix - PAGO ONLINE/);
+    assert.match(texto, /NÃO COBRAR NA ENTREGA/);
+    assert.doesNotMatch(texto, /troco/i);
+    assert.doesNotMatch(cupomParaTexto(montarCupom(pedidoSite, { colunas: 48 }), 48), /PAGO ONLINE/);
+  });
+
+  test('resumo do dia: "Pago na entrega", pago online à parte e estornos de entregues', () => {
+    const relatorio = {
+      ...relatorioDia.relatorio,
+      pagoOnline: [
+        { meio: 'PIX', quantidade: 2, totalCentavos: 5000 },
+        { meio: 'CARTAO_ONLINE', quantidade: 0, totalCentavos: 0 },
+      ],
+      estornosDeFinalizados: { quantidade: 1, totalCentavos: 700 },
+    };
+    const texto = cupomParaTexto(montarCupom({ ...relatorioDia, relatorio }, { colunas: 48 }), 48);
+    assert.match(texto, /Pago na entrega/);
+    assert.match(texto, /Pago online \(fora do caixa\)/);
+    assert.match(texto, /Pix online \(2\)\s+R\$ 50,00/);
+    assert.doesNotMatch(texto, /Cartão online/);
+    assert.match(texto, /Estornos de entregues \(1\)\s+R\$ 7,00/);
+    // Sem online no dia: como antes.
+    assert.match(cupomParaTexto(montarCupom(relatorioDia, { colunas: 48 }), 48), /Por forma de pagamento/);
+  });
+});

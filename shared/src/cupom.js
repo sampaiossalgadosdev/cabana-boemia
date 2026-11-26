@@ -22,6 +22,8 @@ export const TIPOS_CUPOM = ['PEDIDO', 'CANCELAMENTO', 'CONTA', 'FECHAMENTO', 'RE
 const FUSO = 'America/Sao_Paulo';
 const NOME_CANAL = { SITE: 'Site', APP: 'App', WHATSAPP: 'WhatsApp', SALAO: 'Salão' };
 const NOME_PAGAMENTO = { PIX: 'Pix', DINHEIRO: 'Dinheiro', DEBITO: 'Débito', CREDITO: 'Crédito' };
+/** Meio do pagamento online (pedido.pagamentoOnline.meio). */
+const NOME_MEIO_ONLINE = { PIX: 'Pix', CARTAO_ONLINE: 'Cartão' };
 
 const dataHora = new Intl.DateTimeFormat('en-US', {
   timeZone: FUSO,
@@ -227,6 +229,13 @@ function blocoTotais(m, pedido) {
 function blocoPagamento(m, pedido) {
   if (!pedido.formaPagamento) return;
   const forma = NOME_PAGAMENTO[pedido.formaPagamento] ?? pedido.formaPagamento;
+  // Pago online pelo app (Etapa 5): o entregador não cobra nada.
+  if (pedido.pagamentoOnline) {
+    const meio = NOME_MEIO_ONLINE[pedido.pagamentoOnline.meio] ?? forma;
+    m.valor('Pagamento', `${meio} - PAGO ONLINE`, { negrito: true });
+    m.texto('NÃO COBRAR NA ENTREGA', { negrito: true });
+    return;
+  }
   // Já pago no balcão ("pago agora"): o entregador não cobra nem leva troco.
   if (pedido.pagoEm) {
     m.valor('Pagamento', `${forma} - JÁ PAGO`, { negrito: true });
@@ -316,9 +325,17 @@ function cupomRelatorioDia(m, trabalho, restaurante) {
   m.valor('Taxas de entrega', formatarDinheiro(r.taxaEntregaCentavos));
   if (r.descontoCentavos > 0) m.valor('Descontos', `-${formatarDinheiro(r.descontoCentavos)}`);
   m.separador();
-  m.texto('Por forma de pagamento', { negrito: true });
+  // Com pago online no dia, as formas abaixo são só as pagas na entrega (Decisão 19).
+  const comOnline = r.pagoOnline?.some((p) => p.quantidade > 0);
+  m.texto(comOnline ? 'Pago na entrega' : 'Por forma de pagamento', { negrito: true });
   for (const f of r.porFormaPagamento) {
     m.valor(`${NOME_PAGAMENTO[f.forma] ?? f.forma} (${f.quantidade})`, formatarDinheiro(f.totalCentavos));
+  }
+  if (comOnline) {
+    m.texto('Pago online (fora do caixa)', { negrito: true });
+    for (const p of r.pagoOnline) {
+      if (p.quantidade) m.valor(`${NOME_MEIO_ONLINE[p.meio] ?? p.meio} online (${p.quantidade})`, formatarDinheiro(p.totalCentavos));
+    }
   }
   m.texto('Por canal', { negrito: true });
   for (const c of r.porCanal) {
@@ -334,6 +351,9 @@ function cupomRelatorioDia(m, trabalho, restaurante) {
   m.separador();
   m.valor(`Pedidos cancelados (${r.cancelados.quantidade})`, formatarDinheiro(r.cancelados.totalCentavos));
   m.valor(`Itens removidos (${r.itensRemovidos.quantidade})`, formatarDinheiro(r.itensRemovidos.totalCentavos));
+  if (r.estornosDeFinalizados?.quantidade) {
+    m.valor(`Estornos de entregues (${r.estornosDeFinalizados.quantidade})`, formatarDinheiro(r.estornosDeFinalizados.totalCentavos));
+  }
   m.separador();
   m.centro(`Emitido em ${formatarDataHora(trabalho.criadoEm)}`);
   return m.linhas;

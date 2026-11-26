@@ -289,8 +289,12 @@ export function Finalizacao({ onEditarTelefone }) {
       const pix = interpretarErroDoPix(e);
       if (pix) {
         // O pedido anterior foi encerrado (Pix não gerado ou expirado): o próximo é outro.
-        if (pix.acao === 'novaChave') chave.current = novaChavePedido();
-        if (pix.acao === 'email') setPedirEmail(true);
+        if (pix.acao === 'novaChave' || pix.novaChave) chave.current = novaChavePedido();
+        if (pix.acao === 'email') {
+          // E-mail recusado pelo Mercado Pago: o campo volta preenchido para o cliente corrigir.
+          if (pix.novaChave) setEmailTexto(cliente.email ?? '');
+          setPedirEmail(true);
+        }
         if (pix.acao === 'formas') setVersaoPrevia((n) => n + 1);
         return setErro(pix.mensagem);
       }

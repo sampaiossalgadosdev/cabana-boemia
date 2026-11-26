@@ -13,7 +13,7 @@ import * as equipeRepo from '../repositories/equipe.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoService from './endereco.service.js';
 import { bairroParaLoja } from './bairro.service.js';
-import { OPCOES_TRANSACAO, pedidoDaEquipe, STATUS_ABERTOS, STATUS_FORA_DO_PDV, ehDaLoja } from './pedido.service.js';
+import { OPCOES_TRANSACAO, pedidoDaEquipe, pagamentoOnlineDoPedido, STATUS_ABERTOS, STATUS_FORA_DO_PDV, ehDaLoja } from './pedido.service.js';
 import { exigirCaixaAberto } from './caixa.service.js';
 import { usarCampanha } from './campanha.service.js';
 import { desfazVerificacaoSeMudou } from './cliente.service.js';
@@ -53,17 +53,33 @@ export async function listarPedidosDoDia(lojaId, { dataRef, canais, somenteAbert
  */
 export async function finalizarPedido(lojaId, id, { formaPagamento }, agora = new Date()) {
   // De outra loja = 404 antes de tudo (a loja do pedido nunca muda; o caixa é travado depois).
-  if (!ehDaLoja(await pedidoRepo.buscarStatus(id), lojaId)) {
+  const inicial = await pedidoRepo.buscarStatus(id);
+  if (!ehDaLoja(inicial, lojaId)) {
     throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+  }
+  // Pago online (Decisão 9): sem caixa e sem escolher forma; o dinheiro não passa pela gaveta.
+  // O meio online nunca muda depois da criação, então dá para decidir antes de travar.
+  const online = Boolean(inicial.meioOnline);
+  if (!online && !formaPagamento) {
+    throw new ErroHttp(400, 'Escolha a forma de pagamento', {
+      codigo: 'VALIDACAO',
+      detalhes: [{ campo: 'formaPagamento', mensagem: 'Escolha a forma de pagamento' }],
+    });
   }
   const pedido = await prisma.$transaction(async (tx) => {
     // Caixa primeiro (mesma ordem de travas do fechamento de comanda): caixa → pedido.
-    const caixaId = await exigirCaixaAberto(lojaId, tx);
+    const caixaId = online ? null : await exigirCaixaAberto(lojaId, tx);
     const atual = await pedidoRepo.buscarPorId(id, tx);
     if (!ehDaLoja(atual, lojaId)) throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
-    // Já pago ("pago agora" no PDV): vale a forma em que foi pago; a informada é ignorada.
+    // Estornado (por fora) ou contestado: avisa antes de entregar; parcial ainda vale (item faltando).
+    if (online && !['PAGO', 'ESTORNADO_PARCIAL'].includes(pagamentoOnlineDoPedido(atual)?.situacao)) {
+      throw new ErroHttp(409, 'O pagamento online deste pedido foi estornado ou contestado. Fale com o Taaki antes de entregar.', {
+        codigo: 'PAGAMENTO_ESTORNADO',
+      });
+    }
+    // Já pago ("pago agora" no PDV ou online): vale a forma em que foi pago; a informada é ignorada.
     // O caixa do pagamento é o aberto agora (com pedido aberto o caixa não fecha).
-    const forma = atual.pagoEm ? atual.formaPagamento : formaPagamento;
+    const forma = atual.pagoEm || online ? atual.formaPagamento : formaPagamento;
 
     const count = await pedidoRepo.finalizarSeAberto(
       id,
@@ -256,6 +272,8 @@ export async function cardapioDaEquipe(lojaId, { turnoId } = {}, agora = new Dat
     turnos: turnos.map((t) => ({ id: t.id, nome: t.nome })),
     // Prévia do delivery (a taxa oficial é a da API): null = frete grátis desligado.
     freteGratis: freteGratisDaConfig(config, { canal: 'WHATSAPP' }),
+    // Entregadores do Taaki: a taxa é da plataforma e o PDV não deixa digitar outra (a API recusa).
+    modoEntrega: config.modoEntrega ?? 'PROPRIO',
   };
   if (!turno) return { ...base, categorias: [], porKg: [] };
 

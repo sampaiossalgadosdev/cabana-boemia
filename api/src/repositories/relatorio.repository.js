@@ -15,12 +15,39 @@ export function resumo(lojaId, inicio, fim, db = prisma) {
   });
 }
 
+/** Formas pagas NA ENTREGA (o pago online fica à parte, Decisão 19). */
 export function porFormaPagamento(lojaId, inicio, fim, db = prisma) {
   return db.pedido.groupBy({
     by: ['formaPagamento'],
-    where: finalizadosEntre(lojaId, inicio, fim),
+    where: { ...finalizadosEntre(lojaId, inicio, fim), meioOnline: null },
     _count: { _all: true },
     _sum: { totalCentavos: true },
+  });
+}
+
+/** Pago online (Pix e cartão pelo app), por meio. */
+export function porMeioOnline(lojaId, inicio, fim, db = prisma) {
+  return db.pedido.groupBy({
+    by: ['meioOnline'],
+    where: { ...finalizadosEntre(lojaId, inicio, fim), meioOnline: { not: null } },
+    _count: { _all: true },
+    _sum: { totalCentavos: true },
+  });
+}
+
+/**
+ * Estornos concluídos no intervalo de pedidos FINALIZADOS (o ADMIN estornou depois da entrega,
+ * Decisão 2 da Etapa 5): à parte, fora dos totais. O pedido cancelado já está nos cancelados.
+ */
+export function estornosDeFinalizados(lojaId, inicio, fim, db = prisma) {
+  return db.estorno.aggregate({
+    where: {
+      status: { in: ['CONCLUIDO', 'RESOLVIDO_POR_FORA'] },
+      concluidoEm: { gte: inicio, lt: fim },
+      pagamento: { pedido: { lojaId, status: 'FINALIZADO' } },
+    },
+    _count: { _all: true },
+    _sum: { valorCentavos: true },
   });
 }
 

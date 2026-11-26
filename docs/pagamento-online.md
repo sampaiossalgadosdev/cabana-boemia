@@ -211,30 +211,79 @@ Testes (Mercado Pago sempre falso): os listados no pedido da etapa (origem APP/S
 Fora: estorno, cartão, livro-razão e fechamento, trava da taxa na tela do PDV (Etapa 5), limpeza do domínio antigo.
 
 
-### Etapa 5 — Cancelamento, estorno e exibição no PDV
+### Etapa 5 — Cancelamento, estorno, PDV e relatórios (CONCLUÍDA em 2026-11-26, branch `feat/pagamento-online`, sem merge)
+
+**Feito** (vale isto e as Decisões da Etapa 5 onde o plano abaixo divergir):
+- Migrations `20261128120000_pagamento_online_estorno_enums` (`StatusPagamento.CONTESTADO`; alertas `REEMBOLSO_FALHOU`, `CHARGEBACK`, `ESTORNO_EXTERNO`, `PEDIDO_SEM_ACEITE`) e `20261128120100_pagamento_online_estorno` (`Pedido.meioOnline` preenchido nos pedidos já criados, `Pedido.aceitoEm` com CHECK só online, tabela `Estorno`), aplicadas no banco de dev (`migrate diff` sem diferença).
+- `mercadoPago.estornar` (total sem `amount`, parcial com `amount`), `valorReembolsadoCentavos` na consulta e `erroNoEmailDoPagador`.
+- `pagamento.service`: `cancelarPelaLoja` (recusa antes do aceite; depois = 409 `CANCELAR_COM_TAAKI`), `cancelarPeloCliente` (`POST /cliente/pedidos/:id/cancelar`; depois do aceite = 409 `PEDIDO_JA_ACEITO`), `estornarPeloAdmin` (`POST /plataforma/pedidos/:id/estornar { valorCentavos?, motivo }`: aberto = cancela e estorna; encerrado = só estorna), `estornarPagamentoAtrasado` (A_ESTORNAR, também na rotina), `tentarEstornoDeNovo` (consulta o Mercado Pago antes; chave nova), `resolverEstornoPorFora`, `listarParaAdmin` (`GET /plataforma/pagamentos?acao=sim|nao&pedidoId`), `alertarSemAceite` (rotina, 10 min). O pedido é cancelado e o pagamento vai a `REEMBOLSO_PENDENTE` numa transação; o Mercado Pago é chamado depois do commit.
+- Webhook: `refunded`/valor reembolsado conclui o nosso estorno em aberto ou registra o externo (alerta `ESTORNO_EXTERNO` com o pedido aberto); `charged_back`/`in_mediation` = `CONTESTADO` + `CHARGEBACK`. Valor e comissão só são conferidos na aprovação (um estorno parcial pode mudar a comissão).
+- Aceite: `PATCH /equipe/pedidos/:id/aceitar` e Em preparo/Saiu para entrega também aceitam. Finalizar pago online sem caixa e sem forma (estornado ou contestado = 409 `PAGAMENTO_ESTORNADO`). Cancelamento comum de pedido pago online = 409 `CANCELAR_COM_ESTORNO` (só pelo serviço de pagamentos).
+- `pedidoPublico` ganhou `pagamentoOnline` (`{ meio, situacao, aprovadoEm, valorEstornadoCentavos }`), `aceitoEm`, `podeCancelar`; `pedidoDaEquipe` ganhou `entregaPlataforma`; `/equipe/cardapio` ganhou `modoEntrega`.
+- Relatório: `porFormaPagamento` só as pagas na entrega, `pagoOnline` (PIX, CARTAO_ONLINE) e `estornosDeFinalizados` à parte. Cupom: "Pix - PAGO ONLINE" + "NÃO COBRAR NA ENTREGA"; resumo do dia com "Pago na entrega"/"Pago online (fora do caixa)".
+- PDV 0.3.3: faixa "PAGO ONLINE (Pix) — não cobrar na entrega", Aceitar / Recusar, "Para cancelar, fale com o Taaki", destaque e toque extra aos 5 min sem aceite, "Recebi o dinheiro", taxa travada em loja `PLATAFORMA`, selos ESTORNADO / ESTORNO PENDENTE / CONTESTADO.
+- Retaguarda: tela da plataforma "Pagamentos online" (`TelaPagamentosAdmin.jsx`), alertas de pagamento com o botão para ela, relatório com "Pago online".
+- App: e-mail recusado (`EMAIL_RECUSADO_PAGAMENTO`) volta ao campo do e-mail preenchido, com chave nova; aba Pedidos com "Pago. Aguardando a loja aceitar.", "Cancelar pedido" e o aviso do estorno (Pix na conta, cartão na fatura).
+
+**Pendências**:
+- Recusa automática do pedido sem aceite (Decisão 7): só o alerta por enquanto.
+- Conferir no teste real: resposta do `POST /refunds` (status `approved` direto ou `in_process` no Pix), `transaction_amount_refunded` na consulta e as notificações de estorno e de chargeback (tópico `payment` com `status`; o tópico próprio `chargebacks` não é tratado).
+- O alerta `REEMBOLSO_FALHOU` só é marcado como resolvido quando o ADMIN age (tentar de novo/resolvido por fora); concluído pelo webhook, o ADMIN marca à mão.
+- Etapa 6: lançamentos no livro-razão do estorno e do "Recebi o dinheiro".
+- PDV 0.3.3 precisa ser reinstalado nas lojas (não testado no Electron real nesta etapa); app não testado em aparelho.
+
+Texto do plano (escrito ao começar a etapa):
+
+Texto revisto em 2026-11-26 ao começar a etapa (vale sobre o rascunho antigo; valem as Decisões, em especial a 10: estorno recusado = pedido `CANCELADO` + pagamento `REEMBOLSO_PENDENTE`, sem retentativa; o rascunho antigo dizia 502 com o pedido aberto). Respostas às perguntas desta etapa vão em "Decisões da Etapa 5".
+
+Hoje (gap): o PDV cancela um pedido pago por Pix como se fosse na entrega (estoque e campanha voltam, o dinheiro fica com a loja); o pago online finaliza pedindo caixa e forma e entra no caixa como "Pix"; o relatório não separa online; o `A_ESTORNAR` só gera alerta.
+
+Banco (migrations só aditivas; enum em migration própria):
+- `StatusPagamento` + `CONTESTADO` (chargeback/mediação); `TipoAlerta` + `REEMBOLSO_FALHOU`, `CHARGEBACK`, `ESTORNO_EXTERNO`.
+- `Pedido.meioOnline` (`PIX` | `CARTAO_ONLINE`, nulo = na entrega), gravado na criação e preenchido nos pedidos já criados a partir do `Pagamento`; `Pedido.aceitoEm` (aceite da loja; pergunta 1).
+- `Estorno` (um por tentativa): `pagamentoId`, `valorCentavos`, `motivo`, `origem` (`AUTOMATICO` | `ADMIN` | `MERCADO_PAGO`), `status` (`PROCESSANDO` | `CONCLUIDO` | `FALHOU` | `RESOLVIDO_POR_FORA`), `idempotencyKey` única, `mpRefundId`, `erro` (código + detalhe limpo), `usuarioId`, `observacao`, datas. Guarda o motivo do ADMIN e o histórico das tentativas manuais.
 
 API:
-- `cancelarPedido` em pedido pago online: estorno total no Mercado Pago (`POST /v1/payments/:id/refunds`, token da loja, `X-Idempotency-Key`) **antes** de cancelar; estorno recusado = 502 `ESTORNO_FALHOU` e o pedido continua aberto (pergunta 10). O que acontece com a comissão no estorno fica registrado conforme o retorno do Mercado Pago.
-- Webhook trata `refunded`, `charged_back` e `in_mediation` (registra e avisa a equipe; sem automação além disso).
-- Finalizar pedido pago online: não pede forma nem caixa (pergunta 9); `caixaId` fica nulo e o caixa do balcão não muda.
-- Dinheiro na entrega com entregador da plataforma: o "Finalizar" do PDV vira "Recebi o dinheiro" e gera o débito da taxa no livro-razão (etapa 6; aqui só o registro no pedido).
-- `pedidoDaEquipe` e a fila de impressão ganham `modoEntrega`, `pagoOnline`, `meioOnline`.
-- Relatório do dia e caixa: pagamento online separado de "Pix/crédito na entrega" (pergunta 19).
-- `shared/src/cupom.js`: "Pix - PAGO ONLINE" / "Crédito - PAGO ONLINE", sem troco; "Entrega: Taaki" quando for da plataforma.
+- `mercadoPago.estornar(token, paymentId, { valorCentavos?, idempotencyKey })` → `POST /v1/payments/{id}/refunds` (sem valor = total). `pagamentoNormalizado` ganha `valorReembolsadoCentavos` (`transaction_amount_refunded`).
+- `services/estorno.service.js`: numa transação, pedido `CANCELADO` (condicionado), estoque e campanha de volta, cupom de CANCELAMENTO, pagamento `REEMBOLSO_PENDENTE` e `Estorno PROCESSANDO`; depois do commit, `estornar`: deu certo = `REEMBOLSADO` (ou `REEMBOLSO_PARCIAL`) e `Estorno CONCLUIDO`; falhou = continua `REEMBOLSO_PENDENTE`, `Estorno FALHOU` e alerta `REEMBOLSO_FALHOU`. Nenhuma retentativa automática. Se o processo cair no meio, fica `REEMBOLSO_PENDENTE` (visível para o ADMIN).
+- **Recusa da loja** = cancelar no PDV um pedido pago online ainda não aceito → estorno total automático.
+- **Cancelamento pelo cliente** antes do aceite: `POST /cliente/pedidos/:id/cancelar` (só o dono, só pago online, só sem aceite; depois do aceite = 409 `PEDIDO_JA_ACEITO`) → estorno total automático.
+- **Depois do aceite**: o PDV não cancela pedido pago online (409 `CANCELAR_COM_TAAKI`); só o ADMIN: `POST /plataforma/pedidos/:id/cancelar { valorCentavos?, motivo }` (motivo obrigatório; sem valor = total; parcial = `REEMBOLSO_PARCIAL`).
+- **`A_ESTORNAR`**: `estornarPagamentoAtrasado` chama o mesmo estorno total (pedido continua `EXPIRADO`).
+- **Reembolsos pendentes (ADMIN)**: `GET /plataforma/reembolsos` (pendentes e últimos resolvidos), `POST /plataforma/reembolsos/:pagamentoId/tentar` (consulta o Mercado Pago antes: já reembolsado lá = só marca; senão nova tentativa com chave nova), `POST /plataforma/reembolsos/:pagamentoId/resolvido { observacao }` (resolvido por fora).
+- **Webhook**: `refunded` = `REEMBOLSADO`; `approved` com parte reembolsada = `REEMBOLSO_PARCIAL`; `charged_back`/`in_mediation` = `CONTESTADO` + alerta `CHARGEBACK`. Estorno que chega pelo Mercado Pago num pedido ainda aberto (a loja estornou direto lá) = alerta `ESTORNO_EXTERNO` (pergunta 5). Transições só para frente.
+- **Finalizar pago online**: sem caixa e sem forma (`caixaId` nulo, forma continua a da compra).
+- `pedidoDaEquipe` e a fila de impressão ganham `meioOnline`, `aceitoEm`, `situacaoPagamento` (`ESTORNADO` | `ESTORNO_PENDENTE` | …) e `modoEntrega`; `GET /equipe/loja` ganha `modoEntrega`. `pedidoPublico` ganha `meioOnline`, `situacaoPagamento` e `podeCancelar` (app).
+- **Pix recusado pelo e-mail do pagador**: quando o `message`/`cause` da criação aponta o e-mail, 422 `EMAIL_RECUSADO_PAGAMENTO` (pedido `EXPIRADO` como hoje); os outros erros continuam 502 `PAGAMENTO_FALHOU`.
+- **Relatório do dia**: "Pago online" (Pix online, Cartão online) separado das formas pagas na entrega; `EXPIRADO` fora dos cancelados. Caixa: pago online nunca entra (sem `caixaId`). Cupom do relatório idem; cupom do pedido "Pix - PAGO ONLINE" sem troco.
 
-PDV:
-- `lib/painel.js` e `LinhaPedido.jsx`: selo "Pago online · Pix"; filtro não muda (aguardando pagamento nunca chega).
-- `DetalhePedido.jsx`: finalizar sem escolher forma; cancelar com o aviso "o valor será devolvido ao cliente pelo Mercado Pago"; erro de estorno mostra a mensagem.
-- Snapshot de cupom novo em `shared/test`.
+PDV (0.3.3, precisa reinstalar):
+- Faixa "PAGO ONLINE (Pix) — não cobrar na entrega" na linha e no detalhe; finalizar sem escolher forma e sem caixa.
+- Pago online sem aceite: "Aceitar" e "Recusar (estorna o cliente)"; aceito: sem cancelar ("Para cancelar, fale com o Taaki").
+- Dinheiro em loja `PLATAFORMA`: o botão "Finalizar" vira "Recebi o dinheiro" (mesma lógica).
+- Loja `PLATAFORMA`: taxa de entrega travada no novo pedido.
+- Cancelado com estorno: "ESTORNADO" (ou "ESTORNO PENDENTE").
 
-Testes: estorno total, estorno falhou (pedido continua), cancelamento concorrente com finalizar, finalizar sem caixa, cupom, relatório; PDV `test/painel.test.js`.
+Retaguarda: tela da plataforma "Pagamentos online" (ADMIN): busca do pedido (loja + nº do dia ou id), cancelar com estorno total/parcial e motivo, e a seção "Reembolsos pendentes" com "Tentar de novo" e "Resolvido por fora" (observação). Relatório do dia com o bloco "Pago online".
+
+App: mensagens do pedido recusado/cancelado com estorno ("O valor do Pix volta para a sua conta"; cartão: "volta na fatura do cartão"), botão "Cancelar pedido" enquanto a loja não aceitou (pergunta 6) e o e-mail recusado ("O Mercado Pago não aceitou este e-mail para pagamento. Confira o e-mail no seu cadastro e tente de novo." levando ao campo do e-mail).
+
+Testes (Mercado Pago sempre falso): e-mail recusado × erro genérico; recusa com estorno; cancelamento pelo cliente antes do aceite; bloqueio depois do aceite (cliente e PDV); estorno parcial pelo ADMIN; `A_ESTORNAR` processado; estorno recusado = `REEMBOLSO_PENDENTE` sem retentativa; tentar de novo e resolvido por fora; idempotência (chave por tentativa, cancelar duas vezes); estoque e campanha devolvidos; chargeback com alerta; finalizar pago online sem caixa; "Recebi o dinheiro" só em dinheiro de loja `PLATAFORMA`; taxa travada em `PLATAFORMA`; relatório com online separado e expirado fora dos cancelados; módulo único.
+
+Fora: livro-razão e fechamento (Etapa 6), cartão (Etapa 7), SMS, mapas.
 
 Commits previstos:
-- `feat(api): cancelar pedido pago online com estorno no Mercado Pago`
-- `feat(api): finalizar pedido pago online sem caixa e sem trocar a forma`
-- `feat(shared): cupom com pagamento online e entrega da plataforma`
-- `feat(pdv): selo de pago online e cancelamento com estorno`
-- `feat(api): relatório do dia com pagamento online separado`
+- `feat(api): migrations da etapa 5 (estorno, aceite, meio online, contestação)`
+- `feat(api): estorno no módulo do Mercado Pago`
+- `feat(api): recusa, cancelamento pelo cliente e pelo ADMIN com estorno`
+- `feat(api): reembolsos pendentes, A_ESTORNAR e estornos/contestações do webhook`
+- `feat(api): finalizar pago online sem caixa e relatório com pago online separado`
+- `feat(api): e-mail recusado pelo Mercado Pago com mensagem própria`
+- `feat(shared): cupom com pagamento online`
+- `feat(pdv): pago online, aceite, recusa, "Recebi o dinheiro" e taxa travada (0.3.3)`
+- `feat(retaguarda): pagamentos online e reembolsos pendentes do ADMIN; relatório`
+- `feat(app): cancelar antes do aceite, estorno e e-mail recusado`
+- `docs: etapa 5 do pagamento online`
 
 ### Etapa 6 — Livro-razão da loja e fechamento semanal
 
@@ -386,3 +435,14 @@ Respostas às perguntas da Etapa 3:
 8. **`notification_url`**: origem do `MP_REDIRECT_URI` + `/api/mercadopago/webhook`.
 9. **Estoque e sacola**: estoque baixa na criação do Pix e volta se expirar; a sacola só é limpa na aprovação.
 10. **Política**: rascunho em `docs/rascunho-privacidade-pagamento.md`, sem tocar na página nem na versão.
+
+### Decisões da Etapa 5 (2026-11-26)
+
+0. **Teste real da Etapa 4**: foi um sucesso (Pix aprovado na conta de teste, pedido chegou ao PDV). O erro do teste anterior foi o Mercado Pago **recusar o e-mail do pagador** (visto no `message`/`cause` registrado pelo `fix/pix-log-erro-mp`). Por isso, quando a recusa da criação do Pix aponta o e-mail, o app mostra "O Mercado Pago não aceitou este e-mail para pagamento. Confira o e-mail no seu cadastro e tente de novo." e leva o cliente a corrigir o e-mail; os outros erros continuam com a mensagem genérica.
+1. **Aceite da loja** (só pedido pago online; o pago na entrega continua como hoje): o pedido chega ao PDV com "Aceitar" e "Recusar (o cliente recebe o valor de volta)". Mudar para Em preparo ou Saiu para entrega também conta como aceite. Depois do aceite o PDV não cancela e mostra "Para cancelar, fale com o Taaki". A impressão e o som continuam na chegada, como hoje.
+2. **ADMIN**: pedido aberto (aceito ou não) = cancela com estorno total ou parcial e o estoque volta. Pedido finalizado = estorno total ou parcial **sem cancelar** (continua `FINALIZADO`, o estoque não volta, o relatório mostra o valor estornado à parte). Motivo obrigatório nos dois casos.
+3. **Estoque** no cancelamento pelo ADMIN: volta sempre, como no cancelamento de hoje.
+4. **Tela própria "Pagamentos online"** na plataforma (ADMIN), com os alertas de pagamento levando até ela (inclusive os reembolsos pendentes).
+5. **Estorno feito direto no Mercado Pago** com o pedido aberto: atualiza o pagamento, alerta o ADMIN e o PDV mostra "ESTORNADO"; o pedido não é cancelado sozinho.
+6. **App**: "Cancelar pedido" só no pedido pago online ainda não aceito, com "Aguardando a loja aceitar".
+7. **Pedido sem aceite**: sem recusa automática nesta etapa (**pendência**: recusa automática). Aos **5 minutos** sem aceite o PDV toca o alerta de novo e destaca o pedido; aos **10 minutos**, alerta `PEDIDO_SEM_ACEITE` para o ADMIN ligar para a loja; o cliente pode cancelar pelo app enquanto não for aceito.

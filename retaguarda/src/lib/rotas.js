@@ -22,6 +22,7 @@ export const TELAS_PLATAFORMA = [
   { caminho: 'anuncios', titulo: 'Anúncios' },
   { caminho: 'exclusoes', titulo: 'Exclusão de contas' },
   { caminho: 'alertas', titulo: 'Alertas' },
+  { caminho: 'pagamentos', titulo: 'Pagamentos online' },
 ];
 
 /** Todas (para reconhecer o caminho). */

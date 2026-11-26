@@ -39,6 +39,7 @@ import { TelaExclusoes } from './telas/TelaExclusoes.jsx';
 import { TelaAnuncios } from './telas/TelaAnuncios.jsx';
 import { TelaPagamentoOnline } from './telas/TelaPagamentoOnline.jsx';
 import { TelaAlertas } from './telas/TelaAlertas.jsx';
+import { TelaPagamentosAdmin } from './telas/TelaPagamentosAdmin.jsx';
 
 const ICONES = {
   'cardapio-do-dia': IconeCardapioDia,
@@ -57,6 +58,7 @@ const ICONES = {
   exclusoes: IconeLixo,
   'pagamento-online': IconeCartao,
   alertas: IconeSino,
+  pagamentos: IconeCartao,
 };
 
 const COMPONENTES = {
@@ -76,6 +78,7 @@ const COMPONENTES = {
   exclusoes: TelaExclusoes,
   'pagamento-online': TelaPagamentoOnline,
   alertas: TelaAlertas,
+  pagamentos: TelaPagamentosAdmin,
 };
 
 export function App() {

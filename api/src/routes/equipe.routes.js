@@ -4,14 +4,16 @@ import { autenticar } from '../middlewares/autenticar.js';
 import { exigirPapel } from '../middlewares/exigirPapel.js';
 import { lojaDaEquipe } from '../middlewares/loja.js';
 import { criarEquipeController } from '../controllers/equipe.controller.js';
+import { pagamentosPadrao } from '../services/pagamento.service.js';
 
 /**
  * Rotas do PDV (DONO e ATENDENTE; ADMIN passa como DONO), sempre na loja do
  * usuário (`req.lojaId`). Dados do dia: nunca em cache.
- * @param {{ relogio?: () => Date }} [opcoes]
+ * @param {{ relogio?: () => Date, mapas?: object, pagamentos?: object }} [opcoes]
+ *   `pagamentos`: cancelar pedido pago online com estorno (padrão: o do ambiente).
  */
-export function criarEquipeRoutes({ relogio, mapas } = {}) {
-  const c = criarEquipeController(relogio, mapas);
+export function criarEquipeRoutes({ relogio, mapas, pagamentos = pagamentosPadrao() } = {}) {
+  const c = criarEquipeController(relogio, mapas, pagamentos);
   const r = Router();
   r.use((req, res, next) => {
     res.set('Cache-Control', 'no-store');
@@ -25,6 +27,7 @@ export function criarEquipeRoutes({ relogio, mapas } = {}) {
   r.patch('/pedidos/:id/finalizar', assincrono(c.finalizarPedido));
   r.patch('/pedidos/:id/cancelar', assincrono(c.cancelarPedido));
   r.patch('/pedidos/:id/status', assincrono(c.alterarStatus));
+  r.patch('/pedidos/:id/aceitar', assincrono(c.aceitarPedido));
   r.patch('/pedidos/:id/agendamento', assincrono(c.alterarAgendamento));
   r.post('/pedidos/:id/reimprimir', assincrono(c.reimprimirPedido));
   r.patch('/pedidos/:id/nfce', assincrono(c.definirNfce));

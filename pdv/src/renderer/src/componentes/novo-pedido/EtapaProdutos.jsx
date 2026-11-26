@@ -8,7 +8,7 @@ import {
   lerReais,
   removerLinha,
 } from '../../lib/lancamento.js';
-import { adicionarQuantidade, buscarProdutos, definirQuantidade, lerQuantidade } from '../../lib/novoPedido.js';
+import { adicionarQuantidade, buscarProdutos, definirQuantidade, lerQuantidade, taxaDaPlataforma } from '../../lib/novoPedido.js';
 import { Destaque } from '../Destaque.jsx';
 import { IconeLupa, IconeSeta, IconeTeclado, IconeTrocarCliente, IconeVassoura } from '../Icones.jsx';
 
@@ -281,6 +281,7 @@ function EntradaProduto({ categorias, aoAdicionar }) {
 
 /** Lado direito: cliente, tempo, itens editáveis, taxa, total e ações. */
 function ResumoPedido({
+  cardapio,
   linhas,
   aoMudarLinhas,
   produtosPorId,
@@ -303,6 +304,8 @@ function ResumoPedido({
   const [editando, setEditando] = useState(null); // chave da linha aberta
   const [confirmarLimpar, setConfirmarLimpar] = useState(false);
   const [painel, setPainel] = useState(null); // null | 'taxa' | 'desconto' | 'obs'
+  // Loja com os entregadores do Taaki: a taxa é da plataforma (a API recusa taxa digitada).
+  const taxaTravada = taxaDaPlataforma(cardapio);
   const [textoValor, setTextoValor] = useState('');
   const [erroValor, setErroValor] = useState('');
 
@@ -408,6 +411,10 @@ function ResumoPedido({
         </div>
         {retirarNoBalcao ? (
           <div className="faixa faixa--taxa">Retirada no balcão · sem taxa</div>
+        ) : taxaTravada ? (
+          <div className="faixa faixa--taxa" title="A taxa é dos entregadores do Taaki e não pode ser mudada aqui">
+            Taxa de entrega: {t.taxaEntregaCentavos === 0 ? 'Grátis' : formatarPreco(t.taxaEntregaCentavos)} · entregadores do Taaki
+          </div>
         ) : (
           <button type="button" className="faixa faixa--taxa" onClick={() => abrirValor('taxa', t.taxaEntregaCentavos)}>
             Taxa de entrega: {formatarPreco(t.taxaEntregaCentavos)}

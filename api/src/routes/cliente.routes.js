@@ -74,6 +74,7 @@ export function criarClienteRoutes({
   r.post('/pedidos', exigirTelefoneCliente, assincrono(c.criarPedido));
   r.post('/pedidos/previa', exigirTelefoneCliente, assincrono(c.previaPedido));
   r.get('/pedidos/:id/pagamento', assincrono(c.situacaoPagamento));
+  r.post('/pedidos/:id/cancelar', assincrono(c.cancelarPedido));
   r.get('/pedidos', assincrono(c.listarPedidos));
   r.get('/pedidos/ultimo', assincrono(c.ultimoPedido));
   return r;

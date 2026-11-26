@@ -14,11 +14,12 @@
  *
  * Nunca registra token, QR nem dado do pagador em log (só ids, status e códigos).
  */
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { ErroHttp } from '../lib/erros.js';
 import { decifrar, chaveDoAmbiente } from '../lib/cifra.js';
-import { criarClienteMercadoPago, validarAssinaturaWebhook } from '../lib/mercadoPago.js';
+import { criarClienteMercadoPago, erroNoEmailDoPagador, ErroMercadoPago, validarAssinaturaWebhook } from '../lib/mercadoPago.js';
 import { faltasParaConectar, segredoDoWebhook } from '../lib/pagamentoOnline.js';
 import { diaOperacional, paraCampoData } from '../lib/fuso.js';
 import { emitirParaEquipe } from '../lib/eventos.js';
@@ -26,7 +27,18 @@ import { formatarDinheiro } from '@restaurante/shared/cupom';
 import { horaViradaDe } from './diaOperacional.service.js';
 import { usarCampanha, liberarCampanha } from './campanha.service.js';
 import { alertarUmaVez, criarAlerta } from './alerta.service.js';
-import { estornarVendas, pedidoDaEquipe, pedidoPublico, OPCOES_TRANSACAO } from './pedido.service.js';
+import {
+  avisarCancelamento,
+  cancelarNaTransacao,
+  cancelarPedido,
+  ehDaLoja,
+  estornarVendas,
+  pedidoDaEquipe,
+  pedidoPublico,
+  OPCOES_TRANSACAO,
+  STATUS_ABERTOS,
+  STATUS_FORA_DO_PDV,
+} from './pedido.service.js';
 import * as pagamentoRepo from '../repositories/pagamento.repository.js';
 import * as pedidoRepo from '../repositories/pedido.repository.js';
 import * as conexaoRepo from '../repositories/conexaoMp.repository.js';
@@ -43,6 +55,8 @@ export const LIMITE_FALHAS_PIX = 3;
 export const JANELA_FALHAS_PIX_MS = 60 * 60 * 1000;
 
 const STATUS_MP_RECUSADO = { rejected: 'RECUSADO', cancelled: 'CANCELADO' };
+/** Status do nosso pagamento em que um "approved" do Mercado Pago ainda é a aprovação (ou a atrasada). */
+const STATUS_ANTES_DA_APROVACAO = ['PENDENTE', 'EXPIRADO', 'CANCELADO', 'RECUSADO'];
 
 /** Pagamento como o app vê (sem valores internos como a comissão). */
 export function pagamentoParaCliente(p) {
@@ -78,6 +92,9 @@ export function divergencias(pagamento, r, lojaIdDaConta = null) {
   if (pagamento.mpPaymentId && pagamento.mpPaymentId !== r.id) problemas.push('id do pagamento diferente');
   if (lojaIdDaConta != null && pagamento.pedido?.lojaId !== lojaIdDaConta) problemas.push('conta Mercado Pago de outra loja');
   if (r.status !== 'approved') return problemas;
+  // Valor e comissão só quando a notificação vai APROVAR (pagamento ainda não aprovado). Depois,
+  // um estorno parcial pode mudar a comissão no Mercado Pago e não é divergência (Etapa 5).
+  if (pagamento.status && !STATUS_ANTES_DA_APROVACAO.includes(pagamento.status)) return problemas;
   if (r.valorCentavos !== pagamento.valorTotalCentavos) {
     problemas.push(`valor ${r.valorCentavos == null ? '-' : formatarDinheiro(r.valorCentavos)} (esperado ${formatarDinheiro(pagamento.valorTotalCentavos)})`);
   }
@@ -87,15 +104,49 @@ export function divergencias(pagamento, r, lojaIdDaConta = null) {
   return problemas;
 }
 
-/**
- * @param {{ mercadoPago?: ReturnType<typeof criarClienteMercadoPago>, env?: object, log?: Pick<Console, 'warn'>,
- *           estornarPagamentoAtrasado?: (pagamento: object) => Promise<void> }} [opcoes]
- *   `estornarPagamentoAtrasado`: ponto da Etapa 5 (estorno automático do pago depois de expirar).
- */
 /** Erro para o log: o código e, quando o Mercado Pago explicou, o detalhe (message + cause, já limpo). */
 const textoDoErro = (err) => `${err?.codigo ?? err?.message}${err?.detalhe ? `: ${err.detalhe}` : ''}`;
 
-export function criarServicoPagamentos({ mercadoPago, env = process.env, log = console, estornarPagamentoAtrasado = async () => {} } = {}) {
+/** Pedido sem aceite da loja: alerta para o ADMIN depois de 10 minutos (Decisão 7 da Etapa 5). */
+export const SEM_ACEITE_ALERTA_MS = 10 * 60 * 1000;
+/** Estorno "processando" há mais que isto pode ser tentado de novo (a chamada anterior caiu). */
+export const ESTORNO_TRAVADO_MS = 2 * 60 * 1000;
+/** Status do pagamento que ainda têm valor a estornar. */
+const ESTORNAVEIS = ['APROVADO', 'REEMBOLSO_PARCIAL'];
+/** Status do Mercado Pago de contestação (chargeback) ou mediação. */
+const STATUS_MP_CONTESTADO = ['charged_back', 'in_mediation'];
+/** Status do estorno no Mercado Pago que contam como recusa. */
+const ESTORNO_MP_RECUSADO = ['rejected', 'cancelled'];
+
+const MOTIVO = {
+  LOJA: 'Recusado pela loja',
+  CLIENTE: 'Cancelado pelo cliente antes do aceite da loja',
+  ATRASADO: 'Pix pago depois de o pedido expirar',
+};
+
+const naoEncontrado = () => new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+const encerrado = (status) =>
+  new ErroHttp(409, `Pedido já está ${status === 'CANCELADO' ? 'cancelado' : 'finalizado'}`, { codigo: 'PEDIDO_ENCERRADO' });
+
+/** Estorno como o ADMIN vê. */
+const estornoPublico = (e) => ({
+  id: e.id,
+  valorCentavos: e.valorCentavos,
+  motivo: e.motivo,
+  origem: e.origem,
+  status: e.status,
+  erro: e.erro,
+  observacao: e.observacao,
+  usuario: e.usuario?.nome ?? null,
+  resolvidoPor: e.resolvidoPor?.nome ?? null,
+  criadoEm: e.criadoEm,
+  concluidoEm: e.concluidoEm,
+});
+
+/**
+ * @param {{ mercadoPago?: ReturnType<typeof criarClienteMercadoPago>, env?: object, log?: Pick<Console, 'warn'> }} [opcoes]
+ */
+export function criarServicoPagamentos({ mercadoPago, env = process.env, log = console } = {}) {
   const mp = mercadoPago ?? criarClienteMercadoPago();
   const emAndamento = new Set();
 
@@ -181,6 +232,12 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
       // Qualquer falha aqui (Mercado Pago, rede, token ilegível) deixa o cliente sem Pix: encerra.
       log.warn(`[pagamento] pedido ${pedidoId}: Pix não criado (status ${err.status ?? '-'}, ${textoDoErro(err)})`);
       await expirarPedido(pedidoId, { statusPagamento: 'RECUSADO', dadosMp: { erro: err.codigo ?? 'FALHA', status: err.status ?? null, ...(err.detalhe && { detalhe: err.detalhe }) }, agora });
+      // E-mail do pagador recusado (Decisão 0 da Etapa 5): o cliente corrige e tenta de novo.
+      if (erroNoEmailDoPagador(err)) {
+        throw new ErroHttp(422, 'O Mercado Pago não aceitou este e-mail para pagamento. Confira o e-mail no seu cadastro e tente de novo.', {
+          codigo: 'EMAIL_RECUSADO_PAGAMENTO',
+        });
+      }
       await conferirFalhasDaLoja(pedido.lojaId, agora).catch((e) => log.warn(`[pagamento] alerta de falhas: ${e.message}`));
       throw new ErroHttp(502, 'Não foi possível gerar o Pix agora. Tente de novo ou escolha outra forma de pagamento.', {
         codigo: 'PAGAMENTO_FALHOU',
@@ -255,8 +312,9 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
       emitirParaEquipe(resultado.lojaId, 'impressao:nova', resultado.trabalho);
     }
     if (resultado.situacao === 'A_ESTORNAR') {
-      await estornarPagamentoAtrasado(await pagamentoRepo.buscarPorId(pagamento.id)).catch((e) =>
-        log.warn(`[pagamento] estorno do pedido ${pagamento.pedidoId}: ${e.message}`),
+      // Decisão 8: estorna sozinho (o pedido continua EXPIRADO); falhou = REEMBOLSO_PENDENTE + alerta.
+      await estornarPagamentoAtrasado(pagamento.id, agora).catch((e) =>
+        log.warn(`[pagamento] estorno do pedido ${pagamento.pedidoId}: ${textoDoErro(e)}`),
       );
     }
     return resultado.situacao;
@@ -280,14 +338,396 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
       });
       return 'DIVERGENTE';
     }
+    if (r.status === 'approved' && STATUS_ANTES_DA_APROVACAO.includes(pagamento.status)) {
+      return aprovar(pagamento, r, agora);
+    }
+    if (STATUS_MP_CONTESTADO.includes(r.status)) return contestar(pagamento, r, agora);
+    if (r.status === 'refunded' || r.valorReembolsadoCentavos > 0) return refletirReembolso(pagamento, r, agora);
     if (r.status === 'approved') return aprovar(pagamento, r, agora);
     if (STATUS_MP_RECUSADO[r.status]) {
       const expirou = await expirarPedido(pagamento.pedidoId, { statusPagamento: STATUS_MP_RECUSADO[r.status], dadosMp: resumoMp(r), agora });
       return expirou ? 'EXPIRADO' : 'JA_TRATADO';
     }
-    // pending / in_process / outros (estorno e contestação são da Etapa 5): só registra a consulta.
+    // pending / in_process / outros: só registra a consulta.
     await pagamentoRepo.atualizar(pagamento.id, { consultadoEm: agora, dadosMp: resumoMp(r) });
     return 'SEM_MUDANCA';
+  }
+
+  // ───────── Etapa 5: estorno ─────────
+
+  /** Avisa o PDV que o pedido mudou (selo do pagamento), se o pedido existe para a equipe. */
+  async function avisarEquipe(pedidoId) {
+    const pedido = await pedidoRepo.buscarPorId(pedidoId);
+    if (pedido && !STATUS_FORA_DO_PDV.includes(pedido.status)) emitirParaEquipe(pedido.lojaId, 'pedido:atualizado', pedidoDaEquipe(pedido));
+    return pedido;
+  }
+
+  /**
+   * Dentro da transação de quem chama: o pagamento vai para REEMBOLSO_PENDENTE (condicionado:
+   * dois estornos ao mesmo tempo, só um passa) e nasce o Estorno PROCESSANDO com a chave própria.
+   * O Mercado Pago só é chamado depois do commit (`executarEstorno`): se o processo cair no meio,
+   * fica pendente e visível para o ADMIN (sem retentativa automática, Decisão 10).
+   */
+  async function reservarEstorno(tx, pagamento, { valorCentavos, motivo, origem, usuarioId = null, de = ESTORNAVEIS }) {
+    const restante = pagamento.valorTotalCentavos - pagamento.valorReembolsadoCentavos;
+    const valor = valorCentavos ?? restante;
+    if (!Number.isInteger(valor) || valor < 1 || valor > restante) {
+      throw new ErroHttp(400, `O valor do estorno vai de R$ 0,01 até ${formatarDinheiro(restante)}`, {
+        codigo: 'VALIDACAO',
+        detalhes: [{ campo: 'valorCentavos', mensagem: `Até ${formatarDinheiro(restante)}` }],
+      });
+    }
+    if ((await pagamentoRepo.atualizarSeEm(pagamento.id, de, { status: 'REEMBOLSO_PENDENTE' }, tx)) === 0) {
+      throw new ErroHttp(409, 'Este pagamento já tem um estorno em andamento ou não pode ser estornado.', { codigo: 'ESTORNO_INDISPONIVEL' });
+    }
+    return pagamentoRepo.criarEstorno(
+      { pagamentoId: pagamento.id, valorCentavos: valor, motivo: motivo.slice(0, 300), origem, usuarioId, idempotencyKey: randomUUID() },
+      tx,
+    );
+  }
+
+  /** Estorno concluído (pelo nosso pedido, pelo webhook ou resolvido por fora): soma no pagamento. */
+  async function concluirEstorno(estorno, { mpRefundId = null, agora = new Date(), status = 'CONCLUIDO', observacao, resolvidoPorId } = {}) {
+    return prisma.$transaction(async (tx) => {
+      await pagamentoRepo.travarPagamento(estorno.pagamentoId, tx);
+      const mudou = await pagamentoRepo.atualizarEstornoSeEm(
+        estorno.id,
+        ['PROCESSANDO', 'FALHOU'],
+        { status, concluidoEm: agora, ...(mpRefundId && { mpRefundId }), ...(observacao && { observacao }), ...(resolvidoPorId && { resolvidoPorId }) },
+        tx,
+      );
+      if (!mudou) return false;
+      const pagamento = await tx.pagamento.findUnique({ where: { id: estorno.pagamentoId } });
+      const reembolsado = Math.min(pagamento.valorTotalCentavos, pagamento.valorReembolsadoCentavos + estorno.valorCentavos);
+      await tx.pagamento.update({
+        where: { id: pagamento.id },
+        data: {
+          valorReembolsadoCentavos: reembolsado,
+          // Contestado continua contestado (o Mercado Pago decide); senão, total ou parcial.
+          ...(pagamento.status !== 'CONTESTADO' && { status: reembolsado >= pagamento.valorTotalCentavos ? 'REEMBOLSADO' : 'REEMBOLSO_PARCIAL' }),
+        },
+      });
+      // O alerta de reembolso que falhou deste pedido fica resolvido por quem agiu (o ADMIN que
+      // tentou de novo ou resolveu por fora). Concluído sozinho (webhook): o ADMIN marca na tela.
+      const quem = resolvidoPorId ?? estorno.usuarioId ?? null;
+      if (quem) {
+        await tx.alertaPlataforma.updateMany({
+          where: { tipo: 'REEMBOLSO_FALHOU', pedidoId: pagamento.pedidoId, resolvidoEm: null },
+          data: { resolvidoEm: agora, resolvidoPorId: quem },
+        });
+      }
+      return true;
+    }, OPCOES_TRANSACAO);
+  }
+
+  /** Estorno recusado ou com erro: FALHOU, pagamento continua REEMBOLSO_PENDENTE, alerta (sem retentativa). */
+  async function falharEstorno(estorno, err, agora) {
+    const erro = textoDoErro(err).slice(0, 300);
+    log.warn(`[pagamento] pedido ${estorno.pagamento.pedidoId}: estorno ${estorno.id} falhou (${err?.status ?? '-'}, ${erro})`);
+    await pagamentoRepo.atualizarEstornoSeEm(estorno.id, ['PROCESSANDO'], { status: 'FALHOU', erro });
+    const loja = await lojaRepo.buscarPorId(estorno.pagamento.pedido.lojaId);
+    await alertarUmaVez({
+      tipo: 'REEMBOLSO_FALHOU',
+      lojaId: estorno.pagamento.pedido.lojaId,
+      pedidoId: estorno.pagamento.pedidoId,
+      mensagem:
+        `O estorno de ${formatarDinheiro(estorno.valorCentavos)} do pedido ${estorno.pagamento.pedidoId} (${loja?.nome ?? 'loja'}) ` +
+        `não foi feito pelo Mercado Pago (${erro}). Abra "Pagamentos online" para tentar de novo ou marcar como resolvido por fora.`,
+    }).catch((e) => log.warn(`[pagamento] alerta de reembolso: ${e.message}`));
+  }
+
+  /**
+   * Chama o Mercado Pago para um Estorno PROCESSANDO (depois do commit). Aprovado = concluído;
+   * recusado ou erro = falhou + alerta; em processamento no Mercado Pago = continua PROCESSANDO
+   * (o webhook "refunded" conclui). Nunca lança: devolve 'CONCLUIDO' | 'FALHOU' | 'PROCESSANDO'.
+   */
+  async function executarEstorno(estornoId, agora = new Date()) {
+    const estorno = await pagamentoRepo.buscarEstorno(estornoId);
+    const { pagamento } = estorno;
+    try {
+      if (!pagamento.mpPaymentId) throw new ErroMercadoPago('Pagamento sem id no Mercado Pago', { codigo: 'SEM_ID' });
+      const total = estorno.valorCentavos === pagamento.valorTotalCentavos && pagamento.valorReembolsadoCentavos === 0;
+      const r = await mp.estornar(await tokenDaLoja(pagamento.pedido.lojaId), pagamento.mpPaymentId, {
+        valorCentavos: total ? null : estorno.valorCentavos,
+        idempotencyKey: estorno.idempotencyKey,
+      });
+      if (ESTORNO_MP_RECUSADO.includes(r.status)) {
+        throw new ErroMercadoPago('Estorno recusado pelo Mercado Pago', { codigo: `ESTORNO_${r.status.toUpperCase()}` });
+      }
+      if (r.status && r.status !== 'approved') {
+        await pagamentoRepo.atualizarEstornoSeEm(estorno.id, ['PROCESSANDO'], { mpRefundId: r.id });
+        return 'PROCESSANDO';
+      }
+      await concluirEstorno(estorno, { mpRefundId: r.id, agora });
+      return 'CONCLUIDO';
+    } catch (err) {
+      await falharEstorno(estorno, err, agora);
+      return 'FALHOU';
+    } finally {
+      await avisarEquipe(pagamento.pedidoId).catch(() => {});
+    }
+  }
+
+  /** Pago depois de expirar (A_ESTORNAR): estorno total automático; o pedido continua EXPIRADO. */
+  async function estornarPagamentoAtrasado(pagamentoId, agora = new Date()) {
+    const estorno = await prisma.$transaction(async (tx) => {
+      const pagamento = await tx.pagamento.findUnique({ where: { id: pagamentoId } });
+      if (pagamento?.status !== 'A_ESTORNAR') return null;
+      return reservarEstorno(tx, pagamento, { motivo: MOTIVO.ATRASADO, origem: 'AUTOMATICO', de: ['A_ESTORNAR'] });
+    }, OPCOES_TRANSACAO);
+    return estorno ? executarEstorno(estorno.id, agora) : 'JA_TRATADO';
+  }
+
+  /**
+   * Webhook/consulta com valor reembolsado no Mercado Pago. Nosso estorno em aberto e coberto =
+   * concluído. Valor a mais que nenhum estorno nosso explica = estorno feito direto no Mercado
+   * Pago: registrado (origem MERCADO_PAGO) e, com o pedido aberto, alerta ESTORNO_EXTERNO
+   * (Decisão 5: o pedido não é cancelado sozinho).
+   */
+  async function refletirReembolso(pagamento, r, agora) {
+    const noMp = r.status === 'refunded' ? Math.max(r.valorReembolsadoCentavos, pagamento.valorTotalCentavos) : r.valorReembolsadoCentavos;
+    const aberto = await pagamentoRepo.estornoAberto(pagamento.id);
+    let ja = pagamento.valorReembolsadoCentavos;
+    if (aberto && noMp >= ja + aberto.valorCentavos) {
+      await concluirEstorno(aberto, { agora });
+      ja += aberto.valorCentavos;
+    }
+    const externo = Math.min(noMp, pagamento.valorTotalCentavos) - ja;
+    if (externo <= 0) {
+      await pagamentoRepo.atualizar(pagamento.id, { consultadoEm: agora });
+      await avisarEquipe(pagamento.pedidoId);
+      return aberto ? 'ESTORNO_CONCLUIDO' : 'SEM_MUDANCA';
+    }
+    const registrado = await prisma.$transaction(async (tx) => {
+      await pagamentoRepo.travarPagamento(pagamento.id, tx);
+      const atual = await tx.pagamento.findUnique({ where: { id: pagamento.id } });
+      const diferenca = Math.min(noMp, atual.valorTotalCentavos) - atual.valorReembolsadoCentavos;
+      if (diferenca <= 0) return false;
+      await tx.estorno.create({
+        data: { pagamentoId: atual.id, valorCentavos: diferenca, motivo: 'Estorno feito direto no Mercado Pago', origem: 'MERCADO_PAGO', status: 'CONCLUIDO', concluidoEm: agora },
+      });
+      const total = atual.valorReembolsadoCentavos + diferenca;
+      await tx.pagamento.update({
+        where: { id: atual.id },
+        data: {
+          valorReembolsadoCentavos: total,
+          consultadoEm: agora,
+          ...(!['CONTESTADO', 'REEMBOLSO_PENDENTE'].includes(atual.status) && {
+            status: total >= atual.valorTotalCentavos ? 'REEMBOLSADO' : 'REEMBOLSO_PARCIAL',
+          }),
+        },
+      });
+      const pedido = await tx.pedido.findUnique({ where: { id: atual.pedidoId }, select: { status: true, lojaId: true, numeroDia: true } });
+      if (STATUS_ABERTOS.includes(pedido.status)) {
+        await criarAlerta(
+          {
+            tipo: 'ESTORNO_EXTERNO',
+            lojaId: pedido.lojaId,
+            pedidoId: atual.pedidoId,
+            mensagem:
+              `${formatarDinheiro(diferenca)} do pedido ${pedido.numeroDia ? `nº ${pedido.numeroDia}` : atual.pedidoId} foram estornados direto no ` +
+              'Mercado Pago com o pedido ainda aberto. O pedido NÃO foi cancelado: confira com a loja.',
+          },
+          tx,
+        );
+      }
+      return true;
+    }, OPCOES_TRANSACAO);
+    await avisarEquipe(pagamento.pedidoId);
+    return registrado ? 'ESTORNO_EXTERNO' : 'SEM_MUDANCA';
+  }
+
+  /** Chargeback ou mediação: CONTESTADO e alerta para o ADMIN (um por pedido). */
+  async function contestar(pagamento, r, agora) {
+    const mudou = await pagamentoRepo.atualizarSeEm(
+      pagamento.id,
+      ['APROVADO', 'REEMBOLSO_PARCIAL', 'REEMBOLSADO', 'REEMBOLSO_PENDENTE', 'A_ESTORNAR'],
+      { status: 'CONTESTADO', dadosMp: resumoMp(r), consultadoEm: agora },
+    );
+    if (!mudou) return 'SEM_MUDANCA';
+    const loja = await lojaRepo.buscarPorId(pagamento.pedido.lojaId);
+    await alertarUmaVez({
+      tipo: 'CHARGEBACK',
+      lojaId: pagamento.pedido.lojaId,
+      pedidoId: pagamento.pedidoId,
+      mensagem:
+        `O pagamento ${r.id} do pedido ${pagamento.pedidoId} (${loja?.nome ?? 'loja'}) foi contestado no Mercado Pago ` +
+        `(${r.status === 'in_mediation' ? 'mediação' : 'chargeback'}). Acompanhe a disputa no Mercado Pago da loja.`,
+    });
+    await avisarEquipe(pagamento.pedidoId);
+    return 'CONTESTADO';
+  }
+
+  /**
+   * Cancela um pedido pago online com estorno (total, ou parcial pelo ADMIN), numa transação com
+   * o pedido travado; o Mercado Pago é chamado depois do commit. `quem`:
+   * - LOJA: só antes do aceite (depois = 409 CANCELAR_COM_TAAKI);
+   * - CLIENTE: só o dono, só antes do aceite (depois = 409 PEDIDO_JA_ACEITO);
+   * - ADMIN: a qualquer momento (pedido aberto).
+   * Pagamento já todo estornado ou contestado: cancela sem novo estorno.
+   */
+  async function cancelarComEstorno(pedidoId, { quem, lojaId = null, clienteId = null, valorCentavos = null, motivo, usuarioId = null, agora = new Date() }) {
+    const { pedido, trabalho, estorno } = await prisma.$transaction(async (tx) => {
+      const linha = await pagamentoRepo.travarPedidoParaCancelar(pedidoId, tx);
+      if (!linha) throw naoEncontrado();
+      if (quem === 'LOJA' && !ehDaLoja(linha, lojaId)) throw naoEncontrado();
+      if (quem === 'CLIENTE' && linha.clienteId !== clienteId) throw naoEncontrado();
+      if (!linha.meioOnline) {
+        throw new ErroHttp(409, 'Este pedido é pago na entrega: para cancelar, fale com a loja pelo WhatsApp.', { codigo: 'CANCELAR_PELO_WHATSAPP' });
+      }
+      if (!STATUS_ABERTOS.includes(linha.status)) {
+        if (STATUS_FORA_DO_PDV.includes(linha.status) && quem !== 'ADMIN') throw naoEncontrado();
+        throw encerrado(linha.status);
+      }
+      if (linha.aceitoEm && quem === 'LOJA') {
+        throw new ErroHttp(409, 'Este pedido pago online já foi aceito. Para cancelar, fale com o Taaki.', { codigo: 'CANCELAR_COM_TAAKI' });
+      }
+      if (linha.aceitoEm && quem === 'CLIENTE') {
+        throw new ErroHttp(409, 'A loja já aceitou o pedido. Para cancelar, fale com a loja pelo WhatsApp.', { codigo: 'PEDIDO_JA_ACEITO' });
+      }
+      const pagamento = await tx.pagamento.findFirst({ where: { pedidoId }, orderBy: { id: 'desc' } });
+      if (pagamento?.status === 'REEMBOLSO_PENDENTE') {
+        throw new ErroHttp(409, 'Já há um estorno pendente neste pedido. Resolva em "Pagamentos online".', { codigo: 'ESTORNO_INDISPONIVEL' });
+      }
+      const { pedido, trabalho } = await cancelarNaTransacao(tx, linha.lojaId, pedidoId, { usuarioId, agora });
+      const estorno = ESTORNAVEIS.includes(pagamento?.status)
+        ? await reservarEstorno(tx, pagamento, { valorCentavos, motivo, origem: quem === 'ADMIN' ? 'ADMIN' : 'AUTOMATICO', usuarioId })
+        : null;
+      return { pedido, trabalho, estorno };
+    }, OPCOES_TRANSACAO);
+    avisarCancelamento(pedido.lojaId, pedido, trabalho);
+    if (estorno) await executarEstorno(estorno.id, agora);
+    return pedidoRepo.buscarPorId(pedidoId);
+  }
+
+  /**
+   * Cancelar pelo PDV. Pedido pago online: recusa com estorno total (antes do aceite) ou 409
+   * (depois). Os outros: o cancelamento de sempre.
+   */
+  async function cancelarPelaLoja(lojaId, pedidoId, { usuarioId = null, agora = new Date() } = {}) {
+    const atual = await pedidoRepo.buscarStatus(pedidoId);
+    if (!ehDaLoja(atual, lojaId) || !atual.meioOnline) return cancelarPedido(lojaId, pedidoId, { usuarioId, agora });
+    return pedidoDaEquipe(await cancelarComEstorno(pedidoId, { quem: 'LOJA', lojaId, motivo: MOTIVO.LOJA, usuarioId, agora }));
+  }
+
+  /** Cancelar pelo app, antes do aceite da loja (Decisão 6 da Etapa 5). */
+  async function cancelarPeloCliente(clienteId, pedidoId, agora = new Date()) {
+    return pedidoPublico(await cancelarComEstorno(pedidoId, { quem: 'CLIENTE', clienteId, motivo: MOTIVO.CLIENTE, agora }));
+  }
+
+  /**
+   * ADMIN (Decisão 2 da Etapa 5): pedido aberto = cancela com estorno total ou parcial (o estoque
+   * volta); encerrado (finalizado, cancelado ou expirado) = só estorna o que ainda não voltou.
+   * Motivo obrigatório (o controller confere).
+   */
+  async function estornarPeloAdmin(pedidoId, { valorCentavos = null, motivo, usuarioId, agora = new Date() }) {
+    const atual = await pedidoRepo.buscarStatus(pedidoId);
+    if (!atual) throw naoEncontrado();
+    if (!atual.meioOnline) throw new ErroHttp(409, 'Este pedido não foi pago online.', { codigo: 'NAO_PAGO_ONLINE' });
+    if (STATUS_ABERTOS.includes(atual.status)) {
+      return { cancelado: true, pedido: pedidoDaEquipe(await cancelarComEstorno(pedidoId, { quem: 'ADMIN', valorCentavos, motivo, usuarioId, agora })) };
+    }
+    const estorno = await prisma.$transaction(async (tx) => {
+      await pagamentoRepo.travarPedido(pedidoId, tx);
+      const pagamento = await tx.pagamento.findFirst({ where: { pedidoId }, orderBy: { id: 'desc' } });
+      if (!ESTORNAVEIS.includes(pagamento?.status)) {
+        throw new ErroHttp(409, 'Este pagamento não tem valor a estornar (já estornado, pendente ou contestado).', { codigo: 'ESTORNO_INDISPONIVEL' });
+      }
+      return reservarEstorno(tx, pagamento, { valorCentavos, motivo, origem: 'ADMIN', usuarioId });
+    }, OPCOES_TRANSACAO);
+    await executarEstorno(estorno.id, agora);
+    return { cancelado: false, pedido: pedidoDaEquipe(await pedidoRepo.buscarPorId(pedidoId)) };
+  }
+
+  /**
+   * Reembolso pendente, "Tentar de novo" (ADMIN): consulta o Mercado Pago antes (já estornado lá =
+   * só conclui, nunca estorna duas vezes); senão, nova tentativa com chave nova. Estorno ainda
+   * processando há menos de 2 minutos = 409 (a chamada anterior pode estar em andamento).
+   */
+  async function tentarEstornoDeNovo(pagamentoId, { usuarioId, agora = new Date() }) {
+    const pagamento = await pagamentoRepo.buscarPorId(pagamentoId);
+    if (pagamento?.status !== 'REEMBOLSO_PENDENTE') {
+      throw new ErroHttp(409, 'Este pagamento não tem reembolso pendente.', { codigo: 'SEM_REEMBOLSO_PENDENTE' });
+    }
+    const aberto = await pagamentoRepo.estornoAberto(pagamentoId);
+    if (!aberto) throw new ErroHttp(409, 'Este pagamento não tem reembolso pendente.', { codigo: 'SEM_REEMBOLSO_PENDENTE' });
+    if (aberto.status === 'PROCESSANDO' && agora - aberto.criadoEm < ESTORNO_TRAVADO_MS) {
+      throw new ErroHttp(409, 'O estorno ainda está sendo processado. Tente de novo em alguns minutos.', { codigo: 'ESTORNO_EM_ANDAMENTO' });
+    }
+    if (pagamento.mpPaymentId) {
+      const r = await mp.consultarPagamento(await tokenDaLoja(pagamento.pedido.lojaId), pagamento.mpPaymentId);
+      const noMp = r.status === 'refunded' ? pagamento.valorTotalCentavos : r.valorReembolsadoCentavos;
+      if (noMp >= pagamento.valorReembolsadoCentavos + aberto.valorCentavos) {
+        await concluirEstorno(aberto, { agora, observacao: 'Já estornado no Mercado Pago (conferido ao tentar de novo)' });
+        await avisarEquipe(pagamento.pedidoId);
+        return { resultado: 'CONCLUIDO' };
+      }
+    }
+    const novo = await prisma.$transaction(async (tx) => {
+      await pagamentoRepo.travarPagamento(pagamentoId, tx);
+      if ((await pagamentoRepo.atualizarEstornoSeEm(aberto.id, ['PROCESSANDO', 'FALHOU'], { status: 'FALHOU', erro: aberto.erro ?? 'Interrompido' }, tx)) === 0) {
+        throw new ErroHttp(409, 'O reembolso mudou enquanto isso. Atualize a tela.', { codigo: 'ESTORNO_EM_ANDAMENTO' });
+      }
+      return pagamentoRepo.criarEstorno(
+        { pagamentoId, valorCentavos: aberto.valorCentavos, motivo: aberto.motivo, origem: aberto.origem, usuarioId, idempotencyKey: randomUUID() },
+        tx,
+      );
+    }, OPCOES_TRANSACAO);
+    return { resultado: await executarEstorno(novo.id, agora) };
+  }
+
+  /** Reembolso pendente resolvido fora do sistema (ADMIN), com observação obrigatória. */
+  async function resolverEstornoPorFora(pagamentoId, { observacao, usuarioId, agora = new Date() }) {
+    const aberto = await pagamentoRepo.estornoAberto(pagamentoId);
+    const pagamento = aberto?.pagamento;
+    if (!aberto || pagamento.status !== 'REEMBOLSO_PENDENTE') {
+      throw new ErroHttp(409, 'Este pagamento não tem reembolso pendente.', { codigo: 'SEM_REEMBOLSO_PENDENTE' });
+    }
+    if (!(await concluirEstorno(aberto, { agora, status: 'RESOLVIDO_POR_FORA', observacao, resolvidoPorId: usuarioId }))) {
+      throw new ErroHttp(409, 'O reembolso mudou enquanto isso. Atualize a tela.', { codigo: 'ESTORNO_EM_ANDAMENTO' });
+    }
+    await avisarEquipe(pagamento.pedidoId);
+  }
+
+  /** Tela "Pagamentos online" do ADMIN: `acao` = só os que pedem ação. */
+  async function listarParaAdmin({ acao = false, lojaId, pedidoId, numeroDia } = {}) {
+    const lista = await pagamentoRepo.listarParaAdmin({
+      status: acao ? pagamentoRepo.STATUS_DE_ACAO : pagamentoRepo.STATUS_PAGOS,
+      lojaId,
+      pedidoId,
+      numeroDia,
+    });
+    return lista.map((p) => ({
+      id: p.id,
+      metodo: p.metodo,
+      status: p.status,
+      mpPaymentId: p.mpPaymentId,
+      valorCentavos: p.valorTotalCentavos,
+      valorReembolsadoCentavos: p.valorReembolsadoCentavos,
+      aprovadoEm: p.aprovadoEm,
+      pedido: {
+        ...p.pedido,
+        dataRef: p.pedido.dataRef ? new Date(p.pedido.dataRef).toISOString().slice(0, 10) : null,
+      },
+      estornos: p.estornos.map(estornoPublico),
+    }));
+  }
+
+  /** Rotina: pedidos pagos online há 10 minutos sem aceite = alerta para o ADMIN (um por pedido). */
+  async function alertarSemAceite(agora = new Date()) {
+    let criados = 0;
+    for (const p of await pagamentoRepo.semAceiteDesde(new Date(agora.getTime() - SEM_ACEITE_ALERTA_MS))) {
+      await criarAlerta({
+        tipo: 'PEDIDO_SEM_ACEITE',
+        lojaId: p.lojaId,
+        pedidoId: p.id,
+        mensagem:
+          `O pedido nº ${p.numeroDia ?? p.id} da loja ${p.loja?.nome ?? p.lojaId}, pago online, está há mais de 10 minutos sem ` +
+          'o aceite da loja. Ligue para a loja.',
+      });
+      criados += 1;
+    }
+    return criados;
   }
 
   /** Consulta o Mercado Pago com o token da loja do pedido e concilia. */
@@ -354,6 +794,15 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
         log.warn(`[pagamento] rotina, pedido ${p.pedidoId}: ${err.status ?? '-'} ${textoDoErro(err)}`);
       }
     }
+    // Pago depois de expirar que ficou para trás (ex.: o servidor caiu antes do estorno): uma
+    // tentativa só, porque a reserva tira o pagamento de A_ESTORNAR (sem retentativa, Decisão 10).
+    for (const p of await pagamentoRepo.aEstornar()) {
+      if ((await estornarPagamentoAtrasado(p.id, agora).catch(() => 'FALHOU')) === 'FALHOU') r.falhas += 1;
+    }
+    r.semAceite = await alertarSemAceite(agora).catch((err) => {
+      log.warn(`[pagamento] alerta de pedido sem aceite: ${err.message}`);
+      return 0;
+    });
     return r;
   }
 
@@ -498,6 +947,15 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
     receberWebhook,
     aguardarProcessamentos,
     iniciarRotina,
+    // Etapa 5
+    cancelarPelaLoja,
+    cancelarPeloCliente,
+    estornarPeloAdmin,
+    estornarPagamentoAtrasado,
+    tentarEstornoDeNovo,
+    resolverEstornoPorFora,
+    listarParaAdmin,
+    alertarSemAceite,
   };
 }
 

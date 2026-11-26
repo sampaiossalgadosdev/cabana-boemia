@@ -1,6 +1,19 @@
 import { IconeMais, IconeStatus } from '../Icones.jsx';
 import { formatarDataHora, formatarPreco, formatarTelefone, NOME_PAGAMENTO } from '../../lib/formatar.js';
-import { minutosDeAtraso, SELO_ORIGEM, STATUS, estaAberto, textoRegistro, tituloDoPedido } from '../../lib/painel.js';
+import {
+  aceiteAtrasado,
+  estaAberto,
+  faixaPagoOnline,
+  minutosDeAtraso,
+  minutosSemAceite,
+  precisaAceite,
+  seloEstorno,
+  seloPagoOnline,
+  SELO_ORIGEM,
+  STATUS,
+  textoRegistro,
+  tituloDoPedido,
+} from '../../lib/painel.js';
 import { textoDistancia } from '@restaurante/shared/cupom';
 
 /** Uma linha da lista "Entregas/Encomendas". O botão à direita abre as opções do pedido. */
@@ -8,9 +21,14 @@ export function LinhaPedido({ pedido, agora, novo, aoAbrir, aoVer }) {
   const status = STATUS[pedido.status] ?? { rotulo: pedido.status, classe: 'aberto' };
   const atraso = minutosDeAtraso(pedido, agora);
   const registrado = textoRegistro(pedido);
+  const faixa = faixaPagoOnline(pedido);
+  const estorno = seloEstorno(pedido);
+  const semAceite = precisaAceite(pedido);
+  const atrasadoNoAceite = aceiteAtrasado(pedido, agora);
 
   return (
-    <li className={`linha-pedido ${novo ? 'linha-pedido--novo' : ''}`} onPointerDown={novo ? aoVer : undefined}>
+    <li className={`linha-pedido ${novo ? 'linha-pedido--novo' : ''} ${atrasadoNoAceite ? 'linha-pedido--sem-aceite' : ''}`}
+      onPointerDown={novo ? aoVer : undefined}>
       <div className="linha-pedido__info">
         <p className="linha-pedido__titulo">
           {tituloDoPedido(pedido)}
@@ -20,7 +38,15 @@ export function LinhaPedido({ pedido, agora, novo, aoAbrir, aoVer }) {
         <p className={`status-pedido status-pedido--${status.classe}`}>
           <IconeStatus status={status.classe} /> {status.rotulo}
           {pedido.pagoEm && <span className="selo selo--pago">Pago · {NOME_PAGAMENTO[pedido.formaPagamento]}</span>}
+          {seloPagoOnline(pedido) && <span className="selo selo--pago">{seloPagoOnline(pedido)}</span>}
+          {estorno && <span className="selo selo--estorno">{estorno}</span>}
         </p>
+        {faixa && <p className="faixa-online">{faixa}</p>}
+        {semAceite && (
+          <p className={`aviso-aceite ${atrasadoNoAceite ? 'aviso-aceite--atrasado' : ''}`}>
+            Aguardando o aceite da loja{minutosSemAceite(pedido, agora) > 0 && ` · há ${minutosSemAceite(pedido, agora)} min`}
+          </p>
+        )}
         {pedido.enderecoTexto && (
           <p className="linha-pedido__texto">
             {pedido.enderecoTexto}

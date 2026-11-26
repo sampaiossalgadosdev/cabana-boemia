@@ -174,6 +174,8 @@ model Usuario {
   lancamentos         LancamentoLoja[]
   fechamentosQuitados FechamentoSemanal[]
   alertasResolvidos   AlertaPlataforma[]
+  estornos            Estorno[]             @relation("EstornoUsuario")
+  estornosResolvidos  Estorno[]             @relation("EstornoResolvidoPor")
 
   @@index([lojaId])
 }
@@ -416,42 +418,42 @@ model MovimentacaoEstoque {
 
 /// Sempre de uma loja só (itens, caixa e impressões são da mesma loja).
 model Pedido {
-  id                             Int                @id @default(autoincrement())
+  id                             Int                    @id @default(autoincrement())
   lojaId                         Int
   /// Nulo só no AGUARDANDO_PAGAMENTO e no EXPIRADO (CHECK): número e dia são os da aprovação.
   numeroDia                      Int?
-  dataRef                        DateTime           @db.Date // dia local (America/Sao_Paulo) do pedido
+  dataRef                        DateTime               @db.Date // dia local (America/Sao_Paulo) do pedido
   canal                          CanalPedido
-  status                         StatusPedido       @default(ABERTO)
+  status                         StatusPedido           @default(ABERTO)
   clienteId                      Int?
   nomeCliente                    String
   telefone                       String?
   enderecoTexto                  String?
   bairroNome                     String?
-  taxaEntregaCentavos            Int                @default(0)
-  subtotalCentavos               Int                @default(0)
-  totalCentavos                  Int                @default(0)
+  taxaEntregaCentavos            Int                    @default(0)
+  subtotalCentavos               Int                    @default(0)
+  totalCentavos                  Int                    @default(0)
   formaPagamento                 FormaPagamento?
   trocoParaCentavos              Int?
   mesaRotulo                     String?
   tempoEstimadoMin               Int? // tempo mostrado ao cliente, gravado na criação
-  chaveIdempotencia              String?            @unique // reenvio do mesmo pedido devolve o já criado
+  chaveIdempotencia              String?                @unique // reenvio do mesmo pedido devolve o já criado
   criadoPorId                    Int?
-  criadoEm                       DateTime           @default(now())
-  atualizadoEm                   DateTime           @updatedAt
+  criadoEm                       DateTime               @default(now())
+  atualizadoEm                   DateTime               @updatedAt
   finalizadoEm                   DateTime?
   canceladoEm                    DateTime?
   caixaId                        Int? // caixa em que foi FINALIZADO (ou pago antes, no "pago agora")
   /// Encomenda: entrega/retirada agendada (mesmo dia operacional). CHECK: encomenda = (agendadoPara não nulo).
-  encomenda                      Boolean            @default(false)
+  encomenda                      Boolean                @default(false)
   agendadoPara                   DateTime?
-  retirarNoBalcao                Boolean            @default(false) // só encomenda, sem endereço nem taxa (CHECK)
-  descontoCentavos               Int                @default(0) // só pedidos da equipe; total = subtotal + taxa − desconto
-  observacao                     String?            @db.VarChar(200) // observação do pedido inteiro
+  retirarNoBalcao                Boolean                @default(false) // só encomenda, sem endereço nem taxa (CHECK)
+  descontoCentavos               Int                    @default(0) // só pedidos da equipe; total = subtotal + taxa − desconto
+  observacao                     String?                @db.VarChar(200) // observação do pedido inteiro
   pagoEm                         DateTime? // "pago agora" no PDV: forma e caixaId gravados na criação
   /// Chave de acesso da NFC-e emitida para a venda (prova de emissão), preenchida pela
   /// equipe. 44 dígitos, modelo 65 e dígito verificador conferidos no service; CHECK só dígitos.
-  chaveNfce                      String?            @unique @db.VarChar(44)
+  chaveNfce                      String?                @unique @db.VarChar(44)
   /// Posições usadas na distância (fotos do momento da compra) e a distância até o
   /// cliente pelas ruas (ROTA) ou linha reta × 1,3 (ESTIMADA). CHECKs: pares completos.
   latitudeEntrega                Float?
@@ -461,13 +463,17 @@ model Pedido {
   distanciaMetros                Int?
   distanciaOrigem                OrigemDistancia?
   /// Frete grátis aplicado: da loja (custo da loja) ou da campanha da primeira compra (custo da plataforma).
-  origemFreteGratis              OrigemFreteGratis  @default(NENHUM)
+  origemFreteGratis              OrigemFreteGratis      @default(NENHUM)
   /// Só com entregador da plataforma (CHECK: os três juntos): de onde veio a taxa (KM, ou AREA
   /// como reserva no PDV) e a divisão da taxa cheia (95% do entregador, meio para cima; o resto
   /// da plataforma), gravada mesmo com frete grátis.
   origemTaxaEntrega              OrigemTaxaEntrega?
   valorEntregadorCentavos        Int?
   valorPlataformaEntregaCentavos Int?
+  /// Pago online (gravado na criação; nulo = pago na entrega). Nunca muda.
+  meioOnline                     MetodoPagamentoOnline?
+  /// Aceite da loja (só pedido pago online; CHECK). Depois dele, só o ADMIN cancela.
+  aceitoEm                       DateTime?
 
   loja        Loja                    @relation(fields: [lojaId], references: [id])
   cliente     Cliente?                @relation(fields: [clienteId], references: [id])
@@ -783,7 +789,8 @@ enum StatusPagamento {
   REEMBOLSADO
   REEMBOLSO_PARCIAL
   REEMBOLSO_PENDENTE // estorno recusado pelo Mercado Pago: o ADMIN resolve (sem retentativa)
-  A_ESTORNAR // aprovado depois de o pedido expirar: o pedido não revive; estorno automático na Etapa 5
+  A_ESTORNAR // aprovado depois de o pedido expirar: o pedido não revive; estorno automático (Etapa 5)
+  CONTESTADO // chargeback ou mediação aberta pelo comprador no Mercado Pago
 }
 
 enum SituacaoCampanha {
@@ -807,6 +814,10 @@ enum TipoAlerta {
   TAXA_ENTREGA_COMPLEMENTO // taxa passou de 50% do valor cobrado: o resto fica como débito da loja
   PIX_FALHANDO // mais de 3 falhas ao gerar Pix na mesma loja em 1 hora
   LOJA_SEM_LOCALIZACAO // loja PLATAFORMA sem pino: pedido do app usou a taxa da área
+  REEMBOLSO_FALHOU // estorno recusado ou com erro: pagamento REEMBOLSO_PENDENTE (sem retentativa)
+  CHARGEBACK // contestação ou mediação no Mercado Pago
+  ESTORNO_EXTERNO // estorno feito direto no Mercado Pago com o pedido ainda aberto
+  PEDIDO_SEM_ACEITE // pedido pago online há 10 minutos sem o aceite da loja
 }
 
 enum StatusFechamento {
@@ -853,6 +864,7 @@ model Pagamento {
   pixQrCodeBase64          String?
   /// Campos relevantes da resposta do Mercado Pago (status_detail, datas, ids). Nunca dado de cartão.
   dadosMp                  Json?
+  estornos                 Estorno[]
   aprovadoEm               DateTime?
   /// Última consulta ao Mercado Pago (tela do Pix no app: no máximo a cada 30 s).
   consultadoEm             DateTime?
@@ -863,6 +875,47 @@ model Pagamento {
 
   @@index([pedidoId])
   @@index([status, expiraEm])
+}
+
+enum OrigemEstorno {
+  AUTOMATICO // recusa da loja, cancelamento do cliente antes do aceite, pago depois de expirar
+  ADMIN
+  MERCADO_PAGO // feito direto no Mercado Pago (chegou pelo webhook)
+}
+
+enum StatusEstorno {
+  PROCESSANDO
+  CONCLUIDO
+  FALHOU // sem retentativa automática: o ADMIN tenta de novo ou resolve por fora
+  RESOLVIDO_POR_FORA
+}
+
+/// Uma tentativa de estorno (Etapa 5). CHECKs na migration: valor > 0, chave obrigatória fora
+/// da origem MERCADO_PAGO, concluidoEm só nos status concluídos.
+model Estorno {
+  id             Int           @id @default(autoincrement())
+  pagamentoId    Int
+  valorCentavos  Int
+  motivo         String        @db.VarChar(300)
+  origem         OrigemEstorno
+  status         StatusEstorno @default(PROCESSANDO)
+  idempotencyKey String?       @unique @db.VarChar(64)
+  mpRefundId     String?       @db.VarChar(30)
+  /// Código e detalhe limpo do Mercado Pago (sem token nem dado pessoal).
+  erro           String?       @db.VarChar(300)
+  observacao     String?       @db.VarChar(500)
+  usuarioId      Int?
+  resolvidoPorId Int?
+  criadoEm       DateTime      @default(now())
+  concluidoEm    DateTime?
+
+  pagamento    Pagamento @relation(fields: [pagamentoId], references: [id], onDelete: Restrict)
+  usuario      Usuario?  @relation("EstornoUsuario", fields: [usuarioId], references: [id], onDelete: Restrict)
+  resolvidoPor Usuario?  @relation("EstornoResolvidoPor", fields: [resolvidoPorId], references: [id], onDelete: Restrict)
+
+  @@index([pagamentoId])
+  @@index([status])
+  @@index([concluidoEm])
 }
 
 /// Notificação recebida do Mercado Pago (dedupe pela chave e auditoria). Sem dado pessoal.

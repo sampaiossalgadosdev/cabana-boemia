@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld('pdv', {
     alterarStatus: (id, status) => chamar('pedidos:status', Number(id), String(status ?? '')),
     alterarAgendamento: (id, agendadoPara) => chamar('pedidos:agendamento', Number(id), String(agendadoPara ?? '')),
     finalizar: (id, formaPagamento) => chamar('pedidos:finalizar', Number(id), String(formaPagamento ?? '')),
+    finalizarOnline: (id) => chamar('pedidos:finalizarOnline', Number(id)),
+    aceitar: (id) => chamar('pedidos:aceitar', Number(id)),
     cancelar: (id) => chamar('pedidos:cancelar', Number(id)),
     criar: (dados) => chamar('pedidos:criar', dados),
     reimprimir: (id) => chamar('pedidos:reimprimir', Number(id)),

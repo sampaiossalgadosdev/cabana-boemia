@@ -386,6 +386,7 @@ function FormLoja({ loja, aoFechar, aoSalvar }) {
           <Campo
             rotulo="Entrega"
             className="inteiro"
+            erro={erros.modoEntrega ?? (f.modoEntrega === 'PLATAFORMA' && !pino ? 'Marque antes a localização da loja no mapa (acima): a taxa por km é calculada a partir dela.' : undefined)}
             ajuda={
               f.modoEntrega === 'PLATAFORMA'
                 ? 'Entregadores do Taaki: a taxa de entrega é da plataforma (R$ 1,00 + R$ 0,90 por km), e na entrega o cliente paga só em dinheiro.'

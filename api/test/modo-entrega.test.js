@@ -44,7 +44,11 @@ describe('modo de entrega da loja (ADMIN) e o piso do frete grátis', { skip: se
   });
 
   beforeEach(() =>
-    prisma.loja.update({ where: { id: 1 }, data: { modoEntrega: 'PROPRIO', freteGratisAtivo: false, freteGratisMinimoCentavos: null } }),
+    prisma.loja.update({
+      where: { id: 1 },
+      // Com pino: loja PLATAFORMA exige a localização (Decisão 3 da Etapa 4; teste próprio abaixo).
+      data: { modoEntrega: 'PROPRIO', freteGratisAtivo: false, freteGratisMinimoCentavos: null, latitude: -23.3049, longitude: -50.3133 },
+    }),
   );
 
   after(async () => {

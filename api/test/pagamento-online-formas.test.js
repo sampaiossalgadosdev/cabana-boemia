@@ -67,6 +67,20 @@ describe('regras do entregador da plataforma no pedido (conferirModoEntrega)', (
   });
 });
 
+test('loja PLATAFORMA: taxa digitada no PDV recusada (a taxa é a da área); retirada e motoboy próprio passam', () => {
+  const pdv = (loja, extra) => () =>
+    conferirModoEntrega(loja, { canal: 'WHATSAPP', endereco: SEM_PINO, pagamento: { forma: 'DINHEIRO' }, ...extra });
+  assert.equal(codigo(pdv(PLATAFORMA, { ajustes: { taxaManualCentavos: 300 } })), 'TAXA_MANUAL_PROIBIDA');
+  assert.equal(codigo(pdv(PLATAFORMA, { ajustes: { taxaManualCentavos: 0 } })), 'TAXA_MANUAL_PROIBIDA');
+  assert.equal(codigo(pdv(PLATAFORMA, { ajustes: { taxaManualCentavos: null } })), null);
+  // Retirada no balcão: a criação zera a taxa sozinha (não é taxa digitada).
+  assert.equal(
+    codigo(() => conferirModoEntrega(PLATAFORMA, { canal: 'WHATSAPP', endereco: null, pagamento: { forma: 'PIX' }, ajustes: { taxaManualCentavos: 0 }, entrega: { retirarNoBalcao: true } })),
+    null,
+  );
+  assert.equal(codigo(pdv(PROPRIO, { ajustes: { taxaManualCentavos: 300 } })), null);
+});
+
 describe('formas de pagamento da loja na API (pedido do PDV e config pública)', { skip: semBancoDeTeste }, () => {
   let prisma;
   let servidor;
@@ -146,6 +160,17 @@ describe('formas de pagamento da loja na API (pedido do PDV e config pública)',
     assert.match(r.corpo.erro.mensagem, /não aceita cartão de débito na entrega/);
     assert.equal((await prisma.insumo.findFirst({ where: { nome: 'Pão de lanche' } })).estoque, antes);
     assert.equal((await lancar('DINHEIRO')).status, 201);
+  });
+
+  test('PDV em loja PLATAFORMA: taxa digitada recusada (422) antes de baixar estoque; em PROPRIO passa', async () => {
+    await modo('PLATAFORMA');
+    const r = await lancar('DINHEIRO', { taxaEntregaCentavos: 300 });
+    assert.equal(r.status, 422);
+    assert.equal(r.corpo.erro.codigo, 'TAXA_MANUAL_PROIBIDA');
+    await modo('PROPRIO');
+    const ok = await lancar('DINHEIRO', { taxaEntregaCentavos: 300 });
+    assert.equal(ok.status, 201, JSON.stringify(ok.corpo));
+    assert.equal(ok.corpo.pedido.taxaEntregaCentavos, 300);
   });
 
   test('PDV em loja PROPRIO (padrão): débito na entrega continua valendo', async () => {

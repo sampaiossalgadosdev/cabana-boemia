@@ -533,11 +533,18 @@ const NOME_FORMA = { PIX: 'Pix', DINHEIRO: 'dinheiro', DEBITO: 'cartão de débi
  * - pedido do cliente (app/site) com entrega precisa do pino no mapa (a taxa é por km):
  *   422 PINO_OBRIGATORIO; o PDV não marca pino e usa a taxa da área como reserva;
  * - pago na entrega, só dinheiro (o entregador não leva maquininha nem recebe Pix da loja):
- *   422 FORMA_INDISPONIVEL. Retirada no balcão e "pago agora" no balcão aceitam todas.
+ *   422 FORMA_INDISPONIVEL. Retirada no balcão e "pago agora" no balcão aceitam todas;
+ * - a taxa é da plataforma: o PDV não digita outra (422 TAXA_MANUAL_PROIBIDA; Decisão 8 da
+ *   Etapa 3). Vale a da área (origem AREA). Retirada no balcão não tem taxa.
  * Loja com motoboy próprio: nada muda.
  */
-export function conferirModoEntrega(loja, { canal, endereco, pagamento, pagoAgora = false }) {
+export function conferirModoEntrega(loja, { canal, endereco, pagamento, pagoAgora = false, ajustes = {}, entrega = {} }) {
   if (loja?.modoEntrega !== 'PLATAFORMA' || canal === 'SALAO') return;
+  if (ajustes.taxaManualCentavos != null && !entrega.retirarNoBalcao) {
+    throw new ErroHttp(422, 'Nesta loja a entrega é dos entregadores do Taaki e a taxa é a da área de entrega: não dá para digitar outra.', {
+      codigo: 'TAXA_MANUAL_PROIBIDA',
+    });
+  }
   if (canal === 'SITE' && endereco && !endereco.pin) {
     throw new ErroHttp(422, 'Marque no mapa onde fica o endereço de entrega para pedir nesta loja.', {
       codigo: 'PINO_OBRIGATORIO',

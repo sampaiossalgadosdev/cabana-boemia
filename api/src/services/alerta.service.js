@@ -36,3 +36,13 @@ export async function resolver(id, usuarioId, agora = new Date()) {
     throw new ErroHttp(404, 'Alerta não encontrado ou já resolvido', { codigo: 'NAO_ENCONTRADO' });
   }
 }
+
+/**
+ * Cria o alerta só se não houver um aberto do mesmo tipo para a mesma loja/pedido (desde
+ * `desde`, se dado): falhas repetidas não enchem a tela do ADMIN. Devolve se criou.
+ */
+export async function alertarUmaVez({ tipo, lojaId = null, pedidoId = null, mensagem, desde = null }, db) {
+  if (await alertaRepo.existeAberto({ tipo, lojaId, pedidoId, desde }, db)) return false;
+  await criarAlerta({ tipo, lojaId, pedidoId, mensagem }, db);
+  return true;
+}

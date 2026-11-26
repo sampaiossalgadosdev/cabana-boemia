@@ -196,6 +196,7 @@ describe('relatório do dia operacional', { skip: semBancoDeTeste }, () => {
       { canal: 'SITE', quantidade: 1, totalCentavos: 4200 },
       { canal: 'WHATSAPP', quantidade: 1, totalCentavos: 2700 },
       { canal: 'SALAO', quantidade: 1, totalCentavos: 4617 },
+      { canal: 'APP', quantidade: 0, totalCentavos: 0 },
     ]);
     const linha = (x) => [x.nome, x.quantidade, x.totalCentavos, x.pesoGramas];
     assert.deepEqual(d.topPorQuantidade.map(linha), [
@@ -241,7 +242,7 @@ describe('relatório do dia operacional', { skip: semBancoDeTeste }, () => {
     assert.equal(r.totalCentavos, 0);
     assert.equal(r.ticketMedioCentavos, 0);
     assert.equal(r.porFormaPagamento.length, 4);
-    assert.equal(r.porCanal.length, 3);
+    assert.equal(r.porCanal.length, 4);
     assert.deepEqual(r.topPorQuantidade, []);
     for (const data of ['2026-11-15', '2026-02-31', '13/11/2026', 'ontem']) {
       const e = await api('GET', `/retaguarda/relatorios/dia?data=${encodeURIComponent(data)}`);

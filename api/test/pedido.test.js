@@ -396,6 +396,7 @@ describe('pedidos: transação, estoque atômico e preço do servidor', { skip: 
         totalCentavos: 2 * 1800 + 900 + 500,
         taxaBairroCentavos: 500,
         freteGratis: null,
+        origemFreteGratis: 'NENHUM',
         itens: [
           { produtoId: p['X-Bacon'].id, nome: 'X-Bacon', precoUnitarioCentavos: 1800 },
           { produtoId: p['Coca-Cola 1L'].id, nome: 'Coca-Cola 1L', precoUnitarioCentavos: 900 },

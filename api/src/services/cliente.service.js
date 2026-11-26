@@ -188,6 +188,37 @@ export async function atualizarPerfil(clienteId, { nome, telefone }) {
 }
 
 /**
+ * E-mail do pagador (Decisão 13): o app pede uma vez antes do Pix quando a conta não tem
+ * e-mail (login por celular) e grava no cadastro. Nunca é inventado.
+ */
+export async function definirEmail(clienteId, email) {
+  return clientePublico(await clienteRepo.atualizar(clienteId, { email: email.trim().toLowerCase() }));
+}
+
+/**
+ * Verifica o telefone da conta logada (código de 6 dígitos já conferido pelo controller):
+ * grava o número e marca verificado. Outra conta já tem este telefone verificado = 409
+ * TELEFONE_EM_USO (o índice único parcial também garante numa corrida).
+ * @param {string} telefone 11 dígitos
+ */
+export async function verificarTelefoneDaConta(clienteId, telefone, agora = new Date()) {
+  const dono = await clienteRepo.buscarVerificadoPorTelefone(telefone);
+  const emUso = () =>
+    new ErroHttp(409, 'Este telefone já está confirmado em outra conta. Entre com o celular para usar aquela conta.', {
+      codigo: 'TELEFONE_EM_USO',
+    });
+  if (dono && dono.id !== clienteId) throw emUso();
+  try {
+    return clientePublico(
+      await clienteRepo.atualizar(clienteId, { telefone, telefoneVerificado: true, telefoneVerificadoEm: agora }),
+    );
+  } catch (err) {
+    if (ehDuplicado(err)) throw emUso();
+    throw err;
+  }
+}
+
+/**
  * Regra do checkout: sem telefone (ou sem nome, de quem entrou só pelo
  * celular) não faz pedido: a loja precisa dos dois. Usar antes de criar pedido do site.
  */

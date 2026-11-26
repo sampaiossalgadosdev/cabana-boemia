@@ -6,6 +6,7 @@
  * (estoque >= qtd), gera o numeroDia, grava snapshots, movimentações e o
  * trabalho de impressão. Eventos para a equipe só depois do commit.
  */
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { ErroHttp } from '../lib/erros.js';
@@ -28,19 +29,35 @@ import { taxaDaLoja } from './bairro.service.js';
 import { mapasPadrao } from './mapa.service.js';
 import * as mapaRepo from '../repositories/mapa.repository.js';
 import { limparChave, problemaNaChave } from '../lib/nfce.js';
-import { liberarCampanha } from './campanha.service.js';
+import { campanhaElegivel, liberarCampanha, reservarCampanha } from './campanha.service.js';
+import { calcularSplit } from '@restaurante/shared/split';
+import { taxaPorKm } from '@restaurante/shared/taxaKm';
+import { lerConfigMapas } from '../lib/mapas.js';
+import { campanhaLigada, pagamentoOnlineDisponivel } from '../lib/pagamentoOnline.js';
+import * as conexaoRepo from '../repositories/conexaoMp.repository.js';
+import * as pagamentoRepo from '../repositories/pagamento.repository.js';
+import { alertarUmaVez, criarAlerta } from './alerta.service.js';
+import { formatarDinheiro } from '@restaurante/shared/cupom';
 
-export const CANAIS = ['SITE', 'WHATSAPP', 'SALAO'];
+/** APP: o app Taaki Delivery (antes ia como SITE). Fica por último: a ordem dos relatórios não muda. */
+export const CANAIS = ['SITE', 'WHATSAPP', 'SALAO', 'APP'];
 export const FORMAS_PAGAMENTO = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'];
+/** Meios de pagamento online aceitos no pedido (Etapa 4: só Pix; cartão na Etapa 7). */
+export const PAGAMENTOS_ONLINE = ['PIX'];
+/** Prazo do Pix para o cliente (Decisão 5): cancelamos nós mesmos aos 15 minutos. */
+export const PRAZO_PIX_MS = 15 * 60 * 1000;
+
+/** Pedido feito pelo próprio cliente (site ou app): mesmas regras de cardápio, horário e total. */
+export const ehCanalDoCliente = (canal) => canal === 'SITE' || canal === 'APP';
 
 /**
- * Só o SITE depende do horário: a equipe (WHATSAPP, SALAO) lança fora do
+ * Só o cliente (site e app) depende do horário: a equipe (WHATSAPP, SALAO) lança fora do
  * turno, ex.: cliente do salão que continua comendo depois do fim do turno.
  */
-export const canalExigeLojaAberta = (canal) => canal === 'SITE';
+export const canalExigeLojaAberta = ehCanalDoCliente;
 
-/** Comanda do salão nasce aberta; site e WhatsApp já confirmados (é quando baixa o estoque). */
-const STATUS_INICIAL = { SITE: 'CONFIRMADO', WHATSAPP: 'CONFIRMADO', SALAO: 'ABERTO' };
+/** Comanda do salão nasce aberta; site, app e WhatsApp já confirmados (é quando baixa o estoque). */
+const STATUS_INICIAL = { SITE: 'CONFIRMADO', APP: 'CONFIRMADO', WHATSAPP: 'CONFIRMADO', SALAO: 'ABERTO' };
 
 /**
  * Status de pedido "ainda aberto" (no painel; pode ser finalizado ou cancelado).
@@ -73,7 +90,7 @@ export const OPCOES_TRANSACAO = { maxWait: 10_000, timeout: 15_000 };
 export function motivoIndisponivel(produto, { canal, turnoId }) {
   if (!produto) return 'não existe mais';
   if (!produto.ativo || !produto.categoria.ativo) return 'saiu do cardápio';
-  if (canal !== 'SITE') return null;
+  if (!ehCanalDoCliente(canal)) return null;
   if (!produto.disponivelHoje) return 'não está disponível hoje';
   if (!produto.turnos.some((t) => t.turnoId === turnoId)) return 'não é servido neste horário';
   if (!produto.vendidoNoSite) return 'não é vendido pelo site';
@@ -84,7 +101,11 @@ export function motivoIndisponivel(produto, { canal, turnoId }) {
  * SITE: o total que o cliente viu precisa bater com o recalculado. Se não
  * bater (o dono mudou um preço), 409 com os preços novos, antes de baixar estoque.
  */
-export function conferirTotalEsperado(totalEsperadoCentavos, valores, { taxaBairroCentavos = null, freteGratis = null } = {}) {
+export function conferirTotalEsperado(
+  totalEsperadoCentavos,
+  valores,
+  { taxaBairroCentavos = null, freteGratis = null, origemFreteGratis = 'NENHUM' } = {},
+) {
   if (totalEsperadoCentavos === valores.totalCentavos) return;
   throw new ErroHttp(409, 'Os preços mudaram. Confira o novo total e confirme de novo.', {
     codigo: 'PRECO_ALTERADO',
@@ -92,9 +113,11 @@ export function conferirTotalEsperado(totalEsperadoCentavos, valores, { taxaBair
       subtotalCentavos: valores.subtotalCentavos,
       taxaEntregaCentavos: valores.taxaEntregaCentavos,
       totalCentavos: valores.totalCentavos,
-      // Para o site refazer a prévia: taxa do bairro (antes do frete grátis) e a regra vigente.
+      // Para o site/app refazer a prévia: taxa cheia (do bairro ou por km, antes do frete
+      // grátis), a regra da loja e de onde veio o frete grátis (LOJA, CAMPANHA ou NENHUM).
       taxaBairroCentavos,
       freteGratis,
+      origemFreteGratis,
       itens: [...new Map(valores.linhas.map((l) => [l.produto.id, l])).values()].map((l) => ({
         produtoId: l.produto.id,
         nome: l.produto.nome,
@@ -399,11 +422,12 @@ export async function estornarVendas(tx, vendas, usuarioId = null) {
 /**
  * @param {{
  *   lojaId: number,  // o pedido é sempre de uma loja: produtos, bairro, caixa, número e configuração dela
- *   canal: 'SITE' | 'WHATSAPP' | 'SALAO',
+ *   canal: 'SITE' | 'APP' | 'WHATSAPP' | 'SALAO',
  *   itens: { produtoId: number, quantidade: number, pesoGramas?: number, observacao?: string | null }[],
- *   cliente?: { id?: number, nome: string, telefone?: string | null } | null,
+ *   cliente?: { id?: number, nome: string, telefone?: string | null, telefoneVerificado?: boolean } | null,
  *   endereco?: { texto: string, bairroId: number, pin?: { latitude: number, longitude: number } | null } | null,
  *   pagamento?: { forma?: string | null, trocoParaCentavos?: number | null },
+ *   pagamentoOnline?: 'PIX' | null,  // só APP: pedido nasce AGUARDANDO_PAGAMENTO (o Pix é criado depois)
  *   entrega?: { encomenda?: boolean, agendadoPara?: Date | null, retirarNoBalcao?: boolean },
  *   ajustes?: { descontoCentavos?: number, taxaManualCentavos?: number | null },  // só equipe (WHATSAPP)
  *   observacao?: string | null,
@@ -411,11 +435,13 @@ export async function estornarVendas(tx, vendas, usuarioId = null) {
  *   usuarioId?: number | null,
  *   mesaRotulo?: string | null,
  *   chaveIdempotencia?: string | null,
- *   totalEsperadoCentavos?: number,  // obrigatório no SITE: total que o cliente viu
+ *   totalEsperadoCentavos?: number,  // obrigatório no SITE e no APP: total que o cliente viu
  *   agora?: Date,
  *   mapas?: object,  // serviço de mapas (padrão: o do ambiente); distância loja → cliente
+ *   env?: object,    // ambiente (campanha, pagamento online, taxa por km); padrão process.env
  * }} dados
- * @returns {Promise<{ pedido: object, criado: boolean }>} criado=false: mesma chave já tinha pedido
+ * @returns {Promise<{ pedido: object, criado: boolean }>} criado=false: mesma chave já tinha pedido.
+ *   Pagamento online: o pedido volta AGUARDANDO_PAGAMENTO e quem chamou cria o Pix (pagamento.service).
  */
 export async function criarPedido({
   lojaId,
@@ -424,6 +450,7 @@ export async function criarPedido({
   cliente = null,
   endereco = null,
   pagamento = {},
+  pagamentoOnline = null,
   entrega = {},
   ajustes = {},
   observacao = null,
@@ -434,36 +461,10 @@ export async function criarPedido({
   totalEsperadoCentavos,
   agora = new Date(),
   mapas,
+  env = process.env,
 }) {
   if (!Number.isInteger(lojaId)) throw new Error('criarPedido: lojaId obrigatório');
-  if (!CANAIS.includes(canal)) throw new ErroHttp(400, 'Canal inválido', { codigo: 'VALIDACAO' });
-  if (!itens?.length) throw new ErroHttp(400, 'O pedido não tem itens', { codigo: 'VALIDACAO' });
-  if (canal === 'SITE' && !Number.isInteger(totalEsperadoCentavos)) {
-    throw new ErroHttp(400, 'Informe o total do pedido', { codigo: 'VALIDACAO' });
-  }
-  const ent = {
-    encomenda: entrega.encomenda === true,
-    agendadoPara: entrega.agendadoPara ?? null,
-    retirarNoBalcao: entrega.retirarNoBalcao === true,
-  };
-  const aj = { descontoCentavos: ajustes.descontoCentavos ?? 0, taxaManualCentavos: ajustes.taxaManualCentavos ?? null };
-  // Encomenda, retirada, desconto, taxa digitada e "pago agora" são da equipe no
-  // delivery: o site nunca manda (preço e taxa do site saem só do banco).
-  const temExtras = ent.encomenda || ent.retirarNoBalcao || aj.descontoCentavos !== 0 || aj.taxaManualCentavos != null || pagoAgora;
-  if (canal !== 'WHATSAPP' && temExtras) {
-    throw new ErroHttp(400, 'Opção não permitida neste canal', { codigo: 'VALIDACAO' });
-  }
-  if (ent.retirarNoBalcao && (!ent.encomenda || endereco)) {
-    throw new ErroHttp(400, 'Retirada no balcão é só para encomenda, sem endereço', { codigo: 'VALIDACAO' });
-  }
-  if (!Number.isInteger(aj.descontoCentavos) || aj.descontoCentavos < 0) {
-    throw new ErroHttp(400, 'Desconto inválido', { codigo: 'DESCONTO_INVALIDO' });
-  }
-  const taxa = aj.taxaManualCentavos;
-  if (taxa != null && (!Number.isInteger(taxa) || taxa < 0 || taxa > TAXA_MANUAL_MAX_CENTAVOS)) {
-    throw new ErroHttp(400, 'Taxa de entrega inválida', { codigo: 'VALIDACAO' });
-  }
-  if (ent.retirarNoBalcao) aj.taxaManualCentavos = 0; // retirada nunca tem taxa
+  const { ent, aj } = validarEntrada({ canal, itens, endereco, entrega, ajustes, pagoAgora, pagamentoOnline, totalEsperadoCentavos });
 
   if (chaveIdempotencia) {
     const existente = await pedidoRepo.buscarPorChave(chaveIdempotencia);
@@ -471,8 +472,8 @@ export async function criarPedido({
   }
 
   // Distância loja → cliente, FORA da transação (não segura travas): cache, rota
-  // com tempo limite de 1,5 s ou linha reta × 1,3. Nunca falha o pedido; a taxa
-  // continua a da área de entrega (a por km é do lote dos entregadores).
+  // com tempo limite de 1,5 s ou linha reta × 1,3. Nunca falha o pedido. É dela que sai a
+  // taxa por km do app em loja com entregador da plataforma.
   const geo = endereco ? await distanciaDaEntrega(lojaId, endereco.pin ?? null, agora, mapas) : null;
 
   let resultado;
@@ -486,6 +487,7 @@ export async function criarPedido({
           cliente,
           endereco,
           pagamento,
+          pagamentoOnline,
           entrega: ent,
           ajustes: aj,
           observacao,
@@ -496,6 +498,7 @@ export async function criarPedido({
           totalEsperadoCentavos,
           agora,
           geo,
+          env,
         }),
       OPCOES_TRANSACAO,
     );
@@ -513,10 +516,79 @@ export async function criarPedido({
     throw err;
   }
 
-  // Só depois do commit: a equipe nunca recebe pedido que não existe.
-  emitirParaEquipe(lojaId, 'pedido:novo', pedidoDaEquipe(resultado.pedido));
-  emitirParaEquipe(lojaId, 'impressao:nova', resultado.trabalho);
+  await alertasDaCriacao(lojaId, resultado);
+  // Só depois do commit: a equipe nunca recebe pedido que não existe. Pagamento online:
+  // nada vai à equipe até a aprovação (pagamento.service).
+  if (!resultado.pagamentoId) {
+    emitirParaEquipe(lojaId, 'pedido:novo', pedidoDaEquipe(resultado.pedido));
+    emitirParaEquipe(lojaId, 'impressao:nova', resultado.trabalho);
+  }
   return { pedido: pedidoPublico(resultado.pedido), criado: true };
+}
+
+/** Regras do corpo que não dependem do banco (400 VALIDACAO e afins). */
+function validarEntrada({ canal, itens, endereco, entrega, ajustes, pagoAgora, pagamentoOnline, totalEsperadoCentavos }) {
+  if (!CANAIS.includes(canal)) throw new ErroHttp(400, 'Canal inválido', { codigo: 'VALIDACAO' });
+  if (!itens?.length) throw new ErroHttp(400, 'O pedido não tem itens', { codigo: 'VALIDACAO' });
+  if (ehCanalDoCliente(canal) && !Number.isInteger(totalEsperadoCentavos)) {
+    throw new ErroHttp(400, 'Informe o total do pedido', { codigo: 'VALIDACAO' });
+  }
+  if (pagamentoOnline != null && (canal !== 'APP' || !PAGAMENTOS_ONLINE.includes(pagamentoOnline))) {
+    throw new ErroHttp(400, 'Pagamento online só pelo app', { codigo: 'VALIDACAO' });
+  }
+  const ent = {
+    encomenda: entrega.encomenda === true,
+    agendadoPara: entrega.agendadoPara ?? null,
+    retirarNoBalcao: entrega.retirarNoBalcao === true,
+  };
+  const aj = { descontoCentavos: ajustes.descontoCentavos ?? 0, taxaManualCentavos: ajustes.taxaManualCentavos ?? null };
+  // Encomenda, retirada, desconto, taxa digitada e "pago agora" são da equipe no
+  // delivery: o cliente nunca manda (preço e taxa do site/app saem só do banco).
+  const temExtras = ent.encomenda || ent.retirarNoBalcao || aj.descontoCentavos !== 0 || aj.taxaManualCentavos != null || pagoAgora;
+  if (canal !== 'WHATSAPP' && temExtras) {
+    throw new ErroHttp(400, 'Opção não permitida neste canal', { codigo: 'VALIDACAO' });
+  }
+  if (ent.retirarNoBalcao && (!ent.encomenda || endereco)) {
+    throw new ErroHttp(400, 'Retirada no balcão é só para encomenda, sem endereço', { codigo: 'VALIDACAO' });
+  }
+  if (!Number.isInteger(aj.descontoCentavos) || aj.descontoCentavos < 0) {
+    throw new ErroHttp(400, 'Desconto inválido', { codigo: 'DESCONTO_INVALIDO' });
+  }
+  const taxa = aj.taxaManualCentavos;
+  if (taxa != null && (!Number.isInteger(taxa) || taxa < 0 || taxa > TAXA_MANUAL_MAX_CENTAVOS)) {
+    throw new ErroHttp(400, 'Taxa de entrega inválida', { codigo: 'VALIDACAO' });
+  }
+  if (ent.retirarNoBalcao) aj.taxaManualCentavos = 0; // retirada nunca tem taxa
+  return { ent, aj };
+}
+
+/** Alertas do ADMIN gerados pela criação (depois do commit; falha aqui nunca derruba o pedido). */
+async function alertasDaCriacao(lojaId, { pedido, split, lojaSemPino, pagamentoId }) {
+  try {
+    // Trava dos 50%: só no pagamento online (é o split que fica limitado). Na entrega, a loja
+    // deve a taxa inteira no fechamento de qualquer jeito.
+    if (split.alertaAdmin && pagamentoId) {
+      await criarAlerta({
+        tipo: 'TAXA_ENTREGA_COMPLEMENTO',
+        lojaId,
+        pedidoId: pedido.id,
+        mensagem:
+          `A taxa de entrega (${formatarDinheiro(split.devidoPelaLojaCentavos)}) passou de 50% do valor cobrado do pedido ` +
+          `${pedido.id}. ${formatarDinheiro(split.complementoLojaCentavos)} ficam como débito da loja no fechamento.`,
+      });
+    }
+    if (lojaSemPino) {
+      await alertarUmaVez({
+        tipo: 'LOJA_SEM_LOCALIZACAO',
+        lojaId,
+        mensagem:
+          'A loja usa os entregadores do Taaki mas está sem a localização no mapa: os pedidos do app estão usando a taxa ' +
+          'da área de entrega no lugar da taxa por km. Marque a localização em Lojas ou no Perfil da loja.',
+      });
+    }
+  } catch (err) {
+    console.warn(`[pedido] alerta da criação não gravado: ${err.message}`);
+  }
 }
 
 function reaproveitar(existente, cliente, lojaId) {
@@ -529,28 +601,30 @@ function reaproveitar(existente, cliente, lojaId) {
 const NOME_FORMA = { PIX: 'Pix', DINHEIRO: 'dinheiro', DEBITO: 'cartão de débito', CREDITO: 'cartão de crédito' };
 
 /**
- * Regras do entregador da plataforma (docs/pagamento-online.md, Decisão 11 e as da Etapa 2):
- * - pedido do cliente (app/site) com entrega precisa do pino no mapa (a taxa é por km):
- *   422 PINO_OBRIGATORIO; o PDV não marca pino e usa a taxa da área como reserva;
+ * Regras do entregador da plataforma (docs/pagamento-online.md, Decisão 11 e as das Etapas 2 a 4):
+ * - pedido do APP com entrega precisa do pino no mapa (a taxa é por km): 422 PINO_OBRIGATORIO;
+ *   o site e o PDV não marcam pino e usam a taxa da área (origem AREA);
  * - pago na entrega, só dinheiro (o entregador não leva maquininha nem recebe Pix da loja):
- *   422 FORMA_INDISPONIVEL. Retirada no balcão e "pago agora" no balcão aceitam todas;
+ *   422 FORMA_INDISPONIVEL. Retirada no balcão, "pago agora" no balcão e o pagamento online
+ *   (que não é na entrega) aceitam;
  * - a taxa é da plataforma: o PDV não digita outra (422 TAXA_MANUAL_PROIBIDA; Decisão 8 da
- *   Etapa 3). Vale a da área (origem AREA). Retirada no balcão não tem taxa.
+ *   Etapa 3). Retirada no balcão não tem taxa.
  * Loja com motoboy próprio: nada muda.
  */
-export function conferirModoEntrega(loja, { canal, endereco, pagamento, pagoAgora = false, ajustes = {}, entrega = {} }) {
+export function conferirModoEntrega(loja, { canal, endereco, pagamento, pagamentoOnline = null, pagoAgora = false, ajustes = {}, entrega = {} }) {
   if (loja?.modoEntrega !== 'PLATAFORMA' || canal === 'SALAO') return;
   if (ajustes.taxaManualCentavos != null && !entrega.retirarNoBalcao) {
     throw new ErroHttp(422, 'Nesta loja a entrega é dos entregadores do Taaki e a taxa é a da área de entrega: não dá para digitar outra.', {
       codigo: 'TAXA_MANUAL_PROIBIDA',
     });
   }
-  if (canal === 'SITE' && endereco && !endereco.pin) {
+  if (canal === 'APP' && endereco && !endereco.pin) {
     throw new ErroHttp(422, 'Marque no mapa onde fica o endereço de entrega para pedir nesta loja.', {
       codigo: 'PINO_OBRIGATORIO',
     });
   }
   const forma = pagamento?.forma;
+  if (pagamentoOnline) return;
   if (forma && !formaNaEntregaPermitida({ modoEntrega: loja.modoEntrega, forma, comEntrega: Boolean(endereco), pagoAgora })) {
     throw new ErroHttp(422, `${loja.nome} não aceita ${NOME_FORMA[forma] ?? forma} na entrega. Escolha outra forma de pagamento.`, {
       codigo: 'FORMA_INDISPONIVEL',
@@ -559,18 +633,30 @@ export function conferirModoEntrega(loja, { canal, endereco, pagamento, pagoAgor
   }
 }
 
-async function criarNaTransacao(tx, d) {
-  // 0. "Pago agora": trava o caixa aberto antes de tudo (mesma ordem de travas
-  //    da finalização: caixa → resto). O pedido já entra neste caixa.
-  let caixaId = null;
-  if (d.pagoAgora) {
-    caixaId = await caixaRepo.travarAbertoCompartilhado(d.lojaId, tx);
-    if (!caixaId) {
-      throw new ErroHttp(409, 'O caixa está fechado. Abra o caixa para continuar.', { codigo: 'CAIXA_FECHADO' });
-    }
+/**
+ * Taxa de entrega cheia (antes de qualquer frete grátis) e de onde veio (Decisão 1 e as da Etapa 4):
+ * - taxa digitada no PDV (só loja com motoboy próprio): ela mesma;
+ * - APP em loja PLATAFORMA com distância: por km (`taxaPorKm`, origem KM);
+ * - o resto: a da área de entrega da loja (origem AREA). APP em loja PLATAFORMA sem distância
+ *   (loja sem pino) cai aqui e marca `lojaSemPino` (alerta para o ADMIN).
+ */
+export function resolverTaxa({ canal, modoEntrega, comEntrega, taxaManualCentavos, taxaAreaCentavos, distanciaMetros, regraKm }) {
+  if (!comEntrega) return { taxaCheiaCentavos: 0, origemTaxa: null, lojaSemPino: false };
+  if (taxaManualCentavos != null) return { taxaCheiaCentavos: taxaManualCentavos, origemTaxa: 'AREA', lojaSemPino: false };
+  const appNaPlataforma = canal === 'APP' && modoEntrega === 'PLATAFORMA';
+  if (appNaPlataforma && distanciaMetros != null) {
+    return { taxaCheiaCentavos: taxaPorKm(distanciaMetros, regraKm), origemTaxa: 'KM', lojaSemPino: false };
   }
+  return { taxaCheiaCentavos: taxaAreaCentavos, origemTaxa: 'AREA', lojaSemPino: appNaPlataforma };
+}
 
-  // 1. Loja aberta agora? (só o SITE; a equipe lança fora do horário)
+/**
+ * Passos 1 a 4 da criação, também usados pela prévia do app (sem gravar nada): loja aberta,
+ * produtos, área de entrega, taxa (km ou área), frete grátis (da loja ou da campanha), divisão
+ * da taxa (`calcularSplit`) e totais. Tudo recalculado no servidor, nunca vindo do cliente.
+ */
+async function calcularCobranca(tx, d) {
+  // 1. Loja aberta agora? (só o cliente; a equipe lança fora do horário)
   const turno = calcularTurnoAtivo(await turnoRepo.listarAtivosComHorarios(d.lojaId, tx), d.agora);
   if (!turno && canalExigeLojaAberta(d.canal)) {
     throw new ErroHttp(409, 'Estamos fechados agora. Os pedidos voltam quando abrirmos.', { codigo: 'LOJA_FECHADA' });
@@ -592,46 +678,96 @@ async function criarNaTransacao(tx, d) {
     });
   }
 
-  // 3. Taxa de entrega: a da área de entrega da loja para o bairro do endereço
-  //    (bairro da cidade). A loja não entrega lá = 422 BAIRRO_FORA_DA_AREA.
+  // 3. Área de entrega da loja para o bairro do endereço (bairro da cidade). A loja não
+  //    entrega lá = 422 BAIRRO_FORA_DA_AREA. Regras do entregador da plataforma.
   const config = await lojaRepo.buscarPorId(d.lojaId, tx);
   let bairro = null;
   if (d.endereco) bairro = await taxaDaLoja(d.lojaId, d.endereco.bairroId, { lojaNome: config?.nome }, tx);
-
-  // 4. Preços e totais recalculados; pagamento conferido contra o total do servidor.
-  //    Frete grátis (configuração da loja): subtotal dos itens >= mínimo zera a
-  //    taxa. Site sempre; WhatsApp só com `freteGratisWhatsapp` (padrão ligado). O site nunca manda taxa.
-  const freteGratis = freteGratisDaConfig(config, { canal: d.canal });
-  const doItens = calcularValores(d.itens, produtosPorId);
-  const taxa = bairro ? taxaDeEntrega(bairro.taxaCentavos, doItens.subtotalCentavos, freteGratis) : 0;
-  // Ajustes (desconto, taxa digitada) só chegam pela equipe; no site ficam zerados.
-  const valores = aplicarAjustes(
-    { ...doItens, taxaEntregaCentavos: taxa, totalCentavos: doItens.subtotalCentavos + taxa },
-    d.ajustes,
-  );
-  if (d.entrega.encomenda) validarAgendamento(d.entrega.agendadoPara, d.agora, horaViradaDe(config));
-  if (d.canal === 'SITE') {
-    conferirTotalEsperado(d.totalEsperadoCentavos, valores, { taxaBairroCentavos: bairro?.taxaCentavos ?? null, freteGratis });
-  }
-  validarPagamento(d.pagamento, valores.totalCentavos, { obrigatorio: d.canal !== 'SALAO' });
   conferirModoEntrega(config, d);
 
-  // 5. Baixa atômica do estoque (409 com o nome do que acabou).
+  // 4. Preços, taxa e frete grátis recalculados. Frete grátis da loja: site e app sempre;
+  //    WhatsApp só com `freteGratisWhatsapp`. Taxa digitada no PDV substitui a do bairro e o
+  //    frete grátis da loja. Campanha da primeira compra: só no app (Decisão 3 da Etapa 2).
+  const doItens = calcularValores(d.itens, produtosPorId);
+  if (d.ajustes.descontoCentavos > doItens.subtotalCentavos) aplicarAjustes(doItens, { descontoCentavos: d.ajustes.descontoCentavos });
+  const modoEntrega = config?.modoEntrega ?? 'PROPRIO';
+  const comEntrega = Boolean(d.endereco);
+  const { taxaCheiaCentavos, origemTaxa, lojaSemPino } = resolverTaxa({
+    canal: d.canal,
+    modoEntrega,
+    comEntrega,
+    taxaManualCentavos: d.ajustes.taxaManualCentavos,
+    taxaAreaCentavos: bairro?.taxaCentavos ?? 0,
+    distanciaMetros: d.geo?.distanciaMetros ?? null,
+    regraKm: lerConfigMapas(d.env).taxaKm,
+  });
+  const freteGratis = freteGratisDaConfig(config, { canal: ehCanalDoCliente(d.canal) ? 'SITE' : d.canal });
+  const elegivel =
+    d.canal === 'APP' && comEntrega && campanhaLigada(d.env) && (await campanhaElegivel(d.cliente, tx, d.env));
+  const split = calcularSplit({
+    subtotalCentavos: doItens.subtotalCentavos,
+    descontoCentavos: d.ajustes.descontoCentavos,
+    modoEntrega,
+    comEntrega,
+    taxaEntregaCentavos: taxaCheiaCentavos,
+    origemTaxa: origemTaxa ?? 'AREA',
+    freteGratisLoja: d.ajustes.taxaManualCentavos != null ? null : freteGratis,
+    campanhaElegivel: elegivel,
+  });
+  const valores = {
+    ...doItens,
+    taxaEntregaCentavos: split.taxaCobradaCentavos,
+    descontoCentavos: d.ajustes.descontoCentavos,
+    totalCentavos: split.valorCobradoCentavos,
+  };
+  return { config, bairro, valores, split, freteGratis, lojaSemPino, taxaCheiaCentavos };
+}
+
+async function criarNaTransacao(tx, d) {
+  // 0. "Pago agora": trava o caixa aberto antes de tudo (mesma ordem de travas
+  //    da finalização: caixa → resto). O pedido já entra neste caixa.
+  let caixaId = null;
+  if (d.pagoAgora) {
+    caixaId = await caixaRepo.travarAbertoCompartilhado(d.lojaId, tx);
+    if (!caixaId) {
+      throw new ErroHttp(409, 'O caixa está fechado. Abra o caixa para continuar.', { codigo: 'CAIXA_FECHADO' });
+    }
+  }
+
+  // 1 a 4. Loja aberta, produtos, área, taxa, frete grátis, divisão e totais.
+  const { config, bairro, valores, split, freteGratis, lojaSemPino, taxaCheiaCentavos } = await calcularCobranca(tx, d);
+  if (d.entrega.encomenda) validarAgendamento(d.entrega.agendadoPara, d.agora, horaViradaDe(config));
+  if (ehCanalDoCliente(d.canal)) {
+    conferirTotalEsperado(d.totalEsperadoCentavos, valores, {
+      taxaBairroCentavos: d.endereco ? taxaCheiaCentavos : null,
+      freteGratis,
+      origemFreteGratis: split.origemFreteGratis,
+    });
+  }
+  validarPagamento(d.pagamento, valores.totalCentavos, { obrigatorio: d.canal !== 'SALAO' });
+  if (d.pagamentoOnline && !pagamentoOnlineDisponivel(config, await conexaoRepo.buscarDaLoja(d.lojaId, tx), d.env)) {
+    throw new ErroHttp(409, `${config?.nome ?? 'A loja'} não está recebendo pagamento pelo app agora. Escolha pagar na entrega.`, {
+      codigo: 'PAGAMENTO_ONLINE_INDISPONIVEL',
+    });
+  }
+
+  // 5. Baixa atômica do estoque (409 com o nome do que acabou). No Pix é a reserva dos 15 minutos.
   await baixarEstoque(tx, necessidadesDeEstoque(valores.linhas));
 
   // 6. Número do dia (dia OPERACIONAL: vira às horaViradaDia, não à meia-noite),
-  //    atômico e sem buraco em caso de rollback.
+  //    atômico e sem buraco em caso de rollback. Pagamento online: só na aprovação
+  //    (Decisão 6); até lá o dia é o da criação e é trocado pelo da aprovação.
   const dia = diaOperacional(d.agora, horaViradaDe(config));
-  const numeroDia = await pedidoRepo.proximoNumeroDoDia(d.lojaId, dia, tx);
+  const numeroDia = d.pagamentoOnline ? null : await pedidoRepo.proximoNumeroDoDia(d.lojaId, dia, tx);
 
-  // 7. Pedido com snapshots.
+  // 7. Pedido com snapshots e a divisão da taxa (só com entregador da plataforma).
   const { id: pedidoId } = await pedidoRepo.criarPedido(
     {
       lojaId: d.lojaId,
       numeroDia,
       dataRef: paraCampoData(dia),
       canal: d.canal,
-      status: STATUS_INICIAL[d.canal],
+      status: d.pagamentoOnline ? 'AGUARDANDO_PAGAMENTO' : STATUS_INICIAL[d.canal],
       clienteId: d.cliente?.id ?? null,
       nomeCliente: d.cliente?.nome ?? (d.mesaRotulo ? `Mesa ${d.mesaRotulo}` : 'Cliente'),
       telefone: d.cliente?.telefone ?? null,
@@ -641,8 +777,8 @@ async function criarNaTransacao(tx, d) {
       taxaEntregaCentavos: valores.taxaEntregaCentavos,
       descontoCentavos: valores.descontoCentavos,
       totalCentavos: valores.totalCentavos,
-      formaPagamento: d.pagamento?.forma ?? null,
-      trocoParaCentavos: d.pagamento?.trocoParaCentavos ?? null,
+      formaPagamento: d.pagamentoOnline ? 'PIX' : (d.pagamento?.forma ?? null),
+      trocoParaCentavos: d.pagamentoOnline ? null : (d.pagamento?.trocoParaCentavos ?? null),
       mesaRotulo: d.mesaRotulo,
       // Encomenda tem horário marcado: sem "tempo estimado".
       tempoEstimadoMin: config && !d.entrega.encomenda ? calcularTempoEstimado(config, d.agora) : null,
@@ -654,6 +790,10 @@ async function criarNaTransacao(tx, d) {
       caixaId,
       criadoPorId: d.usuarioId,
       chaveIdempotencia: d.chaveIdempotencia,
+      origemFreteGratis: split.origemFreteGratis,
+      origemTaxaEntrega: split.origemTaxaEntrega,
+      valorEntregadorCentavos: split.valorEntregadorCentavos,
+      valorPlataformaEntregaCentavos: split.valorPlataformaEntregaCentavos,
       ...(d.geo ?? {}),
     },
     tx,
@@ -662,44 +802,147 @@ async function criarNaTransacao(tx, d) {
   // 8. Itens (snapshot de nome e preço) + histórico de estoque por item.
   await gravarItens(tx, pedidoId, valores.linhas, d.usuarioId);
 
-  // 9. Fila de impressão.
+  // 9. Campanha da primeira compra: reservada agora (usada na aprovação/finalização). Outro
+  //    pedido do mesmo telefone reservou no meio: o total mudou (409, nada fica gravado).
+  if (split.consumirCampanha) {
+    const reservou = await reservarCampanha(
+      tx,
+      { telefone: d.cliente.telefone, clienteId: d.cliente.id ?? null, pedidoId, agora: d.agora },
+      d.env,
+    );
+    if (!reservou) {
+      throw new ErroHttp(409, 'O frete grátis da primeira compra já foi usado neste telefone. Confira o novo total.', {
+        codigo: 'PRECO_ALTERADO',
+        detalhes: { origemFreteGratis: 'NENHUM' },
+      });
+    }
+  }
+
+  // 10. Pagamento online: o registro do pagamento (o Pix é criado depois do commit). Senão,
+  //     a fila de impressão.
+  if (d.pagamentoOnline) {
+    const { id: pagamentoId } = await pagamentoRepo.criar(
+      {
+        pedidoId,
+        metodo: 'PIX',
+        status: 'PENDENTE',
+        valorTotalCentavos: valores.totalCentavos,
+        valorPlataformaCentavos: split.valorPlataformaSplitCentavos,
+        idempotencyKey: randomUUID(),
+        expiraEm: new Date(d.agora.getTime() + PRAZO_PIX_MS),
+      },
+      tx,
+    );
+    return { pedido: await pedidoRepo.buscarPorId(pedidoId, tx), trabalho: null, pagamentoId, split, lojaSemPino };
+  }
   const trabalho = await pedidoRepo.criarTrabalhoImpressao(
     { lojaId: d.lojaId, pedidoId, tipo: 'PEDIDO', status: 'PENDENTE' },
     tx,
   );
 
-  return { pedido: await pedidoRepo.buscarPorId(pedidoId, tx), trabalho };
+  return { pedido: await pedidoRepo.buscarPorId(pedidoId, tx), trabalho, pagamentoId: null, split, lojaSemPino };
 }
 
-// ───────── Site ─────────
+// ───────── Site e app ─────────
 
 /**
- * Pedido do site na loja dada: exige telefone e um endereço do próprio cliente;
- * nome e telefone vêm do cadastro, não do corpo da requisição.
+ * Pedido do cliente (site ou app) na loja dada: exige telefone e um endereço do próprio
+ * cliente; nome e telefone vêm do cadastro, não do corpo da requisição. `origem: 'APP'`
+ * = canal APP (o app manda); sem ela, SITE. Pix exige e-mail no cadastro (Decisão 13).
  */
 export async function criarPedidoDoSite(
   lojaId,
   cliente,
-  { itens, enderecoId, formaPagamento, trocoParaCentavos, chaveIdempotencia, totalEsperadoCentavos },
-  { agora, mapas } = {},
+  { itens, enderecoId, formaPagamento, trocoParaCentavos, chaveIdempotencia, totalEsperadoCentavos, origem, pagamentoOnline },
+  { agora, mapas, env } = {},
 ) {
   garantirTelefone(cliente);
-  const endereco = await enderecoRepo.buscarDoCliente(cliente.id, enderecoId);
-  if (!endereco) {
-    throw new ErroHttp(422, 'Escolha um endereço de entrega', { codigo: 'ENDERECO_INVALIDO' });
+  if (pagamentoOnline && !cliente.email) {
+    throw new ErroHttp(422, 'Informe seu e-mail para pagar com Pix', { codigo: 'EMAIL_OBRIGATORIO' });
   }
+  const endereco = await enderecoDoCliente(cliente, enderecoId);
   return criarPedido({
     lojaId,
-    canal: 'SITE',
+    canal: origem === 'APP' ? 'APP' : 'SITE',
     itens,
-    cliente: { id: cliente.id, nome: cliente.nome, telefone: cliente.telefone },
-    endereco: { texto: formatarEndereco(endereco), bairroId: endereco.bairro.id, pin: pinDe(endereco) },
-    pagamento: { forma: formaPagamento, trocoParaCentavos: trocoParaCentavos ?? null },
+    cliente: clienteDoPedido(cliente),
+    endereco,
+    pagamento: { forma: pagamentoOnline ? 'PIX' : formaPagamento, trocoParaCentavos: pagamentoOnline ? null : (trocoParaCentavos ?? null) },
+    pagamentoOnline: pagamentoOnline ?? null,
     chaveIdempotencia,
     totalEsperadoCentavos,
     agora,
     mapas,
+    env,
   });
+}
+
+const clienteDoPedido = (c) => ({ id: c.id, nome: c.nome, telefone: c.telefone, telefoneVerificado: Boolean(c.telefoneVerificado) });
+
+async function enderecoDoCliente(cliente, enderecoId) {
+  const endereco = await enderecoRepo.buscarDoCliente(cliente.id, enderecoId);
+  if (!endereco) {
+    throw new ErroHttp(422, 'Escolha um endereço de entrega', { codigo: 'ENDERECO_INVALIDO' });
+  }
+  return { texto: formatarEndereco(endereco), bairroId: endereco.bairro.id, pin: pinDe(endereco) };
+}
+
+/**
+ * Prévia do checkout do app (nada é gravado nem baixado): taxa (por km ou da área), frete
+ * grátis (da loja ou da campanha), total e formas de pagamento da loja. O app mostra isto e
+ * manda o total no pedido (`totalEsperadoCentavos`). Mesmas recusas da criação (loja fechada,
+ * produto indisponível, fora da área, sem pino em loja PLATAFORMA).
+ */
+export async function previaDoPedido(lojaId, cliente, { itens, enderecoId, origem }, { agora = new Date(), mapas, env = process.env } = {}) {
+  const canal = origem === 'APP' ? 'APP' : 'SITE';
+  const endereco = await enderecoDoCliente(cliente, enderecoId);
+  const geo = await distanciaDaEntrega(lojaId, endereco.pin ?? null, agora, mapas);
+  const d = {
+    lojaId,
+    canal,
+    itens,
+    cliente: clienteDoPedido(cliente),
+    endereco,
+    pagamento: {},
+    ajustes: { descontoCentavos: 0, taxaManualCentavos: null },
+    entrega: {},
+    agora,
+    geo,
+    env,
+  };
+  const r = await calcularCobranca(prisma, d);
+  const conexao = await conexaoRepo.buscarDaLoja(lojaId);
+  const campanhaPossivel =
+    canal === 'APP' &&
+    campanhaLigada(env) &&
+    !cliente.telefoneVerificado &&
+    r.split.origemFreteGratis === 'NENHUM' &&
+    r.split.taxaCobradaCentavos > 0 &&
+    (await prisma.pedido.count({ where: { clienteId: cliente.id, status: 'FINALIZADO' } })) === 0;
+  return {
+    subtotalCentavos: r.valores.subtotalCentavos,
+    taxaEntregaCentavos: r.valores.taxaEntregaCentavos,
+    taxaCheiaCentavos: r.taxaCheiaCentavos,
+    totalCentavos: r.valores.totalCentavos,
+    origemTaxa: r.split.origemTaxaEntrega ?? (r.split.taxaCheiaCentavos > 0 ? 'AREA' : null),
+    distanciaMetros: geo?.distanciaMetros ?? null,
+    distanciaEstimada: geo?.distanciaOrigem === 'ESTIMADA',
+    origemFreteGratis: r.split.origemFreteGratis,
+    freteGratis: r.freteGratis,
+    // Sem telefone verificado o app oferece "Verifique seu telefone para ganhar frete grátis".
+    campanha: { aplicada: r.split.origemFreteGratis === 'CAMPANHA', disponivelSeVerificar: campanhaPossivel },
+    formasPagamento: formasDePagamentoDaLoja(r.config, conexao, env, canal),
+  };
+}
+
+/** Formas que o cliente pode escolher (o online só no app e com a loja apta). */
+function formasDePagamentoDaLoja(loja, conexao, env, canal) {
+  const formas = formasDePagamento({
+    modoEntrega: loja?.modoEntrega ?? 'PROPRIO',
+    onlineDisponivel: canal === 'APP' && pagamentoOnlineDisponivel(loja, conexao, env),
+  });
+  // Cartão online é da Etapa 7: por enquanto só o Pix.
+  return { ...formas, online: formas.online.filter((m) => PAGAMENTOS_ONLINE.includes(m)) };
 }
 
 export const PEDIDOS_POR_PAGINA = 20;

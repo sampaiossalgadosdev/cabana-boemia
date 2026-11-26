@@ -13,7 +13,7 @@ import {
 import { EstadoCarga, useAvisar, useCarregar } from '../componentes/comuns.jsx';
 
 const NOME_FORMA = { DINHEIRO: 'Dinheiro', PIX: 'Pix', DEBITO: 'Débito', CREDITO: 'Crédito' };
-const NOME_CANAL = { SITE: 'Site', WHATSAPP: 'WhatsApp', SALAO: 'Salão' };
+const NOME_CANAL = { SITE: 'Site', APP: 'App', WHATSAPP: 'WhatsApp', SALAO: 'Salão' };
 
 async function carregar(data) {
   const [relatorio, { caixas }] = await Promise.all([api.relatorios.dia(data), api.relatorios.caixas(data)]);

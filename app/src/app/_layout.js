@@ -13,6 +13,7 @@ import { UltimoPedidoProvider } from '../estado/UltimoPedido.js';
 import { TelaSemInternet } from '../componentes/TelaSemInternet.js';
 import { AceiteTermos } from '../componentes/AceiteTermos.js';
 import { PedirNome } from '../componentes/PedirNome.js';
+import { RetomarPix } from '../componentes/RetomarPix.js';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -59,6 +60,7 @@ function Navegacao() {
       </Stack>
       <AceiteTermos />
       <PedirNome />
+      <RetomarPix />
     </>
   );
 }

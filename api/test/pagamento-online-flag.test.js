@@ -58,7 +58,13 @@ describe('cifra dos tokens (AES-256-GCM)', () => {
 });
 
 describe('flag PAGAMENTO_ONLINE_ATIVO e disponibilidade por loja', () => {
-  const LIGADA = { PAGAMENTO_ONLINE_ATIVO: 'sim', TOKEN_ENCRYPTION_KEY: CHAVE_HEX, MP_STATE_SECRET: 's'.repeat(40) };
+  const LIGADA = {
+    PAGAMENTO_ONLINE_ATIVO: 'sim',
+    TOKEN_ENCRYPTION_KEY: CHAVE_HEX,
+    MP_STATE_SECRET: 's'.repeat(40),
+    CAMPANHA_TELEFONE_SECRET: 'c'.repeat(40),
+    MP_WEBHOOK_SECRET: 'segredo-do-webhook',
+  };
   const loja = { modoEntrega: 'PROPRIO', pagamentoOnlineAtivo: true };
   const conectada = { status: 'CONECTADA' };
 
@@ -79,6 +85,9 @@ describe('flag PAGAMENTO_ONLINE_ATIVO e disponibilidade por loja', () => {
 
   test('flag ligada exige a chave válida e o segredo do state; desligada não exige nada', () => {
     assert.match(problemasNoPagamentoOnline({ ...LIGADA, MP_STATE_SECRET: '' })[0], /MP_STATE_SECRET ausente/);
+    // Etapa 4: com a flag ligada, a campanha e o webhook também precisam dos segredos.
+    assert.match(problemasNoPagamentoOnline({ ...LIGADA, CAMPANHA_TELEFONE_SECRET: '' })[0], /CAMPANHA_TELEFONE_SECRET ausente/);
+    assert.match(problemasNoPagamentoOnline({ ...LIGADA, MP_WEBHOOK_SECRET: ' ' })[0], /MP_WEBHOOK_SECRET ausente/);
     assert.deepEqual(problemasNoPagamentoOnline({}), []);
     assert.deepEqual(problemasNoPagamentoOnline({ TOKEN_ENCRYPTION_KEY: 'lixo' }), []);
     assert.deepEqual(problemasNoPagamentoOnline(LIGADA), []);

@@ -481,7 +481,7 @@ function Historico({ dados, filtroInicial }) {
                 <td>
                   {m.motivo ?? (m.pedido ? `Pedido #${m.pedido.numeroDia}` : <span className="suave">—</span>)}
                 </td>
-                <td>{m.usuario?.nome ?? <span className="suave">{m.pedido?.canal === 'SITE' ? 'Site' : '—'}</span>}</td>
+                <td>{m.usuario?.nome ?? <span className="suave">{m.pedido?.canal === 'SITE' ? 'Site' : m.pedido?.canal === 'APP' ? 'App' : '—'}</span>}</td>
               </tr>
             ))}
           </tbody>

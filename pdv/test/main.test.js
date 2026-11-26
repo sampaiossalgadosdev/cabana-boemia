@@ -117,10 +117,12 @@ describe('handlers IPC', () => {
     assert.deepEqual(chamadas[0], ['PATCH', '/equipe/pedidos/3/finalizar', { formaPagamento: 'PIX' }]);
   });
 
-  test('fila pede só site + WhatsApp de hoje', async () => {
+  test('fila e painel pedem todos os canais (sem lista de canais: um canal novo nunca some)', async () => {
     const { h, chamadas } = montar();
     await h['pedidos:fila']();
-    assert.deepEqual(chamadas[0], ['GET', '/equipe/pedidos?dataRef=hoje&canal=SITE,WHATSAPP']);
+    assert.deepEqual(chamadas[0], ['GET', '/equipe/pedidos?dataRef=hoje']);
+    await h['pedidos:listar']('hoje');
+    assert.deepEqual(chamadas[1], ['GET', '/equipe/pedidos?dataRef=hoje&status=todos']);
   });
 
   test('tempo: 1 a 240 inteiro; vazio/null volta ao padrão', async () => {
@@ -307,8 +309,8 @@ describe('handlers IPC', () => {
       assert.equal((await executar(h[canal], args)).ok, false, `${canal} ${JSON.stringify(args)}`);
     }
     assert.deepEqual(chamadas, [
-      ['GET', '/equipe/pedidos?dataRef=hoje&canal=SITE,WHATSAPP&status=todos'],
-      ['GET', '/equipe/pedidos?dataRef=2026-11-14&canal=SITE,WHATSAPP&status=todos'],
+      ['GET', '/equipe/pedidos?dataRef=hoje&status=todos'],
+      ['GET', '/equipe/pedidos?dataRef=2026-11-14&status=todos'],
       ['PATCH', '/equipe/pedidos/5/status', { status: 'EM_PREPARO' }],
       ['PATCH', '/equipe/pedidos/5/agendamento', { agendadoPara: '2026-11-15T01:30:00.000Z' }],
     ]);

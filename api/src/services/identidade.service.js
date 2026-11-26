@@ -112,13 +112,20 @@ export async function definirCor(lojaId, corPrimaria) {
   return perfil(loja);
 }
 
+const lojaPlataformaSemPino = () =>
+  new ErroHttp(422, 'Esta loja usa os entregadores do Taaki: a taxa de entrega é calculada a partir da localização da loja, que não pode ficar vazia.', {
+    codigo: 'LOJA_SEM_LOCALIZACAO',
+  });
+
 /**
  * DONO: pino da loja (busca + arrastar no mapa da retaguarda). Os dois null = apaga
  * (sem pino, os pedidos da loja ficam sem distância). Mesma regra do raio da cidade.
  */
 export async function definirLocalizacao(lojaId, { latitude, longitude }) {
   const pin = pinoDoCorpo({ latitude: latitude ?? null, longitude: longitude ?? null });
-  await buscarLoja(lojaId);
+  const atual = await buscarLoja(lojaId);
+  // Com os entregadores do Taaki a taxa é por km a partir deste pino (Decisão 3 da Etapa 4).
+  if (!pin && atual?.modoEntrega === 'PLATAFORMA') throw lojaPlataformaSemPino();
   const loja = await lojaRepo.atualizar(lojaId, { latitude: pin?.latitude ?? null, longitude: pin?.longitude ?? null });
   return perfil(loja);
 }

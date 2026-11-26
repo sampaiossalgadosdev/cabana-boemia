@@ -1,20 +1,20 @@
 import { IconeMais, IconeStatus } from '../Icones.jsx';
 import { formatarDataHora, formatarPreco, formatarTelefone, NOME_PAGAMENTO } from '../../lib/formatar.js';
-import { minutosDeAtraso, STATUS, estaAberto, tituloDoPedido } from '../../lib/painel.js';
+import { minutosDeAtraso, SELO_ORIGEM, STATUS, estaAberto, textoRegistro, tituloDoPedido } from '../../lib/painel.js';
 import { textoDistancia } from '@restaurante/shared/cupom';
 
 /** Uma linha da lista "Entregas/Encomendas". O botão à direita abre as opções do pedido. */
 export function LinhaPedido({ pedido, agora, novo, aoAbrir, aoVer }) {
   const status = STATUS[pedido.status] ?? { rotulo: pedido.status, classe: 'aberto' };
   const atraso = minutosDeAtraso(pedido, agora);
-  const registrado = pedido.registradoPor ? `Registrado por: ${pedido.registradoPor}` : 'Registrado pelo site';
+  const registrado = textoRegistro(pedido);
 
   return (
     <li className={`linha-pedido ${novo ? 'linha-pedido--novo' : ''}`} onPointerDown={novo ? aoVer : undefined}>
       <div className="linha-pedido__info">
         <p className="linha-pedido__titulo">
           {tituloDoPedido(pedido)}
-          {pedido.canal === 'SITE' && <span className="selo selo--site">Site</span>}
+          {SELO_ORIGEM[pedido.canal] && <span className={`selo selo--${pedido.canal === 'APP' ? 'app' : 'site'}`}>{SELO_ORIGEM[pedido.canal]}</span>}
           {novo && <span className="selo selo--novo">Novo</span>}
         </p>
         <p className={`status-pedido status-pedido--${status.classe}`}>

@@ -26,13 +26,22 @@ describe('regras do entregador da plataforma no pedido (conferirModoEntrega)', (
     }
   });
 
-  test('cliente sem pino em loja PLATAFORMA: 422 PINO_OBRIGATORIO', () => {
+  test('app sem pino em loja PLATAFORMA: 422 PINO_OBRIGATORIO; o site passa (taxa da área)', () => {
     assert.equal(
-      codigo(() => conferirModoEntrega(PLATAFORMA, { canal: 'SITE', endereco: SEM_PINO, pagamento: { forma: 'DINHEIRO' } })),
+      codigo(() => conferirModoEntrega(PLATAFORMA, { canal: 'APP', endereco: SEM_PINO, pagamento: { forma: 'DINHEIRO' } })),
       'PINO_OBRIGATORIO',
     );
     assert.equal(
-      codigo(() => conferirModoEntrega(PLATAFORMA, { canal: 'SITE', endereco: COM_PINO, pagamento: { forma: 'DINHEIRO' } })),
+      codigo(() => conferirModoEntrega(PLATAFORMA, { canal: 'APP', endereco: COM_PINO, pagamento: { forma: 'DINHEIRO' } })),
+      null,
+    );
+    assert.equal(
+      codigo(() => conferirModoEntrega(PLATAFORMA, { canal: 'SITE', endereco: SEM_PINO, pagamento: { forma: 'DINHEIRO' } })),
+      null,
+    );
+    // Pix online não é "na entrega": passa em loja PLATAFORMA.
+    assert.equal(
+      codigo(() => conferirModoEntrega(PLATAFORMA, { canal: 'APP', endereco: COM_PINO, pagamento: { forma: 'PIX' }, pagamentoOnline: 'PIX' })),
       null,
     );
   });
@@ -45,7 +54,7 @@ describe('regras do entregador da plataforma no pedido (conferirModoEntrega)', (
   });
 
   test('loja PLATAFORMA na entrega: só dinheiro; retirada e pago agora aceitam todas', () => {
-    for (const canal of ['SITE', 'WHATSAPP']) {
+    for (const canal of ['SITE', 'APP', 'WHATSAPP']) {
       for (const forma of ['PIX', 'DEBITO', 'CREDITO']) {
         assert.equal(
           codigo(() => conferirModoEntrega(PLATAFORMA, { canal, endereco: COM_PINO, pagamento: { forma } })),

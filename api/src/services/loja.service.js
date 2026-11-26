@@ -206,6 +206,26 @@ function comPisoDoFreteGratis(atual, { freteGratisPiso, ...dados }) {
   );
 }
 
+/**
+ * Loja com os entregadores do Taaki precisa do pino (a taxa é por km a partir dele; Decisão 3
+ * da Etapa 4): virar PLATAFORMA sem pino salvo, ou apagar o pino de uma loja PLATAFORMA = 422
+ * LOJA_SEM_LOCALIZACAO. O pino pode vir na mesma gravação.
+ */
+function exigirPinoNaPlataforma(atual, dados) {
+  const modo = dados.modoEntrega ?? atual.modoEntrega;
+  if (modo !== 'PLATAFORMA') return;
+  const latitude = dados.latitude !== undefined ? dados.latitude : atual.latitude;
+  if (latitude != null) return;
+  throw new ErroHttp(
+    422,
+    'Para usar os entregadores do Taaki, marque antes a localização da loja no mapa: a taxa de entrega é calculada a partir dela.',
+    {
+      codigo: 'LOJA_SEM_LOCALIZACAO',
+      detalhes: [{ campo: 'modoEntrega', mensagem: 'Marque antes a localização da loja no mapa: a taxa por km é calculada a partir dela.' }],
+    },
+  );
+}
+
 /** O slug da loja padrão é fixo: é por ele que o site atual acha a Cabana. */
 export async function editarLoja(id, dados) {
   if (dados.slug !== undefined && dados.slug !== SLUG_LOJA_PADRAO && id === (await lojaPadraoId())) {
@@ -218,6 +238,7 @@ export async function editarLoja(id, dados) {
   const atual = await lojaRepo.buscarPorId(id);
   if (!atual) throw lojaNaoEncontrada();
   dados = comPisoDoFreteGratis(atual, comPinoConferido(dados));
+  exigirPinoNaPlataforma(atual, dados);
   if (dados.corPrimariaPadrao !== undefined && dados.corPrimaria === undefined && (atual.corPrimaria ?? null) === (atual.corPrimariaPadrao ?? null)) {
     dados.corPrimaria = dados.corPrimariaPadrao;
   }

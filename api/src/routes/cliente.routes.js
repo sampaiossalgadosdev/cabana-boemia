@@ -8,6 +8,7 @@ import { criarVerificadorTelefone, telefoneE164 } from '../lib/verificadorTelefo
 import { criarClienteController } from '../controllers/cliente.controller.js';
 import { lojaDoSite } from '../middlewares/loja.js';
 import { criarLimitadorMapa, criarMapaController } from '../controllers/mapa.controller.js';
+import { pagamentosPadrao } from '../services/pagamento.service.js';
 
 /** Dados pessoais: nunca em cache. */
 function semCache(req, res, next) {
@@ -22,6 +23,7 @@ function semCache(req, res, next) {
  *           verificadorTelefone?: object, limitesTelefone?: object, mapas?: object }} [opcoes]
  *   `verificadorTelefone`: login com celular (padrão: o de PHONE_VERIFIER);
  *   `limitesTelefone`: janelas e limites (ver criarLimitadoresTelefone; os testes encurtam).
+ *   `pagamentos`: pagamento online (Pix; padrão: o do ambiente; os testes simulam o Mercado Pago).
  */
 export function criarClienteRoutes({
   verificarIdTokenGoogle = criarVerificadorGoogle(),
@@ -32,9 +34,10 @@ export function criarClienteRoutes({
   limiteAuthCliente,
   relogio,
   mapas,
+  pagamentos = pagamentosPadrao(),
 } = {}) {
   const c = criarClienteController(
-    { verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple, verificadorTelefone, mapas },
+    { verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple, verificadorTelefone, mapas, pagamentos },
     relogio,
   );
   const mapa = criarMapaController(mapas);
@@ -57,6 +60,10 @@ export function criarClienteRoutes({
   r.put('/me', assincrono(c.atualizarMe));
   r.delete('/me', assincrono(c.excluirConta));
   r.post('/aceite', assincrono(c.aceitarTermos));
+  r.put('/email', assincrono(c.definirEmail));
+  // Verificar o telefone da conta logada (campanha): mesmo verificador e mesmos limites do login.
+  r.post('/telefone/enviar', tel.porIp, tel.reenvio, tel.porHora, assincrono(c.enviarCodigoDaConta));
+  r.post('/telefone/verificar', tel.errosCodigo, assincrono(c.verificarTelefoneDaConta));
   r.put('/marketing', assincrono(c.definirMarketing));
   // Busca do endereço no mapa (Geocoding pelo servidor; a chave não vai ao app).
   r.post('/mapa/geocodificar', criarLimitadorMapa({ chave: (req) => `cliente:${req.cliente.id}` }), assincrono(mapa.geocodificarEndereco));
@@ -65,6 +72,8 @@ export function criarClienteRoutes({
   r.put('/enderecos/:id', assincrono(c.atualizarEndereco));
   r.delete('/enderecos/:id', assincrono(c.removerEndereco));
   r.post('/pedidos', exigirTelefoneCliente, assincrono(c.criarPedido));
+  r.post('/pedidos/previa', exigirTelefoneCliente, assincrono(c.previaPedido));
+  r.get('/pedidos/:id/pagamento', assincrono(c.situacaoPagamento));
   r.get('/pedidos', assincrono(c.listarPedidos));
   r.get('/pedidos/ultimo', assincrono(c.ultimoPedido));
   return r;

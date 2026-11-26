@@ -51,7 +51,7 @@ export function avisoCaixaEsquecido(caixa, agora = new Date(), horaVirada = hora
   return `Caixa aberto desde ${diaMes.format(d)} às ${horaMin.format(d)}`;
 }
 
-const NOME_CANAL = { SITE: 'Site', WHATSAPP: 'WhatsApp', SALAO: 'Comanda' };
+const NOME_CANAL = { SITE: 'Site', APP: 'App', WHATSAPP: 'WhatsApp', SALAO: 'Comanda' };
 
 /** "Comanda #3 · Maria (Mesa 2)" / "WhatsApp #5 · João". */
 export function descreverPendente(p) {

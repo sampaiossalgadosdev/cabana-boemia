@@ -61,7 +61,11 @@ export function dataDoPedido(iso) {
  * viu: a API recalcula e, se for diferente, responde 409 PRECO_ALTERADO.
  */
 export function corpoDoPedido(itens, { enderecoId, formaPagamento, trocoParaCentavos, chaveIdempotencia, totalEsperadoCentavos, lojaSlug }) {
+  // "Pix pelo app" (PIX_ONLINE): pagamento online, sem forma na entrega nem troco.
+  const online = formaPagamento === 'PIX_ONLINE';
   return {
+    // Pedido feito pelo app (canal APP: campanha, pino e pagamento online). O site não manda.
+    origem: 'APP',
     // Loja do pedido (multi-loja); sem ela a API usa a loja padrão.
     ...(lojaSlug ? { lojaSlug } : {}),
     itens: itens.map((i) => ({
@@ -70,7 +74,7 @@ export function corpoDoPedido(itens, { enderecoId, formaPagamento, trocoParaCent
       ...(i.observacao ? { observacao: i.observacao } : {}),
     })),
     enderecoId,
-    formaPagamento,
+    ...(online ? { pagamentoOnline: 'PIX' } : { formaPagamento }),
     ...(totalEsperadoCentavos != null ? { totalEsperadoCentavos } : {}),
     ...(formaPagamento === 'DINHEIRO' && trocoParaCentavos ? { trocoParaCentavos } : {}),
     ...(chaveIdempotencia ? { chaveIdempotencia } : {}),

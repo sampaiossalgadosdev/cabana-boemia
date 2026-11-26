@@ -159,37 +159,57 @@ Commits previstos:
 - `feat(retaguarda): modo de entrega na tela Lojas`
 - `docs: etapa 3 do pagamento online`
 
-### Etapa 4 — Pix no app, webhook, conciliação e expiração
+### Etapa 4 — Canal APP, Pix no app, webhook, conciliação e expiração (CONCLUÍDA em 2026-11-25, branch `feat/pagamento-online`, sem commit)
 
-Objetivo: o cliente paga por Pix dentro do app e o pedido só chega ao PDV aprovado.
+**Feito** (vale isto e as Decisões da Etapa 4 onde o plano abaixo divergir):
+- Migrations `20261127120000_pagamento_online_pix_enums` (`CanalPedido.APP`, `StatusPagamento.A_ESTORNAR`, alertas `PAGAMENTO_DIVERGENTE`, `PAGO_APOS_EXPIRAR`, `MP_DESVINCULADA`, `TAXA_ENTREGA_COMPLEMENTO`, `PIX_FALHANDO`, `LOJA_SEM_LOCALIZACAO`) e `20261127120100_pagamento_online_pix` (`Pagamento.consultadoEm`), aplicadas no banco de dev (`migrate diff` sem diferença).
+- Corpo do pedido: `origem: 'APP'` (o app manda sempre) e `pagamentoOnline: 'PIX'` (sem `formaPagamento` nem troco). Prévia `POST /cliente/pedidos/previa`.
+- `criarPedido` com `calcularSplit` para todos os canais (`calcularCobranca`, também usada pela prévia; `resolverTaxa`: KM só no APP em loja PLATAFORMA com distância). Trava de 50% gera alerta só no pagamento online.
+- `api/src/services/pagamento.service.js` (`gerarPix`, `aprovar`, `conciliar`, `expirarPedido`, `situacaoParaCliente`, `rodarRotina`, `cancelarPendentesDaLoja`, `desvincularConta`, `receberWebhook`, `iniciarRotina`); `mercadoPago.js` ganhou `criarPix`, `consultarPagamento`, `cancelarPagamento`, `validarAssinaturaWebhook`, `urlDeNotificacao`.
+- PDV 0.3.2: painel com todos os canais menos o salão e os status ocultos; selo "App"/"Site"; alerta sonoro no APP; "Registrado pelo app".
+- App (versionCode 5 continua: ainda não foi enviado ao Play): prévia no pagamento, "Pix pelo app (pagar agora)", e-mail pedido uma vez, faixa da campanha com a verificação do telefone, tela `sacola/pix`, `RetomarPix`, `logica/pagamento.js`, `expo-clipboard` ~58.0.4.
+- Retaguarda › Lojas: o campo "Entrega" mostra o aviso/erro do pino da loja.
+- Rascunho da política e dos termos: `docs/rascunho-privacidade-pagamento.md` (não publicado).
+
+**Ordem do lançamento (Decisão 1 da Etapa 4)**: 1) instalar o **PDV 0.3.2 em todas as lojas**; 2) só depois, o build do app que manda `origem: 'APP'` (o PDV 0.3.1 esconde esses pedidos).
+
+**Pendências**:
+- **Bloqueante da campanha**: `PHONE_VERIFIER` vazio em produção (sem SMS real ninguém verifica o telefone; nada de modo teste em produção). Provedor de SMS a escolher (Firebase Phone Auth previsto como outra implementação de `verificadorTelefone`).
+- Conferir no teste real com as contas de teste do Mercado Pago: o template do HMAC (`id:…;request-id:…;ts:…;`, `data.id` em minúsculas), como a comissão aparece no `GET /v1/payments/:id` (`fee_details` tipo `application_fee` ou `application_fee`; sem ela a comissão não é conferida), se as notificações `mp-connect` chegam assinadas e o `action` delas (tratamos `…deauthorized…`).
+- Etapa 5: estorno do `A_ESTORNAR` (ponto `estornarPagamentoAtrasado` em `criarServicoPagamentos`), selo "Pago online" no PDV, finalizar sem caixa.
+- Etapa 6: lançamento `TAXA_ENTREGA_COMPLEMENTO` no livro-razão (hoje só o alerta).
+- Revisão jurídica do rascunho e nova `DOCUMENTOS_APP.versao` antes de ligar `PAGAMENTO_ONLINE_ATIVO=sim` em produção.
+- Não testado em aparelho (QR, copiar, retomar a tela ao reabrir o app).
+
+Texto revisto em 2026-11-25 ao começar a etapa (vale sobre o rascunho antigo; as Decisões continuam valendo). Objetivo: o app passa a ser um canal próprio, o cliente paga por Pix dentro do app e o pedido só chega ao PDV aprovado. Com `PAGAMENTO_ONLINE_ATIVO` desligado ou a loja sem pagamento online, o pagamento fica como hoje (só o canal `APP` e o split entram para todos).
+
+Banco (migrations só aditivas):
+- `CanalPedido` ganha `APP` (migration só do enum). `TipoAlerta` ganha `PAGAMENTO_DIVERGENTE`, `PAGO_APOS_EXPIRAR`, `MP_DESVINCULADA`, `TAXA_ENTREGA_COMPLEMENTO`; `StatusPagamento` ganha o estado "aprovado depois de expirar, a estornar" (pergunta 6 abaixo).
 
 API:
-- `criarPedido` aceita `pagamento: { modo: 'ONLINE', meio: 'PIX' }` só no canal do cliente e só com a loja apta (senão 409 `PAGAMENTO_ONLINE_INDISPONIVEL`). Nesse caso: status `AGUARDANDO_PAGAMENTO`, **sem** cupom e **sem** `pedido:novo`; estoque baixado na criação (reserva de 15 min); número do dia conforme a pergunta 6.
-- Depois do commit, `pagamento.service.criarPix(pedido)`: `POST /v1/payments` com o token da loja, `X-Idempotency-Key`, `transaction_amount` (total do servidor), `payment_method_id: "pix"`, `payer.email` (pergunta 13), `description`, `external_reference` (id do pedido), `notification_url`, `date_of_expiration` e `application_fee` só quando > 0. Falha ao criar o Pix = pedido cancelado na hora (estoque devolvido) e 502 `PAGAMENTO_FALHOU` para o app.
-- `POST /cliente/pedidos` devolve o pedido + `pagamento: { qrCode, qrCodeBase64, expiraEm }`. `GET /cliente/pedidos/:id/pagamento` (só o dono do pedido) consulta o Mercado Pago se ainda pendente e devolve o estado (o app chama a cada poucos segundos na tela do Pix).
-- `POST /mercadopago/webhook` (pública): confere a assinatura `x-signature` com `MP_WEBHOOK_SECRET`, grava o evento (dedupe), responde 200 rápido e processa: busca o pagamento pelo `data.id` no banco (desconhecido = ignora), consulta `GET /v1/payments/:id` com o token da loja e concilia.
-- Conciliação (`conciliar(pagamento, respostaMp)`), uma função só para webhook, consulta do app e rotina: `approved` com valor igual ao total → numa transação, `AGUARDANDO_PAGAMENTO → CONFIRMADO` condicionado, `pagoOnlineEm`, forma `PIX`, cupom PEDIDO, e depois do commit `pedido:novo` + `impressao:nova`; `rejected`/`cancelled`/vencido → encerra e devolve o estoque; valor diferente → não aprova e registra alerta.
-- Expiração: rotina a cada minuto procura pendentes com `expiraPagamentoEm` passado, consulta o Mercado Pago uma última vez (aprovado no último segundo vence), cancela o pagamento lá (`PUT /v1/payments/:id { status: "cancelled" }`) e encerra o pedido com o estoque devolvido. Aprovação que chega depois de encerrado: pergunta 8.
-- `pedidoPublico` ganha `modoPagamento`, `meioOnline`, `pagoOnline`; o histórico do cliente mostra "Aguardando pagamento", "Pagamento expirado".
-- Política de privacidade do app: o Mercado Pago passa a receber dados do pagador. Texto novo e `DOCUMENTOS_APP.versao` nova (todos aceitam de novo), com revisão jurídica (pergunta 20).
+- **Canal APP**: o app manda `origem: 'APP'` no `POST /cliente/pedidos` (sem o campo = `SITE`, como o site e os builds antigos). `APP` segue as regras do `SITE` (loja aberta, `disponivelHoje`, turno, `vendidoNoSite`, `totalEsperadoCentavos`, `CONFIRMADO`, frete grátis da loja) e só ele tem pino obrigatório em loja `PLATAFORMA`, campanha e pagamento online. Site em loja `PLATAFORMA`: entrega com a taxa da área (origem `AREA`), só dinheiro na entrega. Relatório e cupom ganham o canal "App".
+- **Split na criação** (todos os canais com entrega): `calcularSplit` decide taxa cobrada, origem do frete grátis, `origemTaxaEntrega`, `valorEntregadorCentavos`/`valorPlataformaEntregaCentavos` e o valor do split, sempre no servidor. `APP` em loja `PLATAFORMA` = `taxaPorKm(distância)` (origem `KM`); site e PDV em `PLATAFORMA` = área (`AREA`). Trava de 50% estourada = alerta `TAXA_ENTREGA_COMPLEMENTO` (o lançamento no livro-razão é da Etapa 6).
+- **Prévia** `POST /cliente/pedidos/previa { lojaSlug, enderecoId, itens }` → subtotal, taxa (km ou área), frete grátis (`LOJA`/`CAMPANHA`), total e formas; o app mostra a taxa por km e a campanha antes de enviar (o `totalEsperadoCentavos` vem dali).
+- **Campanha**: reservada na criação (só `APP`, telefone verificado, `calcularSplit` com `consumirCampanha`), usada na aprovação do online ou na finalização, liberada na expiração e no cancelamento.
+- **Verificar o telefone da conta logada** (para a campanha): `POST /cliente/telefone/enviar` e `/cliente/telefone/verificar` (mesmo verificador e limites do login por celular; telefone verificado em outra conta = 409).
+- **Pix**: `pagamentoOnline: 'PIX'` no corpo, só `APP` e loja apta (senão 409 `PAGAMENTO_ONLINE_INDISPONIVEL`); e-mail obrigatório no cadastro (422 `EMAIL_OBRIGATORIO`; Decisão 13). Pedido `AGUARDANDO_PAGAMENTO`, sem número, sem cupom e sem eventos; estoque baixado (reserva). Depois do commit, `mercadoPago.criarPix` (token da loja, `X-Idempotency-Key` do `Pagamento`, `application_fee` só > 0, `external_reference` = id do pedido, `notification_url`, `date_of_expiration` +30 min, `description` com a loja, `payer.email`); devolve `qrCode`, `qrCodeBase64` e `expiraEm` (+15 min). Falha ao criar = pedido `EXPIRADO` com estoque e campanha devolvidos e 502 `PAGAMENTO_FALHOU`. Reenvio com a mesma chave devolve o mesmo Pix.
+- `GET /cliente/pedidos/:id/pagamento` (só o dono do pedido): estado do banco; pendente há mais de 30 s sem consulta = consulta o Mercado Pago (a rotina e o webhook são o caminho principal).
+- `POST /mercadopago/webhook` (pública): `x-signature` com `MP_WEBHOOK_SECRET` (manifesto `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`), inválida = 401; dedupe em `EventoWebhook`; 200 na hora e processa depois. `payment`: loja pelo `user_id` (conexão), `consultarPagamento` com o token dela, confere `external_reference`, valor e `application_fee` (divergência = alerta, não aprova). `mp-connect` desvinculado = conexão `DESCONECTADA`, loja desligada, alerta `MP_DESVINCULADA`.
+- **Aprovação** (`aprovarPagamento`, uma só para webhook, consulta e rotina): transição condicionada `AGUARDANDO_PAGAMENTO → CONFIRMADO`, número e dia operacional da aprovação, `formaPagamento = PIX`, campanha usada, cupom PEDIDO; depois do commit `pedido:novo` + `impressao:nova`. Pedido já `EXPIRADO`: não revive, pagamento marcado para estorno, alerta `PAGO_APOS_EXPIRAR` e ponto `estornarPagamentoAtrasado` (vazio até a Etapa 5).
+- **Rotina de 1 minuto** (`iniciarRotinaPagamentos` no `server.js`): pendente com mais de 15 min = consulta uma última vez, `cancelarPagamento` no Mercado Pago e pedido `EXPIRADO` (estoque e campanha devolvidos); os outros pendentes são consultados (webhook perdido).
+- **Desconectar**: `cancelarPendentesDaLoja` cancela no Mercado Pago (antes de apagar os tokens) e expira os pedidos.
+- `mercadoPago.js` ganha `criarPix`, `consultarPagamento`, `cancelarPagamento` e `validarAssinaturaWebhook`.
+- Variável nova: `MP_WEBHOOK_SECRET`. `notification_url` = origem do `MP_REDIRECT_URI` + `/api/mercadopago/webhook`. `CAMPANHA_TELEFONE_SECRET` obrigatório para subir com a flag ligada; sem ele, a campanha fica desligada (aviso no log).
+- Política: rascunho em `docs/` (Mercado Pago, e-mail do pagador, hash do telefone depois da exclusão), sem publicar nem trocar `DOCUMENTOS_APP.versao`.
 
-App (versionCode novo):
-- `expo-clipboard` (versão do `bundledNativeModules.json`).
-- `logica/pedido.js`: formas conforme a loja (`modoEntrega`, pagamento online disponível) vindas do `/publico/lojas/:slug/config` (campo novo, aditivo).
-- `componentes/Finalizacao.js`: seção "Pagar agora" (Pix) separada de "Pagar na entrega".
-- Tela nova `app/sacola/pix.js`: QR code, "Copiar código Pix", contagem regressiva de 15 min, consulta periódica, aprovado → `enviado`; expirado → aviso e volta à sacola (itens mantidos).
-- `logica/pagamento.js` (pura, testada): estado da tela, tempo restante, interpretação de erros.
+PDV (versão nova, obrigatória: o 0.3.1 esconde pedido `APP`): selo "App" ou "Site", alerta sonoro também no `APP`, filtro com `APP`.
 
-Testes: `api/test/pagamento-pix.test.js` com Mercado Pago falso (criação com e sem comissão, comissão nunca vinda do cliente, webhook com assinatura inválida, duplicado, fora de ordem, aprovação concorrente com expiração, valor divergente, pedido não aparece no `GET /equipe/pedidos` nem imprime antes da aprovação, estoque devolvido na expiração, idempotência do `POST /cliente/pedidos`); app `test/pagamento.test.js`.
+App (versionCode 5, que ainda não foi enviado ao Play): `expo-clipboard`; corpo com `origem: 'APP'`; pagamento pela prévia ("Pagar agora com Pix" separado de "Pagar na entrega", formas da loja); faixa "Verifique seu telefone para ganhar frete grátis na primeira compra"; e-mail pedido uma vez antes do Pix; tela `sacola/pix` (QR, copiar, contagem de 15 min, consulta a cada 5 s, aprovado → `enviado`, expirado → aviso e volta à sacola guardada); Pix pendente salvo no aparelho e retomado ao abrir; `logica/pagamento.js` testada.
 
-Commits previstos:
-- `feat(api): criar o Pix do pedido no Mercado Pago com a comissão do marketplace`
-- `feat(api): webhook do Mercado Pago com assinatura e conciliação do pagamento`
-- `feat(api): expiração do Pix em 15 minutos com devolução do estoque`
-- `feat(api): pedido aguardando pagamento fora do PDV até a aprovação`
-- `feat(api): política do app com o Mercado Pago (versão nova)`
-- `feat(app): pagar com Pix no app (QR, copia e cola, expiração)`
-- `chore(app): versionCode N`
+Testes (Mercado Pago sempre falso): os listados no pedido da etapa (origem APP/SITE, split, taxa por km, campanha, aguardando fora do PDV, idempotência, assinatura, duplicado, divergência, aprovação, expiração, aprovação atrasada, desconectar, mp-connect, módulo único).
+
+Fora: estorno, cartão, livro-razão e fechamento, trava da taxa na tela do PDV (Etapa 5), limpeza do domínio antigo.
+
 
 ### Etapa 5 — Cancelamento, estorno e exibição no PDV
 
@@ -353,3 +373,16 @@ Respostas às perguntas da Etapa 3:
 14. **Conta desconectada** pode ser conectada a outra loja; só bloqueia a conta CONECTADA ou EXPIRADA em outra loja.
 15. **PKCE**: fica sem por enquanto (só o state assinado). **Melhoria futura**: ligar o PKCE no aplicativo do Mercado Pago e mandar o `code_verifier`.
 16. **Trava da taxa na tela do PDV** (loja `PLATAFORMA`): fica para a **Etapa 5**; na Etapa 3 só a API recusa.
+
+### Decisões da Etapa 4 (2026-11-25)
+
+1. **PDV novo obrigatório** (o 0.3.1 esconde pedido `APP`). O filtro do PDV deixa de ser "lista de canais permitidos" e passa a ser "todos os canais, menos os status ocultos (`AGUARDANDO_PAGAMENTO`, `EXPIRADO`)", para um canal novo nunca mais deixar pedido invisível. **Ordem do lançamento: primeiro atualizar o PDV em todas as lojas, depois o build do app que manda `origem: 'APP'`.**
+2. **Verificar o telefone da conta logada**: duas rotas autenticadas (enviar e verificar), o mesmo verificador e os mesmos limites do login por celular; telefone verificado em outra conta = 409. **`PHONE_VERIFIER` vazio em produção é pendência bloqueante do lançamento da campanha**; nada de modo teste em produção.
+3. **Loja `PLATAFORMA` sem pino da loja**: o ADMIN não consegue mudar a loja para `PLATAFORMA` sem o pino salvo (mensagem clara). Se mesmo assim faltar, o pedido usa a taxa da área (origem `AREA`) e gera alerta para o ADMIN.
+4. **Sem `CAMPANHA_TELEFONE_SECRET`**: campanha desligada, com aviso no log.
+5. **Falha ao criar o Pix**: pedido `EXPIRADO` (estoque e campanha devolvidos) e 502. O app mostra "Não foi possível gerar o Pix agora. Tente de novo ou escolha outra forma de pagamento." e mantém a sacola. Mais de 3 falhas na mesma loja em 1 hora = alerta para o ADMIN.
+6. **Pago depois de expirar**: status de pagamento novo `A_ESTORNAR` (processado na Etapa 5), com alerta para o ADMIN já agora.
+7. **Acompanhamento**: aprovado, o app vai para a tela "Pedido nº N recebido".
+8. **`notification_url`**: origem do `MP_REDIRECT_URI` + `/api/mercadopago/webhook`.
+9. **Estoque e sacola**: estoque baixa na criação do Pix e volta se expirar; a sacola só é limpa na aprovação.
+10. **Política**: rascunho em `docs/rascunho-privacidade-pagamento.md`, sem tocar na página nem na versão.

@@ -56,7 +56,10 @@ export function listarAtivas(db = prisma) {
 export function listarTodas(db = prisma) {
   return db.loja.findMany({
     orderBy: [{ ordem: 'asc' }, { nome: 'asc' }],
-    include: { _count: { select: { usuarios: true, pedidos: true } } },
+    include: {
+      _count: { select: { usuarios: true, pedidos: true } },
+      conexaoMercadoPago: { select: { status: true, mpUserId: true } },
+    },
   });
 }
 

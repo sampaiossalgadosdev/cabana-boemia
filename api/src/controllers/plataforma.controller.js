@@ -143,7 +143,13 @@ const lojaCriarSchema = z.object({
 });
 
 const lojaEditarSchema = z
-  .object(Object.fromEntries(Object.entries(camposLoja).map(([k, v]) => [k, v.optional()])))
+  .object({
+    ...Object.fromEntries(Object.entries(camposLoja).map(([k, v]) => [k, v.optional()])),
+    // Só o ADMIN muda (esta rota é só dele); toda loja nasce PROPRIO.
+    modoEntrega: z.enum(['PLATAFORMA', 'PROPRIO'], { error: 'Modo de entrega inválido' }).optional(),
+    // Frete grátis abaixo do piso ao virar PLATAFORMA: subir o mínimo ou desligar.
+    freteGratisPiso: z.enum(['SUBIR', 'DESLIGAR'], { error: 'Escolha subir o mínimo ou desligar o frete grátis' }).optional(),
+  })
   .refine((d) => Object.values(d).some((v) => v !== undefined), 'Nada para alterar');
 
 const donoSchema = z.object({

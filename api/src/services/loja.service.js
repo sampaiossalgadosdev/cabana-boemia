@@ -14,6 +14,8 @@ import * as turnoRepo from '../repositories/turno.repository.js';
 import { calcularTurnoAtivo, calcularProximaAbertura } from './turno.service.js';
 import { identidade, limparImagensDaLoja } from './identidade.service.js';
 import { pinoDoCorpo } from './endereco.service.js';
+import { formatarDinheiro } from '@restaurante/shared/cupom';
+import { minimoFreteGratisPlataforma } from '../lib/pagamentoOnline.js';
 
 /** Loja que o site atual atende (rotas sem slug). */
 export const SLUG_LOJA_PADRAO = 'cabana-boemia';
@@ -121,6 +123,7 @@ const CAMPOS_EDITAVEIS = [
   'ordem',
   'latitude',
   'longitude',
+  'modoEntrega',
 ];
 
 /** Loja como o ADMIN vê (cadastro completo, sem a configuração do dia). */
@@ -129,6 +132,14 @@ function lojaDaPlataforma(l) {
   for (const c of CAMPOS_EDITAVEIS) saida[c] = l[c] ?? null;
   saida.whatsapp = l.whatsapp ?? '';
   if (l._count) Object.assign(saida, { usuarios: l._count.usuarios, pedidos: l._count.pedidos });
+  // Frete grátis (para o aviso do piso ao mudar o modo de entrega) e o pagamento online.
+  saida.freteGratisAtivo = Boolean(l.freteGratisAtivo);
+  saida.freteGratisMinimoCentavos = l.freteGratisMinimoCentavos ?? null;
+  saida.pagamentoOnlineAtivo = Boolean(l.pagamentoOnlineAtivo);
+  if ('conexaoMercadoPago' in l) {
+    const mp = l.conexaoMercadoPago;
+    saida.mercadoPago = mp && mp.status !== 'DESCONECTADA' ? { status: mp.status, conta: mp.mpUserId } : null;
+  }
   saida.criadoEm = l.criadoEm;
   return saida;
 }
@@ -174,6 +185,27 @@ function comPinoConferido({ latitude, longitude, ...resto }) {
   return pin === undefined ? resto : { ...resto, latitude: pin?.latitude ?? null, longitude: pin?.longitude ?? null };
 }
 
+/**
+ * Loja passando a (ou sendo) entregador da plataforma com frete grátis ligado abaixo do piso
+ * (Decisão 9 da Etapa 3): o ADMIN escolhe `freteGratisPiso` = 'SUBIR' (mínimo vai ao piso) ou
+ * 'DESLIGAR' (frete grátis da loja desligado). Sem escolha = 409 FRETE_GRATIS_ABAIXO_DO_PISO
+ * (com o mínimo e o piso): a loja nunca fica gravada violando o piso.
+ */
+function comPisoDoFreteGratis(atual, { freteGratisPiso, ...dados }) {
+  if (dados.modoEntrega !== 'PLATAFORMA') return dados;
+  const piso = minimoFreteGratisPlataforma();
+  const minimo = atual.freteGratisMinimoCentavos;
+  if (!atual.freteGratisAtivo || minimo == null || minimo >= piso) return dados;
+  if (freteGratisPiso === 'SUBIR') return { ...dados, freteGratisMinimoCentavos: piso };
+  if (freteGratisPiso === 'DESLIGAR') return { ...dados, freteGratisAtivo: false };
+  throw new ErroHttp(
+    409,
+    `O frete grátis desta loja começa em ${formatarDinheiro(minimo)}. Com os entregadores do Taaki a loja paga a taxa no frete grátis, ` +
+      `e o mínimo precisa ser de pelo menos ${formatarDinheiro(piso)}. Suba o mínimo ou desligue o frete grátis da loja.`,
+    { codigo: 'FRETE_GRATIS_ABAIXO_DO_PISO', detalhes: { minimoCentavos: minimo, pisoCentavos: piso } },
+  );
+}
+
 /** O slug da loja padrão é fixo: é por ele que o site atual acha a Cabana. */
 export async function editarLoja(id, dados) {
   if (dados.slug !== undefined && dados.slug !== SLUG_LOJA_PADRAO && id === (await lojaPadraoId())) {
@@ -185,7 +217,7 @@ export async function editarLoja(id, dados) {
   // Padrão novo: a loja que ainda usa o padrão antigo (o dono não personalizou) acompanha.
   const atual = await lojaRepo.buscarPorId(id);
   if (!atual) throw lojaNaoEncontrada();
-  dados = comPinoConferido(dados);
+  dados = comPisoDoFreteGratis(atual, comPinoConferido(dados));
   if (dados.corPrimariaPadrao !== undefined && dados.corPrimaria === undefined && (atual.corPrimaria ?? null) === (atual.corPrimariaPadrao ?? null)) {
     dados.corPrimaria = dados.corPrimariaPadrao;
   }

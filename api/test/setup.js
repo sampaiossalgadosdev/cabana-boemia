@@ -16,3 +16,6 @@ process.env.PRISMA_HIDE_UPDATE_MESSAGE = '1';
 // Login com celular: cada teste passa o próprio verificador (o .env de dev pode ter PHONE_VERIFIER=test).
 process.env.PHONE_VERIFIER = '';
 process.env.PHONE_TEST_NUMBERS = '';
+// Pagamento online: segredos próprios dos testes (o .env de dev pode não ter ou ter outros).
+process.env.CAMPANHA_TELEFONE_SECRET = 'teste-campanha-telefone-com-pelo-menos-32-caracteres';
+process.env.MP_STATE_SECRET = 'teste-state-mercado-pago-com-pelo-menos-32-caracteres';

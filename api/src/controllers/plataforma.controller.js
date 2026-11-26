@@ -8,6 +8,7 @@ import * as usuarioService from '../services/usuario.service.js';
 import { normalizarWhatsapp } from '../services/configuracao.service.js';
 import * as identidadeService from '../services/identidade.service.js';
 import * as anuncioService from '../services/anuncio.service.js';
+import * as alertaService from '../services/alerta.service.js';
 import { normalizarCpfCnpj } from '../lib/documento.js';
 import { avaliarCor } from '@restaurante/shared/cores';
 
@@ -36,6 +37,23 @@ export async function alterarBairro(req, res) {
 /** Pedidos de exclusão de conta da página pública /excluir-conta. */
 export async function listarSolicitacoesExclusao(req, res) {
   res.json(await solicitacaoRepo.listar());
+}
+
+// ───────── Alertas para o ADMIN ─────────
+
+export async function listarAlertas(req, res) {
+  res.json(await alertaService.listar());
+}
+
+/** Contador do menu da plataforma. */
+export async function contarAlertas(req, res) {
+  res.json({ abertos: await alertaService.contarAbertos() });
+}
+
+export async function resolverAlerta(req, res) {
+  const { id } = validar(idSchema, req.params);
+  await alertaService.resolver(id, req.usuario.id);
+  res.status(204).end();
 }
 
 export async function marcarSolicitacaoAtendida(req, res) {
@@ -125,7 +143,13 @@ const lojaCriarSchema = z.object({
 });
 
 const lojaEditarSchema = z
-  .object(Object.fromEntries(Object.entries(camposLoja).map(([k, v]) => [k, v.optional()])))
+  .object({
+    ...Object.fromEntries(Object.entries(camposLoja).map(([k, v]) => [k, v.optional()])),
+    // Só o ADMIN muda (esta rota é só dele); toda loja nasce PROPRIO.
+    modoEntrega: z.enum(['PLATAFORMA', 'PROPRIO'], { error: 'Modo de entrega inválido' }).optional(),
+    // Frete grátis abaixo do piso ao virar PLATAFORMA: subir o mínimo ou desligar.
+    freteGratisPiso: z.enum(['SUBIR', 'DESLIGAR'], { error: 'Escolha subir o mínimo ou desligar o frete grátis' }).optional(),
+  })
   .refine((d) => Object.values(d).some((v) => v !== undefined), 'Nada para alterar');
 
 const donoSchema = z.object({

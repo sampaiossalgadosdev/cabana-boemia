@@ -20,6 +20,8 @@ import {
   IconeRelatorio,
   IconeRelogio,
   IconeSair,
+  IconeCartao,
+  IconeSino,
 } from './componentes/Icones.jsx';
 import { TelaLogin } from './telas/TelaLogin.jsx';
 import { TelaCardapioDoDia } from './telas/TelaCardapioDoDia.jsx';
@@ -35,6 +37,8 @@ import { TelaPerfil } from './telas/TelaPerfil.jsx';
 import { TelaLojas } from './telas/TelaLojas.jsx';
 import { TelaExclusoes } from './telas/TelaExclusoes.jsx';
 import { TelaAnuncios } from './telas/TelaAnuncios.jsx';
+import { TelaPagamentoOnline } from './telas/TelaPagamentoOnline.jsx';
+import { TelaAlertas } from './telas/TelaAlertas.jsx';
 
 const ICONES = {
   'cardapio-do-dia': IconeCardapioDia,
@@ -51,6 +55,8 @@ const ICONES = {
   'bairros-cidade': IconeBairros,
   anuncios: IconeMegafone,
   exclusoes: IconeLixo,
+  'pagamento-online': IconeCartao,
+  alertas: IconeSino,
 };
 
 const COMPONENTES = {
@@ -68,6 +74,8 @@ const COMPONENTES = {
   'bairros-cidade': TelaBairrosCidade,
   anuncios: TelaAnuncios,
   exclusoes: TelaExclusoes,
+  'pagamento-online': TelaPagamentoOnline,
+  alertas: TelaAlertas,
 };
 
 export function App() {
@@ -136,6 +144,9 @@ function Estrutura({ usuario, aoSair }) {
   const Tela = COMPONENTES[tela];
   const titulo = TELAS.find((t) => t.caminho === tela).titulo;
   const [tema, setTema] = useState(() => aplicarTema(loja));
+  // ADMIN: contador de alertas abertos no menu da plataforma (relido a cada troca de tela).
+  const alertas = useCarregar(() => (admin ? api.plataforma.alertas.contagem() : Promise.resolve(null)), [admin, tela]);
+  const alertasAbertos = alertas.dados?.abertos ?? 0;
 
   useEffect(() => {
     setTema(aplicarTema(loja));
@@ -180,7 +191,10 @@ function Estrutura({ usuario, aoSair }) {
   /** Perfil salvo (cor/logo) ou loja editada pelo ADMIN: o tema muda na hora. */
   function lojaMudou(nova) {
     if (nova && loja && nova.slug === loja.slug) setLoja((l) => ({ ...l, ...nova }));
-    if (admin) lojas.recarregar();
+    if (admin) {
+      lojas.recarregar();
+      alertas.recarregar();
+    }
   }
 
   return (
@@ -236,6 +250,11 @@ function Estrutura({ usuario, aoSair }) {
             >
               <Icone />
               {t.titulo}
+              {t.caminho === 'alertas' && alertasAbertos > 0 && (
+                <span className="etiqueta etiqueta--alerta menu__contador" aria-label={`${alertasAbertos} abertos`}>
+                  {alertasAbertos}
+                </span>
+              )}
             </a>
           );
         })}

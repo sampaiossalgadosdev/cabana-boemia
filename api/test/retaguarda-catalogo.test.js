@@ -402,6 +402,8 @@ describe('retaguarda: catálogo, cardápio do dia, turnos, bairros e configuraç
       freteGratisAtivo: false,
       freteGratisMinimoCentavos: null,
       freteGratisWhatsapp: true,
+      modoEntrega: 'PROPRIO',
+      freteGratisMinimoPlataformaCentavos: null,
     });
     assert.equal((await publico('/publico/config')).whatsapp, '5543999990000');
     assert.equal((await publico('/publico/cardapio')).tempoEstimadoMin, 50);

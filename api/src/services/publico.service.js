@@ -5,6 +5,8 @@ import { horaViradaDe } from './diaOperacional.service.js';
 import * as publicoRepo from '../repositories/publico.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as lojaService from './loja.service.js';
+import * as lojaRepo from '../repositories/loja.repository.js';
+import { formasDaLoja, pagamentoOnlineLigado } from '../lib/pagamentoOnline.js';
 import { identidade } from './identidade.service.js';
 import * as bairroService from './bairro.service.js';
 import { calcularTurnoAtivo, calcularProximaAbertura } from './turno.service.js';
@@ -125,6 +127,9 @@ export async function config(lojaId) {
     whatsapp: c.whatsapp,
     // null = desligado; { minimoCentavos } = frete grátis com subtotal >= mínimo.
     freteGratis: freteGratisDaConfig(c),
+    // Formas que o app oferece (tipo de loja; online só com a flag, a loja ligada e
+    // a conexão com o Mercado Pago ativa). Aditivo: o site ignora.
+    formasPagamento: formasDaLoja(c, pagamentoOnlineLigado() ? await lojaRepo.buscarConexaoMp(lojaId) : null),
     // O Client ID OAuth é público: o site precisa dele para desenhar o botão do Google.
     googleClientId: process.env.GOOGLE_CLIENT_ID || null,
   };

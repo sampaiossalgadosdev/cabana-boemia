@@ -14,6 +14,7 @@ import { horaViradaDe } from './diaOperacional.service.js';
 import { emitirParaEquipe } from '../lib/eventos.js';
 import { freteGratisDaConfig, taxaDeEntrega } from '@restaurante/shared/frete';
 import { linkDoMapa, pinDe } from '@restaurante/shared/mapa';
+import { formaNaEntregaPermitida, formasDePagamento } from '@restaurante/shared/formasPagamento';
 import * as pedidoRepo from '../repositories/pedido.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoRepo from '../repositories/endereco.repository.js';
@@ -27,6 +28,7 @@ import { taxaDaLoja } from './bairro.service.js';
 import { mapasPadrao } from './mapa.service.js';
 import * as mapaRepo from '../repositories/mapa.repository.js';
 import { limparChave, problemaNaChave } from '../lib/nfce.js';
+import { liberarCampanha } from './campanha.service.js';
 
 export const CANAIS = ['SITE', 'WHATSAPP', 'SALAO'];
 export const FORMAS_PAGAMENTO = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'];
@@ -48,6 +50,12 @@ export const STATUS_ABERTOS = ['ABERTO', 'CONFIRMADO', 'EM_PREPARO', 'SAIU_ENTRE
 
 /** Status que a equipe escolhe no painel (delivery/encomenda abertos). */
 export const STATUS_ANDAMENTO = ['ABERTO', 'EM_PREPARO', 'SAIU_ENTREGA'];
+
+/**
+ * Pagamento online ainda não aprovado (ou que expirou): o pedido não existe para a
+ * equipe (lista do dia, fila, caixa, ações do painel) até a aprovação.
+ */
+export const STATUS_FORA_DO_PDV = ['AGUARDANDO_PAGAMENTO', 'EXPIRADO'];
 
 /** Teto da taxa de entrega digitada no PDV (R$ 1.000,00): acima disso é erro de digitação. */
 export const TAXA_MANUAL_MAX_CENTAVOS = 100_000;
@@ -518,6 +526,39 @@ function reaproveitar(existente, cliente, lojaId) {
   return { pedido: pedidoPublico(existente), criado: false };
 }
 
+const NOME_FORMA = { PIX: 'Pix', DINHEIRO: 'dinheiro', DEBITO: 'cartão de débito', CREDITO: 'cartão de crédito' };
+
+/**
+ * Regras do entregador da plataforma (docs/pagamento-online.md, Decisão 11 e as da Etapa 2):
+ * - pedido do cliente (app/site) com entrega precisa do pino no mapa (a taxa é por km):
+ *   422 PINO_OBRIGATORIO; o PDV não marca pino e usa a taxa da área como reserva;
+ * - pago na entrega, só dinheiro (o entregador não leva maquininha nem recebe Pix da loja):
+ *   422 FORMA_INDISPONIVEL. Retirada no balcão e "pago agora" no balcão aceitam todas;
+ * - a taxa é da plataforma: o PDV não digita outra (422 TAXA_MANUAL_PROIBIDA; Decisão 8 da
+ *   Etapa 3). Vale a da área (origem AREA). Retirada no balcão não tem taxa.
+ * Loja com motoboy próprio: nada muda.
+ */
+export function conferirModoEntrega(loja, { canal, endereco, pagamento, pagoAgora = false, ajustes = {}, entrega = {} }) {
+  if (loja?.modoEntrega !== 'PLATAFORMA' || canal === 'SALAO') return;
+  if (ajustes.taxaManualCentavos != null && !entrega.retirarNoBalcao) {
+    throw new ErroHttp(422, 'Nesta loja a entrega é dos entregadores do Taaki e a taxa é a da área de entrega: não dá para digitar outra.', {
+      codigo: 'TAXA_MANUAL_PROIBIDA',
+    });
+  }
+  if (canal === 'SITE' && endereco && !endereco.pin) {
+    throw new ErroHttp(422, 'Marque no mapa onde fica o endereço de entrega para pedir nesta loja.', {
+      codigo: 'PINO_OBRIGATORIO',
+    });
+  }
+  const forma = pagamento?.forma;
+  if (forma && !formaNaEntregaPermitida({ modoEntrega: loja.modoEntrega, forma, comEntrega: Boolean(endereco), pagoAgora })) {
+    throw new ErroHttp(422, `${loja.nome} não aceita ${NOME_FORMA[forma] ?? forma} na entrega. Escolha outra forma de pagamento.`, {
+      codigo: 'FORMA_INDISPONIVEL',
+      detalhes: { aceitas: formasDePagamento({ modoEntrega: loja.modoEntrega }).naEntrega },
+    });
+  }
+}
+
 async function criarNaTransacao(tx, d) {
   // 0. "Pago agora": trava o caixa aberto antes de tudo (mesma ordem de travas
   //    da finalização: caixa → resto). O pedido já entra neste caixa.
@@ -573,6 +614,7 @@ async function criarNaTransacao(tx, d) {
     conferirTotalEsperado(d.totalEsperadoCentavos, valores, { taxaBairroCentavos: bairro?.taxaCentavos ?? null, freteGratis });
   }
   validarPagamento(d.pagamento, valores.totalCentavos, { obrigatorio: d.canal !== 'SALAO' });
+  conferirModoEntrega(config, d);
 
   // 5. Baixa atômica do estoque (409 com o nome do que acabou).
   await baixarEstoque(tx, necessidadesDeEstoque(valores.linhas));
@@ -739,8 +781,12 @@ export async function criarPedidoDoWhatsapp(
 
 const pedidoNaoEncontrado = () => new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
 
-/** Pedido de outra loja não existe para quem é desta (404, como inexistente). */
-export const ehDaLoja = (pedido, lojaId) => Boolean(pedido) && pedido.lojaId === lojaId;
+/**
+ * Pedido de outra loja não existe para quem é desta (404, como inexistente). O que
+ * aguarda pagamento online ou expirou também não existe para a equipe.
+ */
+export const ehDaLoja = (pedido, lojaId) =>
+  Boolean(pedido) && pedido.lojaId === lojaId && !STATUS_FORA_DO_PDV.includes(pedido.status);
 
 function pedidoEncerrado(status) {
   return new ErroHttp(409, `Pedido já está ${status === 'CANCELADO' ? 'cancelado' : 'finalizado'}`, {
@@ -817,6 +863,8 @@ export async function cancelarPedido(lojaId, id, { usuarioId = null, agora = new
     }
 
     await estornarVendas(tx, await pedidoRepo.vendasDoPedido(id, tx), usuarioId);
+    // Frete grátis da primeira compra volta para o telefone (reservado ou já usado).
+    await liberarCampanha(tx, id);
 
     const pedido = await pedidoRepo.buscarPorId(id, tx);
     const trabalho =

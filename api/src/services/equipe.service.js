@@ -13,8 +13,9 @@ import * as equipeRepo from '../repositories/equipe.repository.js';
 import * as turnoRepo from '../repositories/turno.repository.js';
 import * as enderecoService from './endereco.service.js';
 import { bairroParaLoja } from './bairro.service.js';
-import { OPCOES_TRANSACAO, pedidoDaEquipe, STATUS_ABERTOS, ehDaLoja } from './pedido.service.js';
+import { OPCOES_TRANSACAO, pedidoDaEquipe, STATUS_ABERTOS, STATUS_FORA_DO_PDV, ehDaLoja } from './pedido.service.js';
 import { exigirCaixaAberto } from './caixa.service.js';
+import { usarCampanha } from './campanha.service.js';
 import { desfazVerificacaoSeMudou } from './cliente.service.js';
 import { calcularTempoEstimado, manualDeHoje, saldoDisponivel, temSaldo } from './publico.service.js';
 
@@ -38,6 +39,7 @@ export async function listarPedidosDoDia(lojaId, { dataRef, canais, somenteAbert
     dataRef: dia,
     canais,
     status: somenteAbertos ? STATUS_ABERTOS : undefined,
+    excluirStatus: STATUS_FORA_DO_PDV,
   });
   return { dataRef: dia, pedidos: pedidos.map(pedidoDaEquipe) };
 }
@@ -80,6 +82,8 @@ export async function finalizarPedido(lojaId, id, { formaPagamento }, agora = ne
       const situacao = s?.status === 'CANCELADO' ? 'cancelado' : 'finalizado';
       throw new ErroHttp(409, `Pedido já está ${situacao}`, { codigo: 'PEDIDO_ENCERRADO' });
     }
+    // Pago na entrega: a reserva do frete grátis da primeira compra vira uso.
+    await usarCampanha(tx, id, agora);
     return pedidoRepo.buscarPorId(id, tx);
   }, OPCOES_TRANSACAO);
 

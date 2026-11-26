@@ -13,6 +13,8 @@ import { criarLimitadorMapa, criarMapaController } from '../controllers/mapa.con
  * - Anúncios do carrossel "Patrocinado" do app (registro da veiculação; sem excluir).
  * - Solicitações de exclusão de conta da página pública /excluir-conta (a
  *   plataforma é a controladora dos dados; atendidas à mão pelo ADMIN).
+ * - Alertas para o ADMIN (renovação do Mercado Pago que falhou e, nas próximas etapas,
+ *   pagamentos que pedem ação).
  */
 /** Corpo cru da imagem (até 500 KB; o tipo é conferido pelos bytes no service). */
 export const corpoImagem = () => express.raw({ type: () => true, limit: '520kb' });
@@ -43,6 +45,9 @@ export function criarPlataformaRoutes({ relogio, mapas } = {}) {
   r.post('/anuncios/imagens', corpoImagem(), assincrono(anuncios.enviarImagem));
   r.post('/anuncios', assincrono(anuncios.criar));
   r.patch('/anuncios/:id', assincrono(anuncios.alterar));
+  r.get('/alertas', assincrono(c.listarAlertas));
+  r.get('/alertas/contagem', assincrono(c.contarAlertas));
+  r.patch('/alertas/:id/resolvido', assincrono(c.resolverAlerta));
   r.get('/solicitacoes-exclusao', assincrono(c.listarSolicitacoesExclusao));
   r.patch('/solicitacoes-exclusao/:id/atendida', assincrono(c.marcarSolicitacaoAtendida));
   return r;

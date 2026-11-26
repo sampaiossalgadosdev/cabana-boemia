@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { errosPorCampo, formatarWhatsapp } from '../lib/formatar.js';
+import { formatarReais } from '../lib/dinheiro.js';
 import { Campo, CampoDinheiro, EstadoCarga, Interruptor, useAvisar, useCarregar } from '../componentes/comuns.jsx';
 
 /** Nome do restaurante, WhatsApp (link de cancelamento do site), tempo estimado padrão, virada do dia e frete grátis. */
@@ -40,6 +41,8 @@ function FormConfig({ config, aoSalvar }) {
   if (!f) return null;
 
   const mudar = (campo) => (e) => setF((x) => ({ ...x, [campo]: e.target.value }));
+  // Entregador da plataforma: no frete grátis a loja paga a taxa; o mínimo tem um piso (a API confere de novo).
+  const pisoPlataforma = config.freteGratisMinimoPlataformaCentavos ?? null;
 
   async function salvar(e) {
     e.preventDefault();
@@ -52,6 +55,9 @@ function FormConfig({ config, aoSalvar }) {
     const digitouMinimo = f.freteGratisTexto.trim() !== '';
     if (digitouMinimo && !(minimo > 0)) erro.freteGratisMinimoCentavos = 'Valor inválido, ex.: 69,00';
     else if (f.freteGratisAtivo && !digitouMinimo) erro.freteGratisMinimoCentavos = 'Informe a partir de quanto o frete é grátis';
+    else if (f.freteGratisAtivo && pisoPlataforma && minimo < pisoPlataforma) {
+      erro.freteGratisMinimoCentavos = `No frete grátis a loja paga a taxa dos entregadores do Taaki. Para a taxa não ficar maior que o pedido, comece em pelo menos ${formatarReais(pisoPlataforma)}.`;
+    }
     setErros(erro);
     if (Object.keys(erro).length) return;
     setSalvando(true);
@@ -138,9 +144,11 @@ function FormConfig({ config, aoSalvar }) {
           rotulo="Frete grátis a partir de (R$)"
           erro={erros.freteGratisMinimoCentavos}
           ajuda={
-            f.freteGratisAtivo
-              ? 'Pedidos de entrega com itens a partir deste valor não pagam a taxa do bairro. O site mostra quanto falta.'
-              : 'Desligado: todo pedido paga a taxa do bairro e o site não mostra a barra de frete grátis.'
+            pisoPlataforma
+              ? `Nesta loja a entrega é feita pelos entregadores do Taaki e a taxa de entrega é da plataforma. Com o frete grátis, o cliente não paga a taxa e a loja paga a taxa cheia. Por isso o frete grátis começa em pelo menos ${formatarReais(pisoPlataforma)}: assim a taxa não fica maior que o pedido.`
+              : f.freteGratisAtivo
+                ? 'Pedidos de entrega com itens a partir deste valor não pagam a taxa do bairro. O site mostra quanto falta.'
+                : 'Desligado: todo pedido paga a taxa do bairro e o site não mostra a barra de frete grátis.'
           }
         >
           {(id, d) => (

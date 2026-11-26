@@ -5,6 +5,11 @@ export function buscarPorId(id, db = prisma) {
   return db.loja.findUnique({ where: { id } });
 }
 
+/** Situação da conexão da loja com o Mercado Pago (sem os tokens), ou null. */
+export function buscarConexaoMp(lojaId, db = prisma) {
+  return db.conexaoMercadoPago.findUnique({ where: { lojaId }, select: { status: true } });
+}
+
 export function buscarPorSlug(slug, db = prisma) {
   return db.loja.findUnique({ where: { slug } });
 }
@@ -51,7 +56,10 @@ export function listarAtivas(db = prisma) {
 export function listarTodas(db = prisma) {
   return db.loja.findMany({
     orderBy: [{ ordem: 'asc' }, { nome: 'asc' }],
-    include: { _count: { select: { usuarios: true, pedidos: true } } },
+    include: {
+      _count: { select: { usuarios: true, pedidos: true } },
+      conexaoMercadoPago: { select: { status: true, mpUserId: true } },
+    },
   });
 }
 

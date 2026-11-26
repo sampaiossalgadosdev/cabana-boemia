@@ -7,6 +7,7 @@ import { criarClienteRoutes } from './cliente.routes.js';
 import { criarEquipeRoutes } from './equipe.routes.js';
 import { criarRetaguardaRoutes } from './retaguarda.routes.js';
 import { criarPlataformaRoutes } from './plataforma.routes.js';
+import { criarMercadoPagoRoutes } from './mercadoPago.routes.js';
 
 /**
  * Rotas montadas por app: cada criarApp() tem seu próprio rate limiter
@@ -24,5 +25,6 @@ export function criarRotas(opcoes = {}) {
   routes.use('/equipe', criarEquipeRoutes(opcoes));
   routes.use('/retaguarda', criarRetaguardaRoutes(opcoes));
   routes.use('/plataforma', criarPlataformaRoutes(opcoes));
+  routes.use('/mercadopago', criarMercadoPagoRoutes(opcoes));
   return routes;
 }

@@ -120,6 +120,13 @@ export const api = {
     voltarAoPadrao: () => post('/retaguarda/perfil/padrao'),
     localizacao: (pino) => put('/retaguarda/perfil/localizacao', pino),
   },
+  // Pagamento online: conta Mercado Pago da loja (OAuth) e o interruptor.
+  pagamentoOnline: {
+    obter: () => get('/retaguarda/pagamento-online'),
+    conectar: (origem) => post('/retaguarda/pagamento-online/conectar', { origem }),
+    desconectar: (confirmar) => post('/retaguarda/pagamento-online/desconectar', { confirmar }),
+    ativo: (ativo) => put('/retaguarda/pagamento-online/ativo', { ativo }),
+  },
   // Mapa do pino da loja (chave web e busca pelo servidor).
   mapa: {
     config: () => get('/retaguarda/mapa/config'),
@@ -143,6 +150,11 @@ export const api = {
       enviarImagem: (arquivo) => post('/plataforma/anuncios/imagens', arquivo),
       criar: (dados) => post('/plataforma/anuncios', dados),
       alterar: (id, dados) => patch(`/plataforma/anuncios/${id}`, dados),
+    },
+    alertas: {
+      listar: () => get('/plataforma/alertas'),
+      contagem: () => get('/plataforma/alertas/contagem'),
+      resolver: (id) => patch(`/plataforma/alertas/${id}/resolvido`),
     },
     solicitacoes: {
       listar: () => get('/plataforma/solicitacoes-exclusao'),

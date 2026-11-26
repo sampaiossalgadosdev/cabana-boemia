@@ -474,6 +474,9 @@ model Pedido {
   meioOnline                     MetodoPagamentoOnline?
   /// Aceite da loja (só pedido pago online; CHECK). Depois dele, só o ADMIN cancela.
   aceitoEm                       DateTime?
+  /// Taxa de entrega antes do frete grátis (só com entrega; gravada na criação). Base do
+  /// crédito da campanha no livro-razão (loja com motoboy próprio).
+  taxaEntregaCheiaCentavos       Int?
 
   loja        Loja                    @relation(fields: [lojaId], references: [id])
   cliente     Cliente?                @relation(fields: [clienteId], references: [id])
@@ -818,6 +821,7 @@ enum TipoAlerta {
   CHARGEBACK // contestação ou mediação no Mercado Pago
   ESTORNO_EXTERNO // estorno feito direto no Mercado Pago com o pedido ainda aberto
   PEDIDO_SEM_ACEITE // pedido pago online há 10 minutos sem o aceite da loja
+  FECHAMENTO_ATRASADO // fechamento semanal aguardando pagamento há mais de FECHAMENTO_ATRASO_DIAS
 }
 
 enum StatusFechamento {
@@ -961,12 +965,17 @@ model LancamentoLoja {
   observacao    String?            @db.VarChar(300)
   fechamentoId  Int?
   criadoPorId   Int?
+  /// ESTORNO: o lançamento que este desfaz (CHECK: só e sempre no ESTORNO; um por lançamento).
+  /// Índice único parcial (só na migration): um lançamento automático de cada tipo por pedido.
+  estornaId     Int?               @unique
   criadoEm      DateTime           @default(now())
 
-  loja       Loja               @relation(fields: [lojaId], references: [id], onDelete: Restrict)
-  pedido     Pedido?            @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
-  fechamento FechamentoSemanal? @relation(fields: [fechamentoId], references: [id], onDelete: Restrict)
-  criadoPor  Usuario?           @relation(fields: [criadoPorId], references: [id], onDelete: Restrict)
+  loja         Loja               @relation(fields: [lojaId], references: [id], onDelete: Restrict)
+  pedido       Pedido?            @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+  fechamento   FechamentoSemanal? @relation(fields: [fechamentoId], references: [id], onDelete: Restrict)
+  criadoPor    Usuario?           @relation(fields: [criadoPorId], references: [id], onDelete: Restrict)
+  estorna      LancamentoLoja?    @relation("EstornoDeLancamento", fields: [estornaId], references: [id], onDelete: Restrict)
+  estornadoPor LancamentoLoja?    @relation("EstornoDeLancamento")
 
   @@index([lojaId, criadoEm])
   @@index([pedidoId])
@@ -988,9 +997,10 @@ model FechamentoSemanal {
   criadoEm      DateTime         @default(now())
   atualizadoEm  DateTime         @updatedAt
 
-  loja        Loja             @relation(fields: [lojaId], references: [id], onDelete: Restrict)
-  quitadoPor  Usuario?         @relation(fields: [quitadoPorId], references: [id], onDelete: Restrict)
+  loja        Loja               @relation(fields: [lojaId], references: [id], onDelete: Restrict)
+  quitadoPor  Usuario?           @relation(fields: [quitadoPorId], references: [id], onDelete: Restrict)
   lancamentos LancamentoLoja[]
+  alertas     AlertaPlataforma[]
 
   @@unique([lojaId, inicio])
 }
@@ -1006,11 +1016,14 @@ model AlertaPlataforma {
   criadoEm       DateTime   @default(now())
   resolvidoEm    DateTime?
   resolvidoPorId Int?
+  fechamentoId   Int? // FECHAMENTO_ATRASADO: um por fechamento
 
-  loja         Loja?    @relation(fields: [lojaId], references: [id], onDelete: Restrict)
-  pedido       Pedido?  @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
-  resolvidoPor Usuario? @relation(fields: [resolvidoPorId], references: [id], onDelete: Restrict)
+  loja         Loja?              @relation(fields: [lojaId], references: [id], onDelete: Restrict)
+  pedido       Pedido?            @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+  resolvidoPor Usuario?           @relation(fields: [resolvidoPorId], references: [id], onDelete: Restrict)
+  fechamento   FechamentoSemanal? @relation(fields: [fechamentoId], references: [id], onDelete: Restrict)
 
   @@index([resolvidoEm, criadoEm])
   @@index([lojaId])
+  @@index([fechamentoId])
 }

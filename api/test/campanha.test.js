@@ -4,6 +4,8 @@ import http from 'node:http';
 import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 
 const SABADO_20H = new Date('2026-11-14T20:00-03:00');
+/** Telefone sem pedido nenhum (os testes de liberação não podem esbarrar na "primeira compra"). */
+const SEM_COMPRA = '43999990007';
 
 /**
  * Frete grátis da primeira compra (decisões 4 e 16 e as da Etapa 2): um por telefone
@@ -136,26 +138,51 @@ describe('campanha de frete grátis da primeira compra', { skip: semBancoDeTeste
 
   test('cancelado não consome: a reserva é liberada e o telefone volta a ganhar', async () => {
     const p = await lancar();
-    await reservar(p.id);
+    await reservar(p.id, SEM_COMPRA);
     assert.equal((await api('PATCH', `/equipe/pedidos/${p.id}/cancelar`)).status, 200);
     assert.equal(await uso(p.id), null);
-    assert.equal(await elegivel({ telefone: '43999990001', telefoneVerificado: true }), true);
+    assert.equal(await elegivel({ telefone: SEM_COMPRA, telefoneVerificado: true }), true);
   });
 
   test('cancelado depois do aceite (já usada) também libera', async () => {
     const p = await lancar();
-    await reservar(p.id);
+    await reservar(p.id, SEM_COMPRA);
     await prisma.$transaction((tx) => campanha.usarCampanha(tx, p.id)); // aprovado online
     assert.equal((await uso(p.id)).situacao, 'USADO');
     assert.equal((await api('PATCH', `/equipe/pedidos/${p.id}/cancelar`)).status, 200);
     assert.equal(await uso(p.id), null);
-    assert.equal(await elegivel({ telefone: '43999990001', telefoneVerificado: true }), true);
+    assert.equal(await elegivel({ telefone: SEM_COMPRA, telefoneVerificado: true }), true);
+  });
+
+  test('primeira compra: telefone ou cliente com pedido FINALIZADO não ganha, mesmo sem ter usado', async () => {
+    const p = await lancar();
+    assert.equal((await api('PATCH', `/equipe/pedidos/${p.id}/finalizar`, { formaPagamento: 'DINHEIRO' })).status, 200);
+    assert.equal(await prisma.usoCampanhaFreteGratis.count(), 0);
+    // Pelo telefone do pedido finalizado...
+    assert.equal(await elegivel({ telefone: '43999990001', telefoneVerificado: true }), false);
+    // ...e pelo próprio cliente, mesmo que o telefone tenha mudado.
+    assert.equal(await elegivel({ id: cliente.id, telefone: '43999990008', telefoneVerificado: true }), false);
+    // Telefone e cliente sem compra: ganha.
+    assert.equal(await elegivel({ telefone: '43999990008', telefoneVerificado: true }), true);
+  });
+
+  test('a tabela guarda o hash do telefone, nunca o número', async () => {
+    const p = await lancar();
+    await reservar(p.id, SEM_COMPRA);
+    const u = await uso(p.id);
+    assert.match(u.telefoneHash, /^[0-9a-f]{64}$/);
+    assert.equal(u.telefoneHash, campanha.hashTelefone(SEM_COMPRA));
+    assert.ok(!JSON.stringify(u).includes(SEM_COMPRA));
+    // Formatação não muda o hash; outro segredo, sim; segredo inválido não calcula.
+    assert.equal(campanha.hashTelefone('(43) 99999-0007'), u.telefoneHash);
+    assert.notEqual(campanha.hashTelefone(SEM_COMPRA, { CAMPANHA_TELEFONE_SECRET: 'x'.repeat(40) }), u.telefoneHash);
+    assert.throws(() => campanha.hashTelefone(SEM_COMPRA, { CAMPANHA_TELEFONE_SECRET: 'curto' }), /CAMPANHA_TELEFONE_SECRET curto demais/);
   });
 
   test('expirado não consome: a expiração (etapa 4) libera a reserva', async () => {
     const p = await lancar();
-    await reservar(p.id);
+    await reservar(p.id, SEM_COMPRA);
     assert.equal(await prisma.$transaction((tx) => campanha.liberarCampanha(tx, p.id)), true);
-    assert.equal(await elegivel({ telefone: '43999990001', telefoneVerificado: true }), true);
+    assert.equal(await elegivel({ telefone: SEM_COMPRA, telefoneVerificado: true }), true);
   });
 });

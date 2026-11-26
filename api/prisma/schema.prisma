@@ -116,6 +116,7 @@ model Loja {
   atualizadoEm              DateTime    @updatedAt
 
   conexaoMercadoPago ConexaoMercadoPago?
+  alertas            AlertaPlataforma[]
   lancamentos        LancamentoLoja[]
   fechamentos        FechamentoSemanal[]
   usuarios           Usuario[]
@@ -171,6 +172,7 @@ model Usuario {
   anuncios            Anuncio[]
   lancamentos         LancamentoLoja[]
   fechamentosQuitados FechamentoSemanal[]
+  alertasResolvidos   AlertaPlataforma[]
 
   @@index([lojaId])
 }
@@ -475,6 +477,7 @@ model Pedido {
   pagamentos  Pagamento[]
   lancamentos LancamentoLoja[]
   usoCampanha UsoCampanhaFreteGratis?
+  alertas     AlertaPlataforma[]
 
   @@unique([lojaId, dataRef, numeroDia])
   @@index([status])
@@ -794,6 +797,10 @@ enum TipoLancamentoLoja {
   ESTORNO // desfaz um lançamento (lançamento nunca se apaga nem se altera)
 }
 
+enum TipoAlerta {
+  RENOVACAO_MP_FALHOU // token da loja não renovou: conexão EXPIRADA, pagamento online desligado
+}
+
 enum StatusFechamento {
   ABERTO
   AGUARDANDO_PAGAMENTO
@@ -801,7 +808,9 @@ enum StatusFechamento {
 }
 
 /// Conta Mercado Pago da loja (OAuth). Tokens só cifrados (AES-256-GCM, lib/cifra.js);
-/// desconectar apaga os tokens. CHECK: CONECTADA exige o access token.
+/// desconectar apaga os tokens. CHECK: CONECTADA exige o access token. Índice único parcial
+/// "ConexaoMercadoPago_conta_em_uso_key" (só na migration): a mesma conta (mpUserId) só pode
+/// estar CONECTADA ou EXPIRADA em uma loja; desconectada, pode ir para outra.
 model ConexaoMercadoPago {
   id                  Int             @id @default(autoincrement())
   lojaId              Int             @unique
@@ -861,15 +870,17 @@ model EventoWebhook {
 
 /// Frete grátis da primeira compra: um por telefone verificado. Reservado na criação do
 /// pedido, USADO na aprovação/finalização; expirar ou cancelar apaga a linha (libera).
-/// CHECKs: usadoEm só (e sempre) no USADO; telefone com 11 dígitos.
+/// O telefone NÃO é guardado: só o HMAC-SHA256 dele (CAMPANHA_TELEFONE_SECRET), para a regra
+/// "um por telefone" sobreviver à exclusão da conta sem manter o número.
+/// CHECKs: usadoEm só (e sempre) no USADO; hash com 64 hexadecimais.
 model UsoCampanhaFreteGratis {
-  id          Int              @id @default(autoincrement())
-  telefone    String           @unique @db.VarChar(11)
-  clienteId   Int?
-  pedidoId    Int              @unique
-  situacao    SituacaoCampanha @default(RESERVADO)
-  reservadoEm DateTime         @default(now())
-  usadoEm     DateTime?
+  id           Int              @id @default(autoincrement())
+  telefoneHash String           @unique @db.VarChar(64)
+  clienteId    Int?
+  pedidoId     Int              @unique
+  situacao     SituacaoCampanha @default(RESERVADO)
+  reservadoEm  DateTime         @default(now())
+  usadoEm      DateTime?
 
   cliente Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
   pedido  Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
@@ -919,4 +930,24 @@ model FechamentoSemanal {
   lancamentos LancamentoLoja[]
 
   @@unique([lojaId, inicio])
+}
+
+/// Alerta para o ADMIN (tela "Alertas" da plataforma). Resolvido = resolvidoEm preenchido
+/// (CHECK: com quem resolveu). As próximas etapas só acrescentam tipos.
+model AlertaPlataforma {
+  id             Int        @id @default(autoincrement())
+  tipo           TipoAlerta
+  lojaId         Int?
+  pedidoId       Int?
+  mensagem       String     @db.VarChar(500)
+  criadoEm       DateTime   @default(now())
+  resolvidoEm    DateTime?
+  resolvidoPorId Int?
+
+  loja         Loja?    @relation(fields: [lojaId], references: [id], onDelete: Restrict)
+  pedido       Pedido?  @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+  resolvidoPor Usuario? @relation(fields: [resolvidoPorId], references: [id], onDelete: Restrict)
+
+  @@index([resolvidoEm, criadoEm])
+  @@index([lojaId])
 }

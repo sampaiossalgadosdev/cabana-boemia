@@ -94,18 +94,19 @@ describe('pagamento online: regras no banco', { skip: semBancoDeTeste }, () => {
     assert.equal(ok.status, 'PENDENTE');
   });
 
-  test('campanha: um por telefone, 11 dígitos, data de uso só no USADO', async () => {
+  test('campanha: um por telefone (hash), hash com 64 hexadecimais, data de uso só no USADO', async () => {
     const [a, b] = [await novoPedido(), await novoPedido()];
+    const H = 'ab'.repeat(32);
     await violaCheck(
-      prisma.usoCampanhaFreteGratis.create({ data: { telefone: '4399999', pedidoId: a.id } }),
+      prisma.usoCampanhaFreteGratis.create({ data: { telefoneHash: '43999990001', pedidoId: a.id } }),
       'UsoCampanhaFreteGratis_check',
     );
     await violaCheck(
-      prisma.usoCampanhaFreteGratis.create({ data: { telefone: '43999990001', pedidoId: a.id, situacao: 'USADO' } }),
+      prisma.usoCampanhaFreteGratis.create({ data: { telefoneHash: H, pedidoId: a.id, situacao: 'USADO' } }),
       'UsoCampanhaFreteGratis_check',
     );
-    await prisma.usoCampanhaFreteGratis.create({ data: { telefone: '43999990001', pedidoId: a.id } });
-    await assert.rejects(prisma.usoCampanhaFreteGratis.create({ data: { telefone: '43999990001', pedidoId: b.id } }), {
+    await prisma.usoCampanhaFreteGratis.create({ data: { telefoneHash: H, pedidoId: a.id } });
+    await assert.rejects(prisma.usoCampanhaFreteGratis.create({ data: { telefoneHash: H, pedidoId: b.id } }), {
       code: 'P2002',
     });
   });

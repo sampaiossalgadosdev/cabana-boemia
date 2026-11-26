@@ -35,3 +35,17 @@ export async function resolverSeAberto(id, usuarioId, agora, db = prisma) {
   });
   return count;
 }
+
+/** Já existe alerta aberto deste tipo para a loja (desde `desde`, se dado)? */
+export function existeAberto({ tipo, lojaId = null, pedidoId = null, desde = null }, db = prisma) {
+  return db.alertaPlataforma.findFirst({
+    where: {
+      tipo,
+      resolvidoEm: null,
+      ...(lojaId != null && { lojaId }),
+      ...(pedidoId != null && { pedidoId }),
+      ...(desde && { criadoEm: { gte: desde } }),
+    },
+    select: { id: true },
+  });
+}

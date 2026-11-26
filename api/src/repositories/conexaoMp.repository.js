@@ -39,3 +39,8 @@ export function contarPagamentosPendentes(lojaId, db = prisma) {
 export function definirPagamentoOnlineAtivo(lojaId, ativo, db = prisma) {
   return db.loja.update({ where: { id: lojaId }, data: { pagamentoOnlineAtivo: ativo }, select: { pagamentoOnlineAtivo: true } });
 }
+
+/** Conexão da conta Mercado Pago (pelo user_id das notificações), CONECTADA ou EXPIRADA. */
+export function buscarPorMpUserId(mpUserId, db = prisma) {
+  return db.conexaoMercadoPago.findFirst({ where: { mpUserId: String(mpUserId), status: { in: ['CONECTADA', 'EXPIRADA'] } } });
+}

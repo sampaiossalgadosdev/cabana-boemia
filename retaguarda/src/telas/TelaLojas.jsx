@@ -6,6 +6,15 @@ import { Campo, Dialogo, EstadoCarga, Interruptor, LogoLoja, useAvisar, useCarre
 import { problemaDoArquivo } from '../lib/imagem.js';
 import { MapaPino } from '../componentes/MapaPino.jsx';
 import { pinMudou, pinParaApi } from '../lib/mapa.js';
+import { formatarReais } from '../lib/dinheiro.js';
+
+/** Modo de entrega (só o ADMIN muda; toda loja nasce com motoboy próprio). */
+export const MODOS_ENTREGA = {
+  PROPRIO: 'Motoboy próprio',
+  PLATAFORMA: 'Entregadores do Taaki',
+};
+
+const SITUACAO_MP = { CONECTADA: ['Conectada', 'etiqueta--ok'], EXPIRADA: ['Expirada', 'etiqueta--alerta'] };
 
 const VAZIA = {
   slug: '',
@@ -20,6 +29,7 @@ const VAZIA = {
   ordem: '0',
   ativa: true,
   turnos: 'Almoço, Lanches',
+  modoEntrega: 'PROPRIO',
 };
 
 /** "Lanchonete do Zé" → "lanchonete-do-ze" (sugestão do endereço). */
@@ -70,6 +80,8 @@ export function TelaLojas({ abrirLoja, aoMudarLoja }) {
                 <tr>
                   <th>Loja</th>
                   <th>Cor</th>
+                  <th>Entrega</th>
+                  <th>Mercado Pago</th>
                   <th className="num">Equipe</th>
                   <th className="num">Pedidos</th>
                   <th>Ativa</th>
@@ -94,6 +106,17 @@ export function TelaLojas({ abrirLoja, aoMudarLoja }) {
                     </td>
                     <td>
                       <span className="paleta__cor" style={{ display: 'inline-block', width: 24, height: 24, background: l.corPrimaria ?? '#C8102E', cursor: 'default' }} title={l.corPrimaria ?? 'padrão'} />
+                    </td>
+                    <td>{MODOS_ENTREGA[l.modoEntrega] ?? l.modoEntrega}</td>
+                    <td>
+                      {l.mercadoPago ? (
+                        <span className={`etiqueta ${SITUACAO_MP[l.mercadoPago.status]?.[1] ?? ''}`}>
+                          {SITUACAO_MP[l.mercadoPago.status]?.[0] ?? l.mercadoPago.status}
+                        </span>
+                      ) : (
+                        <span className="suave">Não conectada</span>
+                      )}
+                      {l.pagamentoOnlineAtivo && <div className="suave">online ligado</div>}
                     </td>
                     <td className="num">{l.usuarios}</td>
                     <td className="num">{l.pedidos}</td>
@@ -133,6 +156,8 @@ function FormLoja({ loja, aoFechar, aoSalvar }) {
   const [erroGeral, setErroGeral] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [pino, setPino] = useState(null);
+  // Virar "Entregadores do Taaki" com o frete grátis abaixo do piso: o ADMIN escolhe subir ou desligar.
+  const [piso, setPiso] = useState(null);
   const configMapa = useCarregar(() => api.plataforma.mapas.config());
   const pinoSalvo = !nova && loja?.latitude != null ? { latitude: loja.latitude, longitude: loja.longitude } : null;
 
@@ -141,6 +166,7 @@ function FormLoja({ loja, aoFechar, aoSalvar }) {
     setPino(nova || loja.latitude == null ? null : { latitude: loja.latitude, longitude: loja.longitude });
     setErros({});
     setErroGeral('');
+    setPiso(null);
     setArquivo(null);
     setSalvando(false);
     setSlugTocado(!nova);
@@ -160,6 +186,7 @@ function FormLoja({ loja, aoFechar, aoSalvar }) {
             ordem: String(loja.ordem ?? 0),
             ativa: loja.ativa,
             turnos: '',
+            modoEntrega: loja.modoEntrega ?? 'PROPRIO',
           },
     );
   }, [loja, nova]);
@@ -167,7 +194,8 @@ function FormLoja({ loja, aoFechar, aoSalvar }) {
   const mudar = (campo) => (e) => setF((x) => ({ ...x, [campo]: e.target.value }));
   const avaliacao = avaliarCor(f.cor);
 
-  async function salvar() {
+  /** @param {'SUBIR' | 'DESLIGAR'} [escolhaPiso] resposta ao aviso do piso do frete grátis */
+  async function salvar(escolhaPiso) {
     if (!avaliacao.ok) {
       setErros({ cor: avaliacao.motivo });
       return;
@@ -191,15 +219,23 @@ function FormLoja({ loja, aoFechar, aoSalvar }) {
       dados.turnos = f.turnos.split(',').map((t) => t.trim()).filter(Boolean);
     } else {
       dados.corPrimariaPadrao = avaliacao.cor;
+      if (f.modoEntrega !== (loja.modoEntrega ?? 'PROPRIO')) dados.modoEntrega = f.modoEntrega;
+      if (typeof escolhaPiso === 'string') dados.freteGratisPiso = escolhaPiso;
     }
     setSalvando(true);
     setErros({});
     setErroGeral('');
+    setPiso(null);
     try {
       let { loja: salva } = nova ? await api.plataforma.lojas.criar(dados) : await api.plataforma.lojas.alterar(loja.id, dados);
       if (arquivo) ({ loja: salva } = await api.plataforma.lojas.logoPadrao(salva.id, arquivo));
       await aoSalvar(nova ? `Loja ${salva.nome} criada. Agora crie o dono dela.` : 'Loja salva.', salva);
     } catch (err) {
+      if (err.codigo === 'FRETE_GRATIS_ABAIXO_DO_PISO') {
+        setPiso({ mensagem: err.message, piso: err.detalhes?.pisoCentavos });
+        setSalvando(false);
+        return;
+      }
       const porCampo = errosPorCampo(err);
       porCampo.cor ??= porCampo.corPrimaria ?? porCampo.corPrimariaPadrao;
       setErros(porCampo);
@@ -249,6 +285,19 @@ function FormLoja({ loja, aoFechar, aoSalvar }) {
       }
     >
       {erroGeral && <div className="alerta">{erroGeral}</div>}
+      {piso && (
+        <div className="alerta" role="alert">
+          <p style={{ margin: '0 0 10px' }}>{piso.mensagem}</p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="botao botao--primario botao--pequeno" disabled={salvando} onClick={() => salvar('SUBIR')}>
+              Subir o mínimo para {formatarReais(piso.piso)}
+            </button>
+            <button type="button" className="botao botao--pequeno" disabled={salvando} onClick={() => salvar('DESLIGAR')}>
+              Desligar o frete grátis da loja
+            </button>
+          </div>
+        </div>
+      )}
       <div className="grade-form">
         {texto('nome', 'Nome', { max: 100 })}
         {texto('slug', 'Endereço (slug)', { max: 60, ajuda: 'Letras minúsculas, números e hífen. Ex.: lanchonete-do-ze' })}
@@ -333,6 +382,27 @@ function FormLoja({ loja, aoFechar, aoSalvar }) {
           </div>
           {erros.logo ? <span className="campo__erro">{erros.logo}</span> : <span className="campo__ajuda">PNG, JPEG ou WebP, até 500 KB.</span>}
         </div>
+        {!nova && (
+          <Campo
+            rotulo="Entrega"
+            className="inteiro"
+            ajuda={
+              f.modoEntrega === 'PLATAFORMA'
+                ? 'Entregadores do Taaki: a taxa de entrega é da plataforma (R$ 1,00 + R$ 0,90 por km), e na entrega o cliente paga só em dinheiro.'
+                : 'Motoboy próprio: a taxa da área de entrega é da loja, que aceita as formas de sempre na entrega.'
+            }
+          >
+            {(id, d) => (
+              <select id={id} className="entrada" value={f.modoEntrega} aria-describedby={d} onChange={mudar('modoEntrega')}>
+                {Object.entries(MODOS_ENTREGA).map(([valor, rotulo]) => (
+                  <option key={valor} value={valor}>
+                    {rotulo}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Campo>
+        )}
         {texto('corFundo', 'Cor de fundo (app)', { max: 7, placeholder: '#FBF3E8', ajuda: 'Opcional. Fundo da loja no app do cliente.' })}
         {nova && texto('turnos', 'Turnos iniciais', { max: 200, inteiro: true, ajuda: 'Separados por vírgula. Os horários o dono define em Turnos e horários.' })}
         <div className="campo inteiro">

@@ -7,6 +7,7 @@ import { criarRetaguardaController } from '../controllers/retaguarda.controller.
 import { corpoImagem } from './plataforma.routes.js';
 import { criarLimitadorMapa, criarMapaController } from '../controllers/mapa.controller.js';
 import { criarPagamentoOnlineController } from '../controllers/pagamentoOnline.controller.js';
+import { criarFinanceiroController } from '../controllers/financeiro.controller.js';
 
 /**
  * Rotas da retaguarda (só DONO; ADMIN passa como DONO), na loja do usuário
@@ -18,6 +19,7 @@ export function criarRetaguardaRoutes({ relogio, mapas, conexaoMp } = {}) {
   const c = criarRetaguardaController(relogio);
   const pagamento = criarPagamentoOnlineController(conexaoMp);
   const mapa = criarMapaController(mapas);
+  const fin = criarFinanceiroController(relogio);
   const r = Router();
   r.use((req, res, next) => {
     res.set('Cache-Control', 'no-store');
@@ -75,6 +77,9 @@ export function criarRetaguardaRoutes({ relogio, mapas, conexaoMp } = {}) {
   r.post('/pagamento-online/conectar', assincrono(pagamento.conectar));
   r.post('/pagamento-online/desconectar', assincrono(pagamento.desconectar));
   r.put('/pagamento-online/ativo', assincrono(pagamento.definirAtivo));
+  // Fechamento semanal com o Taaki (Etapa 6): semana atual (parcial) e as fechadas.
+  r.get('/fechamento', assincrono(fin.daLoja));
+  r.get('/fechamento/:id', assincrono(fin.detalheDaLoja));
   r.get('/config', assincrono(c.obterConfig));
   r.put('/config', assincrono(c.definirConfig));
   return r;

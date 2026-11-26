@@ -20,7 +20,7 @@ export const LARGURAS = [48, 32];
 export const TIPOS_CUPOM = ['PEDIDO', 'CANCELAMENTO', 'CONTA', 'FECHAMENTO', 'RELATORIO_DIA'];
 
 const FUSO = 'America/Sao_Paulo';
-const NOME_CANAL = { SITE: 'Site', WHATSAPP: 'WhatsApp', SALAO: 'Salão' };
+const NOME_CANAL = { SITE: 'Site', APP: 'App', WHATSAPP: 'WhatsApp', SALAO: 'Salão' };
 const NOME_PAGAMENTO = { PIX: 'Pix', DINHEIRO: 'Dinheiro', DEBITO: 'Débito', CREDITO: 'Crédito' };
 
 const dataHora = new Intl.DateTimeFormat('en-US', {

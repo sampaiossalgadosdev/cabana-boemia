@@ -9,8 +9,10 @@
  *   com entregador da plataforma (vazio = R$ 20,00), para a taxa não engolir o pedido.
  * - MP_STATE_SECRET: assina o state do OAuth (32+ caracteres, diferente dos segredos JWT);
  *   obrigatório para conectar uma loja e, com a flag ligada, para a API subir.
- * - CAMPANHA_TELEFONE_SECRET: HMAC do telefone da campanha (mesmas regras); exigido quando a
- *   reserva da campanha for ligada na criação do pedido (Etapa 4).
+ * - CAMPANHA_TELEFONE_SECRET: HMAC do telefone da campanha (mesmas regras). Sem ele (ou inválido),
+ *   a campanha fica desligada com aviso no log (Decisão 4 da Etapa 4); com a flag ligada, a API não sobe.
+ * - MP_WEBHOOK_SECRET: assinatura das notificações do Mercado Pago (painel › Webhooks); com a flag
+ *   ligada, a API não sobe sem ele (sem ele toda notificação seria recusada).
  * - MP_CLIENT_ID, MP_CLIENT_SECRET, MP_REDIRECT_URI: aplicativo no Mercado Pago (lib/mercadoPago.js).
  */
 import { problemaNaChave } from './cifra.js';
@@ -38,7 +40,12 @@ export function problemaNoSegredo(nome, env = process.env) {
 /** Problemas que impedem a API de subir (lista vazia = ok). */
 export function problemasNoPagamentoOnline(env = process.env) {
   if (!pagamentoOnlineLigado(env)) return [];
-  return [problemaNaChave(env.TOKEN_ENCRYPTION_KEY), problemaNoSegredo('MP_STATE_SECRET', env)]
+  return [
+    problemaNaChave(env.TOKEN_ENCRYPTION_KEY),
+    problemaNoSegredo('MP_STATE_SECRET', env),
+    problemaNoSegredo('CAMPANHA_TELEFONE_SECRET', env),
+    String(env.MP_WEBHOOK_SECRET ?? '').trim() ? null : 'MP_WEBHOOK_SECRET ausente',
+  ]
     .filter(Boolean)
     .map((p) => `${p} (obrigatória com PAGAMENTO_ONLINE_ATIVO=sim)`);
 }
@@ -54,6 +61,12 @@ export function faltasParaConectar(env = process.env) {
   if (problemaNoSegredo('MP_STATE_SECRET', env)) faltas.push('MP_STATE_SECRET');
   return faltas;
 }
+
+/** Campanha da primeira compra ligada? Só com CAMPANHA_TELEFONE_SECRET válido. */
+export const campanhaLigada = (env = process.env) => problemaNoSegredo('CAMPANHA_TELEFONE_SECRET', env) === null;
+
+/** Segredo da assinatura das notificações do Mercado Pago ('' = sem). */
+export const segredoDoWebhook = (env = process.env) => String(env.MP_WEBHOOK_SECRET ?? '').trim();
 
 /** Pedido mínimo do frete grátis da loja com entregador da plataforma, em centavos. */
 export function minimoFreteGratisPlataforma(env = process.env) {

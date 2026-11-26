@@ -132,3 +132,65 @@ describe('painel de delivery', () => {
     assert.deepEqual(destacarTrecho('X-Bacon', ''), [{ texto: 'X-Bacon', destaque: false }]);
   });
 });
+
+describe('pagamento online no painel (Etapa 5)', async () => {
+  const p = await import('../src/renderer/src/lib/painel.js');
+  const { taxaDaPlataforma } = await import('../src/renderer/src/lib/novoPedido.js');
+  const APROVADO = '2026-11-14T23:00:00.000Z'; // 20:00 em Brasília
+  const online = (extra = {}, pagamento = {}) =>
+    pedido({ canal: 'APP', formaPagamento: 'PIX', pagamentoOnline: { meio: 'PIX', situacao: 'PAGO', aprovadoEm: APROVADO, valorEstornadoCentavos: 0, ...pagamento }, aceitoEm: null, ...extra });
+  const min = (m) => new Date(new Date(APROVADO).getTime() + m * 60_000);
+
+  test('faixa "PAGO ONLINE (Pix) — não cobrar na entrega" só enquanto o pagamento vale', () => {
+    assert.equal(p.faixaPagoOnline(online()), 'PAGO ONLINE (Pix) — não cobrar na entrega');
+    assert.equal(p.faixaPagoOnline(online({}, { meio: 'CARTAO_ONLINE' })), 'PAGO ONLINE (Cartão) — não cobrar na entrega');
+    assert.equal(p.faixaPagoOnline(online({}, { situacao: 'ESTORNADO' })), null);
+    assert.equal(p.faixaPagoOnline(pedido()), null);
+    // Encerrado: a faixa some e fica o selo pequeno.
+    assert.equal(p.faixaPagoOnline(online({ status: 'FINALIZADO' })), null);
+    assert.equal(p.seloPagoOnline(online({ status: 'FINALIZADO' })), 'Pago online · Pix');
+    assert.equal(p.seloPagoOnline(online()), null);
+    assert.equal(p.seloPagoOnline(online({ status: 'CANCELADO' }, { situacao: 'ESTORNADO' })), null);
+  });
+
+  test('aceite: só pago online, pago, aberto e sem aceite; 5 minutos = destaque e um toque a mais', () => {
+    assert.equal(p.precisaAceite(online()), true);
+    assert.equal(p.precisaAceite(online({ aceitoEm: APROVADO })), false);
+    assert.equal(p.precisaAceite(online({ status: 'CANCELADO' })), false);
+    assert.equal(p.precisaAceite(pedido()), false, 'pago na entrega continua como hoje');
+    assert.equal(p.aceiteAtrasado(online(), min(4)), false);
+    assert.equal(p.aceiteAtrasado(online(), min(5)), true);
+    assert.equal(p.minutosSemAceite(online(), min(7)), 7);
+    const ja = new Set();
+    assert.deepEqual(p.pedidosParaRealertar([online()], ja, min(4)), []);
+    assert.deepEqual(p.pedidosParaRealertar([online(), online({ id: 2, aceitoEm: APROVADO })], ja, min(5)), [1]);
+    ja.add(1);
+    assert.deepEqual(p.pedidosParaRealertar([online()], ja, min(9)), [], 'um toque a mais por pedido');
+  });
+
+  test('"Recebi o dinheiro" só em dinheiro na entrega com os entregadores do Taaki', () => {
+    const dinheiroTaaki = pedido({ formaPagamento: 'DINHEIRO', entregaPlataforma: true });
+    assert.equal(p.rotuloFinalizar(dinheiroTaaki), 'Recebi o dinheiro');
+    assert.equal(p.rotuloFinalizar(pedido({ formaPagamento: 'DINHEIRO', entregaPlataforma: false })), 'Finalizar');
+    assert.equal(p.rotuloFinalizar(pedido({ formaPagamento: 'PIX', entregaPlataforma: true, pagoEm: APROVADO })), 'Finalizar');
+    assert.equal(p.rotuloFinalizar({ ...dinheiroTaaki, pagoEm: APROVADO }), 'Finalizar', 'já pago no balcão');
+    assert.equal(p.rotuloFinalizar(online({ entregaPlataforma: true })), 'Finalizar');
+  });
+
+  test('cancelar: pago online aceito só pelo Taaki; selo ESTORNADO no cancelado com estorno', () => {
+    assert.equal(p.lojaPodeCancelar(online()), true);
+    assert.equal(p.lojaPodeCancelar(online({ aceitoEm: APROVADO })), false);
+    assert.equal(p.lojaPodeCancelar(online({ aceitoEm: APROVADO }, { situacao: 'ESTORNADO' })), true, 'estornado por fora: a loja cancela');
+    assert.equal(p.lojaPodeCancelar(pedido()), true);
+    assert.equal(p.seloEstorno(online({ status: 'CANCELADO' }, { situacao: 'ESTORNADO' })), 'ESTORNADO');
+    assert.equal(p.seloEstorno(online({}, { situacao: 'ESTORNO_PENDENTE' })), 'ESTORNO PENDENTE');
+    assert.equal(p.seloEstorno(online()), null);
+    assert.equal(p.seloEstorno(pedido()), null);
+  });
+
+  test('taxa de entrega travada só em loja com os entregadores do Taaki', () => {
+    assert.equal(taxaDaPlataforma({ modoEntrega: 'PLATAFORMA' }), true);
+    assert.equal(taxaDaPlataforma({ modoEntrega: 'PROPRIO' }), false);
+    assert.equal(taxaDaPlataforma(null), false);
+  });
+});

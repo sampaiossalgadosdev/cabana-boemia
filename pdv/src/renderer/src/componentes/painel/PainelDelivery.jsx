@@ -8,6 +8,7 @@ import {
   entraNoPainel,
   filtrarPedidos,
   ordenarPedidos,
+  pedidosParaRealertar,
   tocaAlerta,
 } from '../../lib/painel.js';
 import { tocarAlerta } from '../../lib/som.js';
@@ -18,8 +19,8 @@ import { DetalhePedido } from './DetalhePedido.jsx';
 
 /** Recarga de segurança (eventos perdidos, virada do dia). */
 const RECARREGAR_MS = 5 * 60_000;
-/** O atraso é recalculado a cada minuto. */
-const RELOGIO_MS = 60_000;
+/** O atraso e o "sem aceite" (pago online) são recalculados a cada 30 s. */
+const RELOGIO_MS = 30_000;
 
 /**
  * Painel de pedidos do delivery (tela inicial): filtros, lista
@@ -41,6 +42,8 @@ export function PainelDelivery({ statusConexao, aoNovoPedido, recarga = 0 }) {
   const [novos, setNovos] = useState(() => new Set());
   const [abertoId, setAbertoId] = useState(null);
   const diaRef = useRef(null);
+  // Pagos online que já tocaram de novo por estarem 5 minutos sem aceite (um toque extra cada).
+  const realertados = useRef(new Set());
 
   const diaPedido = dia ?? 'hoje';
 
@@ -92,6 +95,14 @@ export function PainelDelivery({ statusConexao, aoNovoPedido, recarga = 0 }) {
       pararAtualizado();
     };
   }, []);
+
+  // Pago online sem aceite há 5 minutos: toca de novo (uma vez por pedido) e a linha fica em destaque.
+  useEffect(() => {
+    const ids = pedidosParaRealertar(pedidos, realertados.current, agora);
+    if (!ids.length) return;
+    for (const id of ids) realertados.current.add(id);
+    tocarAlerta();
+  }, [pedidos, agora]);
 
   const visiveis = useMemo(
     () => ordenarPedidos(filtrarPedidos(pedidos, { status, tipo, busca })),

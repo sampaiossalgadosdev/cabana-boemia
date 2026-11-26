@@ -192,3 +192,65 @@ export function problemaNaChaveNfce(texto) {
   if (d.slice(20, 22) !== '65') return 'Não é chave de NFC-e (modelo 65)';
   return null;
 }
+
+// ───────── Pagamento online (Etapa 5) ─────────
+
+/** Pedido pago online sem aceite há 5 minutos: o PDV toca de novo e destaca (Decisão 7). */
+export const SEM_ACEITE_ALERTA_MS = 5 * 60_000;
+
+const MEIO_ONLINE = { PIX: 'Pix', CARTAO_ONLINE: 'Cartão' };
+
+/** Pago online pelo app (com o meio). */
+export const pagoOnline = (p) => Boolean(p?.pagamentoOnline);
+
+/** Pago online, pago de fato (não estornado/contestado), aberto e sem o aceite da loja. */
+export const precisaAceite = (p) => pagoOnline(p) && p.pagamentoOnline.situacao === 'PAGO' && estaAberto(p) && !p.aceitoEm;
+
+/** Minutos desde que o pagamento foi aprovado (chegada ao PDV), para o pedido sem aceite. */
+export function minutosSemAceite(p, agora = new Date()) {
+  if (!precisaAceite(p)) return 0;
+  const desde = new Date(p.pagamentoOnline.aprovadoEm ?? p.criadoEm).getTime();
+  return Math.max(0, Math.floor((new Date(agora).getTime() - desde) / 60_000));
+}
+
+/** Passou dos 5 minutos sem aceite: destaque e alerta sonoro de novo. */
+export const aceiteAtrasado = (p, agora = new Date()) =>
+  precisaAceite(p) && new Date(agora).getTime() - new Date(p.pagamentoOnline.aprovadoEm ?? p.criadoEm).getTime() >= SEM_ACEITE_ALERTA_MS;
+
+const pagamentoValendo = (p) => pagoOnline(p) && ['PAGO', 'ESTORNADO_PARCIAL'].includes(p.pagamentoOnline.situacao);
+
+/** "PAGO ONLINE (Pix) — não cobrar na entrega": pedido aberto com o pagamento valendo. */
+export function faixaPagoOnline(p) {
+  if (!pagamentoValendo(p) || !estaAberto(p)) return null;
+  return `PAGO ONLINE (${MEIO_ONLINE[p.pagamentoOnline.meio] ?? 'online'}) — não cobrar na entrega`;
+}
+
+/** Pedido encerrado que foi pago online: selo pequeno "Pago online · Pix" no lugar da faixa. */
+export const seloPagoOnline = (p) => (pagamentoValendo(p) && !estaAberto(p) ? `Pago online · ${MEIO_ONLINE[p.pagamentoOnline.meio] ?? 'online'}` : null);
+
+/** Selo do estorno/contestação (o pedido cancelado com estorno mostra "ESTORNADO"). */
+const SELOS_ESTORNO = {
+  ESTORNADO: 'ESTORNADO',
+  ESTORNADO_PARCIAL: 'ESTORNO PARCIAL',
+  ESTORNO_PENDENTE: 'ESTORNO PENDENTE',
+  CONTESTADO: 'CONTESTADO',
+};
+export const seloEstorno = (p) => (pagoOnline(p) ? (SELOS_ESTORNO[p.pagamentoOnline.situacao] ?? null) : null);
+
+/**
+ * "Recebi o dinheiro" (Decisão 22): é o próprio Finalizar nos pedidos em dinheiro, pagos na
+ * entrega, com os entregadores do Taaki (`entregaPlataforma`). Os outros: "Finalizar".
+ */
+export const recebeDinheiro = (p) => !pagoOnline(p) && Boolean(p?.entregaPlataforma) && p.formaPagamento === 'DINHEIRO' && !p.pagoEm;
+export const rotuloFinalizar = (p) => (recebeDinheiro(p) ? 'Recebi o dinheiro' : 'Finalizar');
+
+/** A loja pode cancelar no PDV? Pago online e já aceito: não (só o Taaki, Decisão 1). */
+export const lojaPodeCancelar = (p) =>
+  estaAberto(p) && !(pagoOnline(p) && p.aceitoEm && !['ESTORNADO', 'CONTESTADO'].includes(p.pagamentoOnline.situacao));
+
+/**
+ * Pedidos que passaram dos 5 minutos sem aceite e ainda não tocaram de novo (um toque extra
+ * por pedido). `jaAlertados`: ids que já tocaram.
+ */
+export const pedidosParaRealertar = (pedidos, jaAlertados, agora = new Date()) =>
+  pedidos.filter((p) => aceiteAtrasado(p, agora) && !jaAlertados.has(p.id)).map((p) => p.id);

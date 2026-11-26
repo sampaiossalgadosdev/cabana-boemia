@@ -247,6 +247,18 @@ describe('handlers IPC', () => {
     assert.equal(chamadas.length, 0);
   });
 
+  test('pago online: aceitar e finalizar sem forma (Etapa 5), com o id conferido', async () => {
+    const { h, chamadas } = montar();
+    assert.equal((await executar(h['pedidos:aceitar'], ['1'])).ok, false);
+    assert.equal((await executar(h['pedidos:finalizarOnline'], [0])).ok, false);
+    await h['pedidos:aceitar'](7);
+    await h['pedidos:finalizarOnline'](7);
+    assert.deepEqual(chamadas.map((c) => c.slice(0, 3)), [
+      ['PATCH', '/equipe/pedidos/7/aceitar'],
+      ['PATCH', '/equipe/pedidos/7/finalizar', {}],
+    ]);
+  });
+
   test('cancelar valida o id; busca de cliente vai codificada na URL', async () => {
     const { h, chamadas } = montar();
     assert.equal((await executar(h['pedidos:cancelar'], ['1'])).ok, false);

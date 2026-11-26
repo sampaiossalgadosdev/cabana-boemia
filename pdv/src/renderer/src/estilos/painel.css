@@ -384,3 +384,34 @@ input.detalhe-pedido__nfce {
   width: 100%;
   font-size: 18px;
 }
+
+/* Pagamento online (Etapa 5): faixa "não cobrar", aguardando aceite e estorno. */
+.faixa-online {
+  justify-self: start;
+  margin: 4px 0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--cor-ok);
+  color: var(--cor-branco);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.aviso-aceite {
+  color: var(--cor-laranja);
+  font-weight: 700;
+}
+.aviso-aceite--atrasado {
+  color: var(--cor-erro-escuro);
+}
+.linha-pedido--sem-aceite {
+  border-left-color: var(--cor-erro);
+  background: var(--cor-aviso-fundo);
+  animation: chegar 0.6s ease-out 3;
+}
+.linha-pedido--sem-aceite:nth-child(even) {
+  background: var(--cor-aviso-fundo);
+}
+.selo--estorno {
+  background: var(--cor-erro-escuro);
+  color: var(--cor-branco);
+}

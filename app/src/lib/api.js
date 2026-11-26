@@ -217,8 +217,36 @@ export const geocodificarEndereco = (token, { rua, numero, bairroId }) =>
 /** DELETE /cliente/enderecos/:id → 204 */
 export const removerEndereco = (token, id) => requisitar('DELETE', `/cliente/enderecos/${id}`, { token });
 
-/** POST /cliente/pedidos → { pedido } (201 criado; 200 = mesma chave, pedido já existia) */
+/**
+ * POST /cliente/pedidos → { pedido } (201 criado; 200 = mesma chave, pedido já existia).
+ * Pix pelo app: → { pedido (AGUARDANDO_PAGAMENTO), pagamento: { status, qrCode, qrCodeBase64, expiraEm } }.
+ */
 export const enviarPedido = (token, corpo) => requisitar('POST', '/cliente/pedidos', { token, corpo });
+
+/** POST /cliente/pedidos/previa → { previa } (taxa por km ou da área, frete grátis, campanha, formas). */
+export const buscarPrevia = (token, { itens, enderecoId, lojaSlug }) =>
+  requisitar('POST', '/cliente/pedidos/previa', {
+    token,
+    corpo: {
+      origem: 'APP',
+      ...(lojaSlug ? { lojaSlug } : {}),
+      enderecoId,
+      itens: itens.map((i) => ({ produtoId: i.produtoId, quantidade: i.quantidade, ...(i.observacao ? { observacao: i.observacao } : {}) })),
+    },
+  });
+
+/** GET /cliente/pedidos/:id/pagamento → { pedido, pagamento } (a tela do Pix consulta a cada 5 s). */
+export const situacaoDoPagamento = (token, pedidoId) => requisitar('GET', `/cliente/pedidos/${pedidoId}/pagamento`, { token });
+
+/** PUT /cliente/email → { cliente } (e-mail do pagador do Pix, pedido uma vez). */
+export const salvarEmail = (token, email) => requisitar('PUT', '/cliente/email', { token, corpo: { email } });
+
+/** Verificar o telefone da conta logada (frete grátis da primeira compra): manda o código. */
+export const enviarCodigoDaConta = (token, telefone) => requisitar('POST', '/cliente/telefone/enviar', { token, corpo: { telefone } });
+
+/** Confere o código e marca o telefone da conta como verificado → { cliente }. */
+export const verificarTelefoneDaConta = (token, { telefone, codigo }) =>
+  requisitar('POST', '/cliente/telefone/verificar', { token, corpo: { telefone, codigo } });
 
 /** GET /cliente/pedidos/ultimo?lojaSlug → { pedido | null } (o último daquela loja) */
 export const buscarUltimoPedido = (token, lojaSlug) =>

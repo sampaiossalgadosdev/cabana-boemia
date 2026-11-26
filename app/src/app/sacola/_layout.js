@@ -4,7 +4,7 @@ import { ComTemaDaLoja } from '../../componentes/Loja.js';
 
 /**
  * A sacola é um modal com o próprio stack (como o painel do site, onde tudo
- * acontece no mesmo lugar): sacola → finalizar → pedido enviado.
+ * acontece no mesmo lugar): sacola → finalizar → (Pix) → pedido enviado.
  */
 export default function LayoutSacola() {
   return (
@@ -29,6 +29,8 @@ function PilhaDaSacola() {
     >
       <Stack.Screen name="index" options={{ title: 'Sacola' }} />
       <Stack.Screen name="checkout" options={{ title: 'Finalizar' }} />
+      {/* Pix: sem voltar para o checkout (o pedido já existe e espera o pagamento); "Fechar" leva ao cardápio. */}
+      <Stack.Screen name="pix" options={{ title: 'Pagar com Pix', headerBackVisible: false, headerLeft: () => null, gestureEnabled: false }} />
       {/* Sem voltar: o pedido já foi criado. */}
       <Stack.Screen name="enviado" options={{ title: 'Pedido enviado', headerBackVisible: false, headerLeft: () => null, gestureEnabled: false }} />
     </Stack>

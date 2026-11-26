@@ -229,6 +229,8 @@ export function ClienteProvider({ children }) {
       excluirConta,
       aceitarTermos,
       definirMarketing,
+      // Cadastro novo devolvido pela API (e-mail do Pix, telefone verificado no checkout).
+      aplicarCliente: setCliente,
       tentarDeNovo: abrir,
     }),
     [status, cliente, chamar, entrarComGoogle, entrarComApple, enviarCodigoTelefone, entrarComTelefone, sair, atualizarPerfil, excluirConta, aceitarTermos, definirMarketing, abrir],

@@ -8,7 +8,16 @@ import { useCardapio } from '../estado/Cardapio.js';
 import { useUltimoPedido } from '../estado/UltimoPedido.js';
 import * as api from '../lib/api.js';
 import { formatarPreco } from '../logica/dinheiro.js';
-import { FORMAS_PAGAMENTO, corpoDoPedido, novaChavePedido, resumoDoPedido, textoTaxa } from '../logica/pedido.js';
+import { corpoDoPedido, novaChavePedido, resumoDoPedido, textoTaxa } from '../logica/pedido.js';
+import {
+  PIX_ONLINE,
+  emailValido,
+  interpretarErroDoPix,
+  opcoesDePagamento,
+  pixParaGuardar,
+  salvarPixPendente,
+} from '../logica/pagamento.js';
+import { VerificarTelefone } from './VerificarTelefone.js';
 import { ERRO_GENERICO, interpretarErroDoEnvio, textoEndereco, trocoDoCheckout } from '../logica/checkout.js';
 import { enderecoInicialNaLoja, taxaNaLoja } from '../logica/lojas.js';
 import { useEstilos, useTema } from '../tema/tema.js';
@@ -28,11 +37,15 @@ import { corpoDoEndereco, precisaConfirmarPino } from '../logica/mapa.js';
  * mostra a mensagem e leva à troca de endereço.
  * Endereço sem pino (antigo ou salvo sem mapa): depois de "Confirmar dados" pede
  * para confirmar no mapa, sem bloquear ("Agora não" segue sem pino).
+ * Pagamento (Etapa 4 do pagamento online): a PRÉVIA da API (/cliente/pedidos/previa) dá a taxa
+ * (por km na loja com entregadores do Taaki), o frete grátis (da loja ou da primeira compra) e as
+ * formas da loja; sem ela (API antiga, sem rede), fica a prévia local de antes. "Pix pelo app"
+ * cria o pedido aguardando o pagamento e abre a tela do Pix (a sacola só esvazia na aprovação).
  */
 export function Finalizacao({ onEditarTelefone }) {
   const s = useEstilos(criarEstilos);
   const tema = useTema();
-  const { cliente, chamar, sair } = useCliente();
+  const { cliente, chamar, sair, aplicarCliente } = useCliente();
   const { itens, substituir } = useCarrinho();
   const { dados: cardapio, podePedir, recarregar: recarregarCardapio, slug, loja } = useCardapio();
   const nomeLoja = loja?.nome || 'A loja';
@@ -57,6 +70,11 @@ export function Finalizacao({ onEditarTelefone }) {
   const [freteDaApi, setFreteDaApi] = useState(null);
   const chave = useRef(novaChavePedido());
   const [tentativa, setTentativa] = useState(0);
+  // Prévia da API (taxa, frete grátis, campanha e formas da loja); null = usa a local.
+  const [previa, setPrevia] = useState(null);
+  const [versaoPrevia, setVersaoPrevia] = useState(0);
+  const [emailTexto, setEmailTexto] = useState('');
+  const [pedirEmail, setPedirEmail] = useState(false);
 
   useEffect(() => {
     let vivo = true;
@@ -84,8 +102,35 @@ export function Finalizacao({ onEditarTelefone }) {
   const freteGratis = freteDaApi ? freteDaApi.valor : (cardapio?.freteGratis ?? null);
   const endereco = enderecos?.find((e) => e.id === enderecoId) ?? null;
   const taxaBairro = taxaNaLoja(endereco, bairros) ?? 0;
-  const resumo = useMemo(() => resumoDoPedido(itens, taxaBairro, freteGratis), [itens, taxaBairro, freteGratis]);
+  const resumoLocal = useMemo(() => resumoDoPedido(itens, taxaBairro, freteGratis), [itens, taxaBairro, freteGratis]);
+  const resumo = previa
+    ? { subtotalCentavos: previa.subtotalCentavos, taxaEntregaCentavos: previa.taxaEntregaCentavos, totalCentavos: previa.totalCentavos }
+    : resumoLocal;
+  const opcoes = opcoesDePagamento(previa?.formasPagamento ?? null);
   const troco = trocoDoCheckout({ forma, precisaTroco, texto: trocoTexto, totalCentavos: resumo.totalCentavos });
+
+  // Prévia da API ao chegar no pagamento (e a cada mudança de endereço, itens ou campanha).
+  const chaveItens = itens.map((i) => `${i.produtoId}x${i.quantidade}`).join(',');
+  useEffect(() => {
+    if (etapa !== 'pagamento' || !endereco) return undefined;
+    let vivo = true;
+    chamar((token) => api.buscarPrevia(token, { itens, enderecoId: endereco.id, lojaSlug: slug }))
+      .then(({ previa: p }) => vivo && setPrevia(p))
+      .catch((e) => {
+        if (!vivo) return;
+        setPrevia(null);
+        // Recusa da loja (fechada, fora da área, sem pino...): mostra já, antes do envio.
+        if (e?.status && e.status !== 401 && e.status !== 404) setErro(e.message);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [etapa, endereco?.id, chaveItens, slug, versaoPrevia]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A forma escolhida saiu das opções da loja (ex.: a loja desligou o Pix pelo app): escolher de novo.
+  useEffect(() => {
+    if (forma && !opcoes.some((o) => o.valor === forma)) setForma('');
+  }, [forma, opcoes.map((o) => o.valor).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!enderecos) {
     return erro ? (
@@ -201,14 +246,24 @@ export function Finalizacao({ onEditarTelefone }) {
     );
   }
 
+  const pixOnline = forma === PIX_ONLINE;
+  const precisaEmail = pixOnline && (!cliente.email || pedirEmail);
+
   const enviar = async () => {
     setErro('');
     if (!forma) return setErro('Escolha a forma de pagamento.');
     if (troco.erro) return setErro(troco.erro);
     if (!podePedir) return setErro('Estamos fechados ou sem conexão agora: não dá para enviar o pedido.');
+    if (precisaEmail && !emailValido(emailTexto)) return setErro('Informe um e-mail válido para pagar com Pix.');
     setEnviando(true);
     let criado = false;
     try {
+      // E-mail do pagador (Decisão 13): pedido uma vez e salvo no cadastro.
+      if (precisaEmail) {
+        const { cliente: novo } = await chamar((token) => api.salvarEmail(token, emailTexto.trim()));
+        aplicarCliente(novo);
+        setPedirEmail(false);
+      }
       const corpo = corpoDoPedido(itens, {
         enderecoId,
         formaPagamento: forma,
@@ -217,13 +272,28 @@ export function Finalizacao({ onEditarTelefone }) {
         totalEsperadoCentavos: resumo.totalCentavos,
         lojaSlug: slug,
       });
-      const { pedido } = await chamar((token) => api.enviarPedido(token, corpo));
+      const r = await chamar((token) => api.enviarPedido(token, corpo));
       criado = true;
+      if (r.pagamento) {
+        // Pix: a tela do Pix acompanha o pagamento; a sacola fica até a aprovação.
+        await salvarPixPendente(pixParaGuardar(r, loja ? { slug, nome: loja.nome } : null));
+        router.replace('/sacola/pix');
+        return;
+      }
+      const { pedido } = r;
       setPedidoEnviado(pedido);
       router.replace('/sacola/enviado');
       substituir([]); // o pedido já existe: a sacola esvazia na hora
       recarregarUltimo();
     } catch (e) {
+      const pix = interpretarErroDoPix(e);
+      if (pix) {
+        // O pedido anterior foi encerrado (Pix não gerado ou expirado): o próximo é outro.
+        if (pix.acao === 'novaChave') chave.current = novaChavePedido();
+        if (pix.acao === 'email') setPedirEmail(true);
+        if (pix.acao === 'formas') setVersaoPrevia((n) => n + 1);
+        return setErro(pix.mensagem);
+      }
       const r = interpretarErroDoEnvio(e, {
         itens,
         taxaBairroCentavos: taxaBairro,
@@ -247,6 +317,7 @@ export function Finalizacao({ onEditarTelefone }) {
         }
         if (r.freteGratis) setFreteDaApi(r.freteGratis);
         recarregarCardapio();
+        setVersaoPrevia((n) => n + 1);
       }
       if (r.acao === 'cardapio') recarregarCardapio();
       setErro(r.mensagem);
@@ -257,10 +328,34 @@ export function Finalizacao({ onEditarTelefone }) {
 
   return (
     <View>
-      <Titulo subtitulo="Pagamento na entrega.">Forma de pagamento</Titulo>
-      {FORMAS_PAGAMENTO.map((f) => (
-        <Opcao key={f.valor} titulo={f.rotulo} marcada={forma === f.valor} onPress={() => setForma(f.valor)} />
+      <Titulo subtitulo={opcoes.some((o) => o.agora) ? 'Pague agora pelo app ou na entrega.' : 'Pagamento na entrega.'}>Forma de pagamento</Titulo>
+      {opcoes.map((f, i) => (
+        <View key={f.valor}>
+          {!f.agora && i > 0 && opcoes[i - 1].agora && <Text style={[s.rotulo, s.grupo]}>Pagar na entrega</Text>}
+          <Opcao titulo={f.rotulo} detalhe={f.agora ? 'Pix com QR code ou copia e cola; o pedido vai para a loja quando o pagamento for aprovado.' : undefined} marcada={forma === f.valor} onPress={() => setForma(f.valor)} />
+        </View>
       ))}
+
+      {precisaEmail && (
+        <Campo
+          rotulo="Seu e-mail (o Mercado Pago pede para o Pix)"
+          value={emailTexto}
+          onChangeText={setEmailTexto}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
+          placeholder="voce@exemplo.com"
+        />
+      )}
+
+      {previa?.campanha?.disponivelSeVerificar && (
+        <VerificarTelefone
+          aoVerificar={(novo) => {
+            aplicarCliente(novo);
+            setVersaoPrevia((n) => n + 1);
+          }}
+        />
+      )}
 
       {forma === 'DINHEIRO' && (
         <View style={s.troco}>
@@ -290,6 +385,7 @@ export function Finalizacao({ onEditarTelefone }) {
           <Text style={s.rotuloResumo}>{`Taxa de entrega (${endereco.bairro.nome})`}</Text>
           <Text style={[s.valor, resumo.taxaEntregaCentavos === 0 && s.gratis]}>{textoTaxa(resumo.taxaEntregaCentavos)}</Text>
         </View>
+        {previa?.origemFreteGratis === 'CAMPANHA' && <Text style={[s.nota, s.gratis]}>Frete grátis da primeira compra 🎉</Text>}
         <View style={[s.linhaResumo, s.divisoria]}>
           <Text style={s.total}>Total</Text>
           <Text style={s.total}>{formatarPreco(resumo.totalCentavos)}</Text>
@@ -304,7 +400,7 @@ export function Finalizacao({ onEditarTelefone }) {
 
       <TextoErro>{erro}</TextoErro>
       <Botao
-        titulo={enviando ? 'Enviando…' : `Enviar pedido · ${formatarPreco(resumo.totalCentavos)}`}
+        titulo={enviando ? 'Enviando…' : `${pixOnline ? 'Gerar Pix' : 'Enviar pedido'} · ${formatarPreco(resumo.totalCentavos)}`}
         onPress={enviar}
         carregando={enviando}
         desabilitado={itens.length === 0}
@@ -375,6 +471,7 @@ const criarEstilos = (t) =>
     divisoria: { borderTopWidth: 1, borderTopColor: t.cores.borda },
     dado: { flex: 1 },
     rotulo: { fontSize: t.fontes.tamanho.pequeno, color: t.cores.textoSuave },
+    grupo: { marginTop: 12, marginBottom: 4 },
     valor: { fontSize: t.fontes.tamanho.normal, color: t.cores.texto, fontWeight: t.fontes.peso.medio },
     nota: { fontSize: t.fontes.tamanho.pequeno, color: t.cores.textoSuave },
     troco: { marginTop: 8 },

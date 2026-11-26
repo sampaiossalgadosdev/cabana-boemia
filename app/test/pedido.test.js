@@ -55,6 +55,7 @@ test('corpoDoPedido nunca manda preço nem nome; troco só em dinheiro', () => {
   const itens = adicionar(adicionar([], XBACON, 2, 'sem cebola'), COCA, 1);
   const corpo = corpoDoPedido(itens, { enderecoId: 7, formaPagamento: 'PIX', trocoParaCentavos: 5000, chaveIdempotencia: 'k' });
   assert.deepEqual(corpo, {
+    origem: 'APP',
     itens: [
       { produtoId: 6, quantidade: 2, observacao: 'sem cebola' },
       { produtoId: 23, quantidade: 1 },

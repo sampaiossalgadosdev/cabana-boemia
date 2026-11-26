@@ -28,6 +28,7 @@ enum CanalPedido {
   SITE
   WHATSAPP
   SALAO
+  APP // app Taaki Delivery (antes ia como SITE): campanha, pino obrigatório em loja PLATAFORMA e pagamento online
 }
 
 enum StatusPedido {
@@ -782,6 +783,7 @@ enum StatusPagamento {
   REEMBOLSADO
   REEMBOLSO_PARCIAL
   REEMBOLSO_PENDENTE // estorno recusado pelo Mercado Pago: o ADMIN resolve (sem retentativa)
+  A_ESTORNAR // aprovado depois de o pedido expirar: o pedido não revive; estorno automático na Etapa 5
 }
 
 enum SituacaoCampanha {
@@ -799,6 +801,12 @@ enum TipoLancamentoLoja {
 
 enum TipoAlerta {
   RENOVACAO_MP_FALHOU // token da loja não renovou: conexão EXPIRADA, pagamento online desligado
+  PAGAMENTO_DIVERGENTE // valor, pedido ou comissão do Mercado Pago diferente do nosso: não aprovado
+  PAGO_APOS_EXPIRAR // Pix aprovado com o pedido já expirado: pagamento A_ESTORNAR
+  MP_DESVINCULADA // a loja desvinculou a conta no Mercado Pago (mp-connect): pagamento online desligado
+  TAXA_ENTREGA_COMPLEMENTO // taxa passou de 50% do valor cobrado: o resto fica como débito da loja
+  PIX_FALHANDO // mais de 3 falhas ao gerar Pix na mesma loja em 1 hora
+  LOJA_SEM_LOCALIZACAO // loja PLATAFORMA sem pino: pedido do app usou a taxa da área
 }
 
 enum StatusFechamento {
@@ -846,6 +854,8 @@ model Pagamento {
   /// Campos relevantes da resposta do Mercado Pago (status_detail, datas, ids). Nunca dado de cartão.
   dadosMp                  Json?
   aprovadoEm               DateTime?
+  /// Última consulta ao Mercado Pago (tela do Pix no app: no máximo a cada 30 s).
+  consultadoEm             DateTime?
   criadoEm                 DateTime              @default(now())
   atualizadoEm             DateTime              @updatedAt
 

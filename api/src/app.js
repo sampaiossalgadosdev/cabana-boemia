@@ -27,6 +27,15 @@ export function lerOrigensCors(valor = '') {
 export const PREFIXO_API = '/api';
 
 /**
+ * Caminho para o log de acesso: o retorno do OAuth do Mercado Pago traz o `code` (e o state)
+ * na query, que nunca vai para o log.
+ */
+export function urlParaLog(url) {
+  const texto = String(url ?? '');
+  return texto.startsWith(`${PREFIXO_API}/mercadopago/`) ? texto.split('?')[0] : texto;
+}
+
+/**
  * Monta o app Express sem abrir porta; usado pelo server.js e pelos testes.
  * @param {{ corsOrigins?: string[], log?: boolean, limiteLogin?: number, relogio?: () => Date,
  *           verificarIdTokenGoogle?: (idToken: string) => Promise<object> }} [opcoes]
@@ -41,6 +50,7 @@ export const PREFIXO_API = '/api';
  *   `destinosApp`: destinos de /app nos hosts do Taaki (padrão: TAAKI_APP_URL / TAAKI_APP_URL_IOS).
  *   `mapas`: serviço de mapas (padrão: o do ambiente; os testes simulam o Google).
  *   `landingTaaki`: modo da landing (padrão: TAAKI_APP_LANCADO, TAAKI_FAQ_IPHONE, TAAKI_INSTAGRAM_URL).
+ *   `conexaoMp`: serviço da conexão com o Mercado Pago (padrão: o do ambiente; os testes simulam).
  */
 export function criarApp({
   corsOrigins = lerOrigensCors(process.env.CORS_ORIGINS),
@@ -61,6 +71,7 @@ export function criarApp({
   destinosApp = lerDestinosDoApp(),
   landingTaaki = lerConfigLanding(),
   mapas,
+  conexaoMp,
 } = {}) {
   const app = express();
   const origens = origensPermitidas(corsOrigins, hostsTaaki);
@@ -86,7 +97,10 @@ export function criarApp({
     }),
   );
   app.use(express.json({ limit: '100kb' }));
-  if (log) app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+  if (log) {
+    morgan.token('url', (req) => urlParaLog(req.originalUrl || req.url));
+    app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+  }
 
   app.use(
     PREFIXO_API,
@@ -101,6 +115,7 @@ export function criarApp({
       limiteAuthCliente,
       emailTitular,
       mapas,
+      conexaoMp,
     }),
   );
   // Páginas públicas do app (exclusão de conta, privacidade e termos; links do Play Console

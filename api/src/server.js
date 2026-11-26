@@ -10,6 +10,7 @@ import { ehProducao, problemasNoVerificador } from './lib/verificadorTelefone.js
 import { problemasNoPagamentoOnline } from './lib/pagamentoOnline.js';
 import { iniciarLimpezaDiaria } from './services/registroAcesso.service.js';
 import { iniciarLimpezaDoCache, mapasPadrao } from './services/mapa.service.js';
+import { conexaoMpPadrao } from './services/conexaoMp.service.js';
 
 // Falha cedo: sem segredos válidos a API subiria e só quebraria no primeiro login.
 const problemas = problemasNosSegredos();
@@ -73,6 +74,8 @@ if (!mapasPadrao().ativo) {
 const pararLimpeza = iniciarLimpezaDiaria();
 // Cache das distâncias pelas ruas: apaga o que passou de 30 dias.
 const pararLimpezaMapas = iniciarLimpezaDoCache();
+// Mercado Pago: renova ao iniciar e a cada 24 h os tokens das lojas que vencem em menos de 30 dias.
+const pararRenovacaoMp = conexaoMpPadrao().iniciarRenovacaoDiaria();
 
 const porta = Number(process.env.PORT) || 3000;
 const app = criarApp();
@@ -89,6 +92,7 @@ function encerrar(sinal) {
   console.log(`${sinal} recebido, encerrando...`);
   pararLimpeza();
   pararLimpezaMapas();
+  pararRenovacaoMp();
   // io.close desconecta os sockets e fecha também o servidor HTTP.
   io.close(async () => {
     await prisma.$disconnect();

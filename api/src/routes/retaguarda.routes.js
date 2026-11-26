@@ -6,15 +6,17 @@ import { lojaDaEquipe } from '../middlewares/loja.js';
 import { criarRetaguardaController } from '../controllers/retaguarda.controller.js';
 import { corpoImagem } from './plataforma.routes.js';
 import { criarLimitadorMapa, criarMapaController } from '../controllers/mapa.controller.js';
+import { criarPagamentoOnlineController } from '../controllers/pagamentoOnline.controller.js';
 
 /**
  * Rotas da retaguarda (só DONO; ADMIN passa como DONO), na loja do usuário
  * (`req.lojaId`), nunca em cache. Catálogo, estoque, turnos,
  * bairros e configuração emitem `cardapio:atualizado` para o PDV recarregar.
- * @param {{ relogio?: () => Date, mapas?: object }} [opcoes]
+ * @param {{ relogio?: () => Date, mapas?: object, conexaoMp?: object }} [opcoes]
  */
-export function criarRetaguardaRoutes({ relogio, mapas } = {}) {
+export function criarRetaguardaRoutes({ relogio, mapas, conexaoMp } = {}) {
   const c = criarRetaguardaController(relogio);
+  const pagamento = criarPagamentoOnlineController(conexaoMp);
   const mapa = criarMapaController(mapas);
   const r = Router();
   r.use((req, res, next) => {
@@ -68,6 +70,11 @@ export function criarRetaguardaRoutes({ relogio, mapas } = {}) {
   r.get('/mapa/config', mapa.configWeb);
   r.post('/mapa/geocodificar', criarLimitadorMapa({ limite: 60, chave: (req) => `usuario:${req.usuario.id}` }), assincrono(mapa.geocodificarTexto));
 
+  // Pagamento online: conexão da conta Mercado Pago da loja (OAuth) e o interruptor.
+  r.get('/pagamento-online', assincrono(pagamento.situacao));
+  r.post('/pagamento-online/conectar', assincrono(pagamento.conectar));
+  r.post('/pagamento-online/desconectar', assincrono(pagamento.desconectar));
+  r.put('/pagamento-online/ativo', assincrono(pagamento.definirAtivo));
   r.get('/config', assincrono(c.obterConfig));
   r.put('/config', assincrono(c.definirConfig));
   return r;

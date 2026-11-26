@@ -10,6 +10,8 @@ import { createHmac } from 'node:crypto';
 import { semBancoDeTeste, resetarBancoDeTeste, criarBairro } from './helpers/banco.js';
 import {
   criarClienteMercadoPago,
+  detalheDoErro,
+  TAMANHO_DETALHE_ERRO,
   ErroMercadoPago,
   manifestoDoWebhook,
   urlDeNotificacao,
@@ -108,6 +110,31 @@ describe('módulo do Mercado Pago: Pix, consulta, cancelamento e assinatura', ()
     await assert.rejects(() => mp.consultarPagamento(null, '1'), (e) => e.codigo === 'SEM_TOKEN');
   });
 
+  test('recusa com message e cause: detalhe curto, sem e-mail nem números longos; sem nada = null', async () => {
+    const resposta = {
+      error: 'bad_request',
+      message: 'Collector user without key enabled for QR render',
+      status: 400,
+      cause: [{ code: 13253, description: 'Financial Identity Use Case was not found', data: 'segredo-que-nao-sai' }],
+    };
+    const mp = criarClienteMercadoPago({ config, fetch: async () => new Response(JSON.stringify(resposta), { status: 400 }) });
+    await assert.rejects(
+      () => mp.criarPix(TOKEN_LOJA, { valorCentavos: 100, comissaoCentavos: 0, pedidoId: 1, descricao: 'x', email: 'a@b.com', expiraEm: new Date(), idempotencyKey: 'k' }),
+      (e) =>
+        e.codigo === 'bad_request' &&
+        e.detalhe === 'Collector user without key enabled for QR render [13253: Financial Identity Use Case was not found]',
+    );
+    assert.equal(
+      detalheDoErro({ message: 'payer.email ana.silva@exemplo.com is invalid', cause: { code: 4050, description: 'CPF 12345678901 telefone 43999990000' } }),
+      'payer.email *** is invalid [4050: CPF *** telefone ***]',
+    );
+    assert.equal(detalheDoErro({ error: 'bad_request', message: 'bad_request', cause: [] }), null, 'message igual ao error não repete');
+    assert.equal(detalheDoErro(null), null);
+    const longo = detalheDoErro({ message: 'x'.repeat(500) });
+    assert.equal(longo.length, TAMANHO_DETALHE_ERRO);
+    assert.ok(!longo.includes(TOKEN_LOJA));
+  });
+
   test('assinatura: válida, adulterada, outro segredo, sem segredo; data.id em minúsculas', () => {
     const assinatura = assinar({ dataId: 'ABC123', requestId: 'req-1' });
     assert.equal(validarAssinaturaWebhook({ assinatura, requestId: 'req-1', dataId: 'ABC123', segredo: SEGREDO_WEBHOOK }), true);
@@ -153,6 +180,7 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
   let pagamentos;
   let conexaoMp;
   let eventos = [];
+  const avisos = [];
   let pararEventos;
   const ENV_ANTES = {};
   const ENV = {
@@ -174,7 +202,7 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     falhar: false,
     async criarPix(token, dados) {
       mp.chamadas.push({ tipo: 'criarPix', token, dados });
-      if (mp.falhar) throw new ErroMercadoPago('Mercado Pago recusou (500)', { status: 500, codigo: 'internal_error' });
+      if (mp.falhar) throw new ErroMercadoPago('Mercado Pago recusou (400)', { status: 400, codigo: 'bad_request', detalhe: 'Collector user without key enabled for QR render [13253: x]' });
       const existente = [...mp.pagamentos.values()].find((p) => p.chave === dados.idempotencyKey);
       if (existente) return { ...existente.r };
       const id = String(mp.proximoId++);
@@ -332,7 +360,7 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
       data: { lojaId: 1, mpUserId: CONTA_MP, accessTokenCifrado: cifrar(TOKEN_LOJA, Buffer.from(CHAVE_HEX, "hex")), status: 'CONECTADA' },
     });
 
-    const silencioso = { warn: () => {} };
+    const silencioso = { warn: (m) => avisos.push(String(m)) };
     pagamentos = criarServicoPagamentos({ mercadoPago: mp, log: silencioso });
     conexaoMp = criarServicoConexaoMp({ mercadoPago: mp, log: silencioso, pagamentos });
     servidor = http.createServer(
@@ -589,6 +617,9 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     const banco = await prisma.pedido.findFirst({ where: { clienteId: c.cliente.id }, include: { pagamentos: true, usoCampanha: true } });
     assert.equal(banco.status, 'EXPIRADO');
     assert.equal(banco.pagamentos[0].status, 'RECUSADO');
+    // O motivo do Mercado Pago (message + cause) fica no dadosMp e no log.
+    assert.deepEqual(banco.pagamentos[0].dadosMp, { erro: 'bad_request', status: 400, detalhe: 'Collector user without key enabled for QR render [13253: x]' });
+    assert.ok(avisos.some((a) => a.includes(`pedido ${banco.id}: Pix não criado (status 400, bad_request: Collector user without key enabled for QR render [13253: x])`)));
     assert.equal(banco.usoCampanha, null); // campanha liberada
     assert.equal(await estoquePao(), pao);
     assert.equal(await prisma.alertaPlataforma.count({ where: { tipo: 'PIX_FALHANDO' } }), 0);

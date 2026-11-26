@@ -92,6 +92,9 @@ export function divergencias(pagamento, r, lojaIdDaConta = null) {
  *           estornarPagamentoAtrasado?: (pagamento: object) => Promise<void> }} [opcoes]
  *   `estornarPagamentoAtrasado`: ponto da Etapa 5 (estorno automático do pago depois de expirar).
  */
+/** Erro para o log: o código e, quando o Mercado Pago explicou, o detalhe (message + cause, já limpo). */
+const textoDoErro = (err) => `${err?.codigo ?? err?.message}${err?.detalhe ? `: ${err.detalhe}` : ''}`;
+
 export function criarServicoPagamentos({ mercadoPago, env = process.env, log = console, estornarPagamentoAtrasado = async () => {} } = {}) {
   const mp = mercadoPago ?? criarClienteMercadoPago();
   const emAndamento = new Set();
@@ -176,8 +179,8 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
       });
     } catch (err) {
       // Qualquer falha aqui (Mercado Pago, rede, token ilegível) deixa o cliente sem Pix: encerra.
-      log.warn(`[pagamento] pedido ${pedidoId}: Pix não criado (status ${err.status ?? '-'}, ${err.codigo ?? err.message})`);
-      await expirarPedido(pedidoId, { statusPagamento: 'RECUSADO', dadosMp: { erro: err.codigo ?? 'FALHA', status: err.status ?? null }, agora });
+      log.warn(`[pagamento] pedido ${pedidoId}: Pix não criado (status ${err.status ?? '-'}, ${textoDoErro(err)})`);
+      await expirarPedido(pedidoId, { statusPagamento: 'RECUSADO', dadosMp: { erro: err.codigo ?? 'FALHA', status: err.status ?? null, ...(err.detalhe && { detalhe: err.detalhe }) }, agora });
       await conferirFalhasDaLoja(pedido.lojaId, agora).catch((e) => log.warn(`[pagamento] alerta de falhas: ${e.message}`));
       throw new ErroHttp(502, 'Não foi possível gerar o Pix agora. Tente de novo ou escolha outra forma de pagamento.', {
         codigo: 'PAGAMENTO_FALHOU',
@@ -308,7 +311,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
         if (r.status === 'approved') return conciliar(pagamento, r, { agora });
         if (r.status === 'pending' || r.status === 'in_process') await mp.cancelarPagamento(token, pagamento.mpPaymentId);
       } catch (err) {
-        log.warn(`[pagamento] pedido ${pagamento.pedidoId}: cancelamento no Mercado Pago falhou (${err.status ?? '-'}, ${err.codigo ?? err.message})`);
+        log.warn(`[pagamento] pedido ${pagamento.pedidoId}: cancelamento no Mercado Pago falhou (${err.status ?? '-'}, ${textoDoErro(err)})`);
       }
     }
     return (await expirarPedido(pagamento.pedidoId, { statusPagamento, agora })) ? 'EXPIRADO' : 'JA_TRATADO';
@@ -327,7 +330,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
           await consultarEConciliar(pagamento, agora);
         }
       } catch (err) {
-        log.warn(`[pagamento] consulta do pedido ${pedidoId} falhou (${err.status ?? '-'}, ${err.codigo ?? err.message})`);
+        log.warn(`[pagamento] consulta do pedido ${pedidoId} falhou (${err.status ?? '-'}, ${textoDoErro(err)})`);
       }
     }
     return resposta(pedidoId);
@@ -348,7 +351,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
         }
       } catch (err) {
         r.falhas += 1;
-        log.warn(`[pagamento] rotina, pedido ${p.pedidoId}: ${err.status ?? '-'} ${err.codigo ?? err.message}`);
+        log.warn(`[pagamento] rotina, pedido ${p.pedidoId}: ${err.status ?? '-'} ${textoDoErro(err)}`);
       }
     }
     return r;
@@ -365,7 +368,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
         try {
           await mp.cancelarPagamento(await tokenDaLoja(lojaId), p.mpPaymentId);
         } catch (err) {
-          log.warn(`[pagamento] desconectar, pedido ${p.pedidoId}: cancelamento falhou (${err.status ?? '-'}, ${err.codigo ?? err.message})`);
+          log.warn(`[pagamento] desconectar, pedido ${p.pedidoId}: cancelamento falhou (${err.status ?? '-'}, ${textoDoErro(err)})`);
         }
       }
       if (await expirarPedido(p.pedidoId, { statusPagamento: 'CANCELADO', agora })) cancelados += 1;
@@ -445,7 +448,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
         async (err) => {
           // Falhou (ex.: Mercado Pago fora do ar): apaga o evento para o reenvio do Mercado
           // Pago ser processado (a rotina de 1 minuto também consulta os Pix pendentes).
-          log.warn(`[pagamento] webhook ${evento.id} (${tipo}): ${err.status ?? '-'} ${err.codigo ?? err.message}`);
+          log.warn(`[pagamento] webhook ${evento.id} (${tipo}): ${err.status ?? '-'} ${textoDoErro(err)}`);
           await prisma.eventoWebhook.delete({ where: { id: evento.id } }).catch(() => {});
           return `ERRO ${err.codigo ?? 'INTERNO'}`;
         },

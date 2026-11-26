@@ -64,20 +64,45 @@ const perfilSchema = z.object({
 
 const slugLoja = z.string({ error: 'Loja inválida' }).trim().toLowerCase().min(1, 'Loja inválida').max(60);
 
+const itensSchema = z.array(itemPedidoSchema, { error: 'A sacola está vazia' }).min(1, 'A sacola está vazia').max(50);
+// O app manda 'APP'; o site não manda nada (= SITE), como os builds antigos do app.
+const origemSchema = z.enum(['APP', 'SITE'], { error: 'Origem inválida' }).optional();
+
 /** Pedido do site e do app (itens: ver itemPedidoSchema; o preço sempre sai do banco). */
 const pedidoSchema = z
   .object({
-    itens: z.array(itemPedidoSchema, { error: 'A sacola está vazia' }).min(1, 'A sacola está vazia').max(50),
+    itens: itensSchema,
     enderecoId: z.number({ error: 'Escolha o endereço de entrega' }).int().positive(),
-    formaPagamento: z.enum(pedidoService.FORMAS_PAGAMENTO, { error: 'Escolha a forma de pagamento' }),
+    // Pagamento online (só app): sem forma na entrega.
+    pagamentoOnline: z.enum(pedidoService.PAGAMENTOS_ONLINE, { error: 'Pagamento online inválido' }).optional(),
+    formaPagamento: z.enum(pedidoService.FORMAS_PAGAMENTO, { error: 'Escolha a forma de pagamento' }).optional(),
     trocoParaCentavos: z.number().int().positive().nullish(),
     chaveIdempotencia: z.uuid().optional(),
     // Total que o cliente viu (só para conferir: o preço sempre sai do banco).
     totalEsperadoCentavos: z.number({ error: 'Informe o total do pedido' }).int().min(0),
     // Loja do pedido (app). Ausente = loja padrão (Cabana), como o site atual.
     lojaSlug: slugLoja.optional(),
+    origem: origemSchema,
   })
-  .superRefine(trocoSoEmDinheiro);
+  .superRefine((dados, ctx) => {
+    if (!dados.pagamentoOnline && !dados.formaPagamento) {
+      ctx.addIssue({ code: 'custom', path: ['formaPagamento'], message: 'Escolha a forma de pagamento' });
+    }
+    if (dados.pagamentoOnline && dados.trocoParaCentavos != null) {
+      ctx.addIssue({ code: 'custom', path: ['trocoParaCentavos'], message: 'Troco só para pagamento em dinheiro' });
+    }
+    if (!dados.pagamentoOnline) trocoSoEmDinheiro(dados, ctx);
+  });
+
+/** Prévia do checkout do app (taxa por km, frete grátis, campanha, formas). */
+const previaSchema = z.object({
+  itens: itensSchema,
+  enderecoId: z.number({ error: 'Escolha o endereço de entrega' }).int().positive(),
+  lojaSlug: slugLoja.optional(),
+  origem: origemSchema,
+});
+
+const emailSchema = z.object({ email: z.email({ error: 'E-mail inválido' }).max(200) });
 
 const historicoSchema = z.object({
   antesDeId: z.coerce.number().int().positive().optional(),
@@ -95,7 +120,7 @@ const lojaDoPedido = async (lojaSlug, padrao) => (lojaSlug ? (await buscarAtivaP
  * @param {() => Date} [relogio] "agora" do pedido (injetável nos testes)
  */
 export function criarClienteController(
-  { verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple, verificadorTelefone, mapas },
+  { verificarIdTokenGoogle, verificarIdentityTokenApple, revogarApple, verificadorTelefone, mapas, pagamentos },
   relogio = () => new Date(),
 ) {
   return {
@@ -209,9 +234,49 @@ export function criarClienteController(
     async criarPedido(req, res) {
       const dados = validar(pedidoSchema, req.body);
       const lojaId = await lojaDoPedido(dados.lojaSlug, req.lojaId);
-      const { pedido, criado } = await pedidoService.criarPedidoDoSite(lojaId, req.cliente, dados, { agora: relogio(), mapas });
+      const agora = relogio();
+      const { pedido, criado } = await pedidoService.criarPedidoDoSite(lojaId, req.cliente, dados, { agora, mapas });
       await registrarAcesso({ clienteId: req.cliente.id, ip: req.ip, evento: 'PEDIDO' });
-      res.status(criado ? 201 : 200).json({ pedido });
+      if (!dados.pagamentoOnline) return res.status(criado ? 201 : 200).json({ pedido });
+      // Pix: criado no Mercado Pago depois do commit (falhou = pedido EXPIRADO e 502).
+      const r = await pagamentos.gerarPix(pedido.id, { email: req.cliente.email, agora });
+      res.status(criado ? 201 : 200).json(r);
+    },
+
+    /** Prévia do checkout do app: taxa (por km ou da área), frete grátis, campanha e formas. */
+    async previaPedido(req, res) {
+      const dados = validar(previaSchema, req.body);
+      const lojaId = await lojaDoPedido(dados.lojaSlug, req.lojaId);
+      res.json({ previa: await pedidoService.previaDoPedido(lojaId, req.cliente, dados, { agora: relogio(), mapas }) });
+    },
+
+    /** Situação do Pix do pedido (a tela do app consulta a cada 5 s). */
+    async situacaoPagamento(req, res) {
+      const { id } = validar(idSchema, req.params);
+      res.json(await pagamentos.situacaoParaCliente(req.cliente.id, id, relogio()));
+    },
+
+    /** E-mail do pagador (pedido uma vez antes do Pix, quando a conta não tem). */
+    async definirEmail(req, res) {
+      const { email } = validar(emailSchema, req.body ?? {});
+      res.json({ cliente: await clienteService.definirEmail(req.cliente.id, email) });
+    },
+
+    /** Verificar o telefone da conta logada, passo 1: manda o código. */
+    async enviarCodigoDaConta(req, res) {
+      const telefone = celularDoCorpo(req.body);
+      await verificadorTelefone.enviarCodigo(telefone);
+      res.json({ enviado: true, telefone, reenviarEmSegundos: 60 });
+    },
+
+    /** Passo 2: confere o código e marca o telefone da conta como verificado (campanha). */
+    async verificarTelefoneDaConta(req, res) {
+      const telefone = celularDoCorpo(req.body);
+      const { codigo } = validar(entrarTelefoneSchema, req.body);
+      if (!(await verificadorTelefone.conferirCodigo(telefone, codigo))) {
+        throw new ErroHttp(401, 'Código errado. Confira os 6 números e tente de novo.', { codigo: 'CODIGO_INVALIDO' });
+      }
+      res.json({ cliente: await clienteService.verificarTelefoneDaConta(req.cliente.id, telefone.slice(3), relogio()) });
     },
 
     /** Histórico de todas as lojas (cada pedido traz `loja`); `lojaSlug` filtra uma. */

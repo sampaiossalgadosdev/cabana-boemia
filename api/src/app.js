@@ -51,6 +51,7 @@ export function urlParaLog(url) {
  *   `mapas`: serviço de mapas (padrão: o do ambiente; os testes simulam o Google).
  *   `landingTaaki`: modo da landing (padrão: TAAKI_APP_LANCADO, TAAKI_FAQ_IPHONE, TAAKI_INSTAGRAM_URL).
  *   `conexaoMp`: serviço da conexão com o Mercado Pago (padrão: o do ambiente; os testes simulam).
+ *   `pagamentos`: serviço do pagamento online (Pix, webhook; padrão: o do ambiente; os testes simulam).
  */
 export function criarApp({
   corsOrigins = lerOrigensCors(process.env.CORS_ORIGINS),
@@ -72,6 +73,7 @@ export function criarApp({
   landingTaaki = lerConfigLanding(),
   mapas,
   conexaoMp,
+  pagamentos,
 } = {}) {
   const app = express();
   const origens = origensPermitidas(corsOrigins, hostsTaaki);
@@ -116,6 +118,7 @@ export function criarApp({
       emailTitular,
       mapas,
       conexaoMp,
+      ...(pagamentos && { pagamentos }),
     }),
   );
   // Páginas públicas do app (exclusão de conta, privacidade e termos; links do Play Console

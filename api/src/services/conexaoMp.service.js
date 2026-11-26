@@ -5,8 +5,9 @@
  * - conectar: monta a URL de autorização com o state assinado (loja, usuário, origem, 10 min);
  * - retorno: confere o state, troca o code, grava os tokens CIFRADOS e volta para a retaguarda;
  *   a mesma conta CONECTADA/EXPIRADA em outra loja é recusada;
- * - desconectar: avisa os pagamentos pendentes; confirmado, apaga os tokens, marca DESCONECTADA e
- *   desliga o pagamento online da loja (a Etapa 4 cancela ali os Pix pendentes);
+ * - desconectar: avisa os pagamentos pendentes; confirmado, cancela no Mercado Pago os Pix pendentes
+ *   e expira os pedidos (Decisão 17; antes de apagar os tokens), apaga os tokens, marca DESCONECTADA
+ *   e desliga o pagamento online da loja;
  * - renovação diária: vence em menos de 30 dias = renova e grava o refresh NOVO; falhou = EXPIRADA,
  *   pagamento online desligado e alerta para o ADMIN.
  *
@@ -24,24 +25,18 @@ import * as conexaoRepo from '../repositories/conexaoMp.repository.js';
 import * as lojaRepo from '../repositories/loja.repository.js';
 import * as usuarioRepo from '../repositories/usuario.repository.js';
 import { criarAlerta } from './alerta.service.js';
+import { pagamentosPadrao } from './pagamento.service.js';
 
 /** Renova quem vence em menos disto. */
 export const ANTECEDENCIA_RENOVACAO_MS = 30 * 24 * 60 * 60 * 1000;
 const UM_DIA_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Ponto da Etapa 4 (Decisão 17): ao desconectar, cancelar no Mercado Pago os Pix pendentes da
- * loja e expirar os pedidos AGUARDANDO_PAGAMENTO, na mesma transação. Na Etapa 3 ainda não há
- * Pix real: só conta os pendentes.
+ * @param {{ mercadoPago?: ReturnType<typeof criarClienteMercadoPago>, env?: object, log?: Pick<Console, 'warn'>,
+ *           pagamentos?: { cancelarPendentesDaLoja: (lojaId: number) => Promise<number> } }} [opcoes]
+ *   `pagamentos`: serviço de pagamentos (padrão: o do ambiente) para cancelar os Pix ao desconectar.
  */
-export async function cancelarPendentesDaLoja(lojaId, tx) {
-  return { cancelados: 0, pendentes: await conexaoRepo.contarPagamentosPendentes(lojaId, tx) };
-}
-
-/**
- * @param {{ mercadoPago?: ReturnType<typeof criarClienteMercadoPago>, env?: object, log?: Pick<Console, 'warn'> }} [opcoes]
- */
-export function criarServicoConexaoMp({ mercadoPago, env = process.env, log = console } = {}) {
+export function criarServicoConexaoMp({ mercadoPago, env = process.env, log = console, pagamentos } = {}) {
   const mp = mercadoPago ?? criarClienteMercadoPago();
   const producao = () => ehProducao(env);
   const chave = () => chaveDoAmbiente(env);
@@ -130,7 +125,8 @@ export function criarServicoConexaoMp({ mercadoPago, env = process.env, log = co
 
   /**
    * Sem `confirmar`: só a contagem dos pagamentos pendentes (para o aviso). Confirmado: cancela os
-   * pendentes (Etapa 4), apaga os tokens, marca DESCONECTADA e desliga o pagamento online.
+   * Pix pendentes no Mercado Pago e expira os pedidos (com o token ainda guardado), apaga os
+   * tokens, marca DESCONECTADA e desliga o pagamento online.
    */
   async function desconectar(lojaId, { confirmar = false } = {}) {
     const conexao = await conexaoRepo.buscarDaLoja(lojaId);
@@ -138,8 +134,10 @@ export function criarServicoConexaoMp({ mercadoPago, env = process.env, log = co
       throw new ErroHttp(409, 'A loja não está conectada ao Mercado Pago', { codigo: 'MP_NAO_CONECTADO' });
     }
     if (!confirmar) return { desconectada: false, pendentes: await conexaoRepo.contarPagamentosPendentes(lojaId) };
+    // Desliga primeiro (nenhum Pix novo entra) e cancela os pendentes antes de apagar os tokens.
+    await conexaoRepo.definirPagamentoOnlineAtivo(lojaId, false);
+    const cancelados = await (pagamentos ?? pagamentosPadrao()).cancelarPendentesDaLoja(lojaId);
     await prisma.$transaction(async (tx) => {
-      await cancelarPendentesDaLoja(lojaId, tx);
       await conexaoRepo.atualizar(
         lojaId,
         { status: 'DESCONECTADA', accessTokenCifrado: null, refreshTokenCifrado: null, publicKey: null, expiraEm: null },
@@ -147,7 +145,7 @@ export function criarServicoConexaoMp({ mercadoPago, env = process.env, log = co
       );
       await conexaoRepo.definirPagamentoOnlineAtivo(lojaId, false, tx);
     });
-    return { desconectada: true, pendentes: 0 };
+    return { desconectada: true, pendentes: 0, cancelados };
   }
 
   /** Liga/desliga o pagamento online da loja. Ligar exige a flag global e a conexão CONECTADA. */

@@ -7,10 +7,11 @@ import { credenciaisApple } from './lib/apple.js';
 import { emailDoTitular } from './lib/controlador.js';
 import { lerHostsTaaki, origensPermitidas } from './lib/dominios.js';
 import { ehProducao, problemasNoVerificador } from './lib/verificadorTelefone.js';
-import { problemasNoPagamentoOnline } from './lib/pagamentoOnline.js';
+import { campanhaLigada, problemasNoPagamentoOnline } from './lib/pagamentoOnline.js';
 import { iniciarLimpezaDiaria } from './services/registroAcesso.service.js';
 import { iniciarLimpezaDoCache, mapasPadrao } from './services/mapa.service.js';
 import { conexaoMpPadrao } from './services/conexaoMp.service.js';
+import { pagamentosPadrao } from './services/pagamento.service.js';
 
 // Falha cedo: sem segredos válidos a API subiria e só quebraria no primeiro login.
 const problemas = problemasNosSegredos();
@@ -70,12 +71,18 @@ if (!mapasPadrao().ativo) {
   console.warn('Aviso: GOOGLE_MAPS_SERVER_KEY ausente. Sem busca de endereço no mapa (o cliente posiciona o pino) e a distância dos pedidos fica estimada.');
 }
 
+if (!campanhaLigada()) {
+  console.warn('Aviso: CAMPANHA_TELEFONE_SECRET ausente ou inválido. A campanha de frete grátis da primeira compra fica desligada.');
+}
+
 // Registros de acesso do cliente: apaga os de mais de 6 meses ao iniciar e a cada 24 h.
 const pararLimpeza = iniciarLimpezaDiaria();
 // Cache das distâncias pelas ruas: apaga o que passou de 30 dias.
 const pararLimpezaMapas = iniciarLimpezaDoCache();
 // Mercado Pago: renova ao iniciar e a cada 24 h os tokens das lojas que vencem em menos de 30 dias.
 const pararRenovacaoMp = conexaoMpPadrao().iniciarRenovacaoDiaria();
+// Pix: a cada minuto expira os pendentes com mais de 15 min e consulta os outros (webhook perdido).
+const pararRotinaPagamentos = pagamentosPadrao().iniciarRotina();
 
 const porta = Number(process.env.PORT) || 3000;
 const app = criarApp();
@@ -93,6 +100,7 @@ function encerrar(sinal) {
   pararLimpeza();
   pararLimpezaMapas();
   pararRenovacaoMp();
+  pararRotinaPagamentos();
   // io.close desconecta os sockets e fecha também o servidor HTTP.
   io.close(async () => {
     await prisma.$disconnect();

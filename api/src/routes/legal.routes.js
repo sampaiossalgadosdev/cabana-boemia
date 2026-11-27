@@ -39,9 +39,13 @@ function controladorHtml(c = CONTROLADOR) {
   return `<p>Controlador dos dados: <strong>${escapar(identificacaoDoControlador(c))}</strong>.</p>${encarregado}`;
 }
 
-export function paginaPrivacidade(email, c = CONTROLADOR) {
+export function paginaPrivacidade(email, c = CONTROLADOR, origem = undefined) {
   return documento({
     titulo: 'Política de privacidade',
+    descricao:
+      'Como o Taaki Delivery, app de pedidos das lojas de Abatiá-PR, coleta, usa e protege os seus dados pessoais, de acordo com a LGPD.',
+    caminho: CAMINHO_PRIVACIDADE_APP,
+    origem,
     rodape: rodape('<a href="/termos-app">Termos de uso</a>'),
     corpo: `
 <section>
@@ -129,9 +133,13 @@ export function paginaPrivacidade(email, c = CONTROLADOR) {
   });
 }
 
-export function paginaTermos(email, c = CONTROLADOR) {
+export function paginaTermos(email, c = CONTROLADOR, origem = undefined) {
   return documento({
     titulo: 'Termos de uso',
+    descricao:
+      'Regras de uso do app Taaki Delivery: conta, pedidos às lojas de Abatiá-PR, pagamento, cancelamento e responsabilidades da plataforma e das lojas.',
+    caminho: CAMINHO_TERMOS_APP,
+    origem,
     rodape: rodape('<a href="/privacidade-app">Política de privacidade</a>'),
     corpo: `
 <section>
@@ -193,9 +201,10 @@ export function paginaTermos(email, c = CONTROLADOR) {
   });
 }
 
-export function criarRotasLegais({ email = emailDoTitular() } = {}) {
+/** `origem` = https://<domínio principal do Taaki> (canonical e link do início). */
+export function criarRotasLegais({ email = emailDoTitular(), origem = undefined } = {}) {
   const r = Router();
-  r.get(CAMINHO_PRIVACIDADE_APP, (req, res) => responderPagina(res, 200, paginaPrivacidade(email), { indexar: true }));
-  r.get(CAMINHO_TERMOS_APP, (req, res) => responderPagina(res, 200, paginaTermos(email), { indexar: true }));
+  r.get(CAMINHO_PRIVACIDADE_APP, (req, res) => responderPagina(res, 200, paginaPrivacidade(email, CONTROLADOR, origem), { indexar: true }));
+  r.get(CAMINHO_TERMOS_APP, (req, res) => responderPagina(res, 200, paginaTermos(email, CONTROLADOR, origem), { indexar: true }));
   return r;
 }

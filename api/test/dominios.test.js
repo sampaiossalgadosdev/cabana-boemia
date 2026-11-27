@@ -104,10 +104,14 @@ describe('separação por host: Taaki x Cabana', () => {
       assert.match(r.corpo, /O delivery de Abatiá, <em>num app só\.<\/em>/, host);
       // Os dois acessos no topo da página (hero).
       assert.match(r.corpo, /class="botao botao--principal" href="#em-breve">Quero pedir/, host);
-      assert.match(r.corpo, /class="botao botao--contorno" href="\/parceiro">Sou parceiro/, host);
+      // "Sou parceiro" leva à seção da própria página (o /parceiro é o painel, noindex).
+      assert.match(r.corpo, /class="botao botao--contorno" href="#parceiros">Sou parceiro/, host);
+      assert.doesNotMatch(r.corpo, /href="[^"]*\/parceiro"[^>]*>Sou parceiro/, host);
       for (const link of ['/privacidade-app', '/termos-app', '/excluir-conta']) assert.match(r.corpo, new RegExp(`href="${link}"`), host);
       assert.match(r.corpo, /mailto:contato@exemplo\.com/, host);
-      assert.doesNotMatch(r.corpo, /<script/i, 'sem script');
+      assert.doesNotMatch(r.corpo.replace(/<script type="application\/ld\+json">/g, ''), /<script/i, 'sem script (só o JSON-LD)');
+      // Canonical sempre no domínio principal (o primeiro dos hosts), venha por www. ou api.
+      assert.match(r.corpo, /<link rel="canonical" href="https:\/\/taakidelivery\.com\.br\/">/, host);
       assert.match(r.headers['content-security-policy'], /default-src 'none'/, host);
     }
     // HEAD também.
@@ -304,7 +308,7 @@ describe('landing do Taaki: modo "Em breve" e conteúdo', () => {
   test('estrutura, Open Graph, contato de parceiro, FAQ sem script e ano automático', async () => {
     const r = await landingCom({});
     const c = r.corpo;
-    assert.doesNotMatch(c, /<script/i);
+    assert.doesNotMatch(c.replace(/<script type="application\/ld\+json">/g, ''), /<script/i);
     assert.match(r.headers['content-security-policy'], /default-src 'none'/);
     assert.match(r.headers['content-security-policy'], /font-src 'self'/);
     assert.doesNotMatch(r.headers['content-security-policy'], /script-src/);
@@ -320,7 +324,7 @@ describe('landing do Taaki: modo "Em breve" e conteúdo', () => {
     assert.equal(c.match(/<details>/g)?.length, 5);
     assert.match(c, /<summary>Como faço para excluir minha conta\?<\/summary><p>[^<]*<a href="\/excluir-conta">/);
     // Parceiro: painel e contato por e-mail.
-    assert.match(c, /href="\/parceiro">Acessar painel do parceiro/);
+    assert.match(c, /href="\/parceiro" rel="nofollow">Acessar painel do parceiro/);
     assert.match(c, /href="mailto:contato@exemplo\.com\?subject=Quero%20ser%20parceiro%20do%20Taaki%20Delivery">/);
     assert.match(c, /Quero ser parceiro<\/a>/);
     assert.match(c, /Bateu a fome\? Peça pelo Taaki\./);
@@ -360,6 +364,97 @@ describe('landing do Taaki: modo "Em breve" e conteúdo', () => {
       ]) {
         assert.doesNotMatch(texto, proibido, String(proibido));
       }
+    }
+  });
+});
+
+describe('SEO dos domínios do Taaki', () => {
+  let servidor;
+  let porta;
+  const host = 'api.taakidelivery.com.br'; // acesso por um host que não é o principal
+  before(async () => {
+    servidor = http.createServer(
+      criarApp({
+        log: false,
+        hostsTaaki: ['taakidelivery.com.br', 'www.taakidelivery.com.br', 'api.taakidelivery.com.br'],
+        destinosApp: lerDestinosDoApp({}),
+        emailTitular: 'contato@exemplo.com',
+        landingTaaki: lerConfigLanding({ TAAKI_INSTAGRAM_URL: 'https://www.instagram.com/taakidelivery?igsh=abc&utm_source=qr' }),
+      }),
+    );
+    await new Promise((resolve) => servidor.listen(0, resolve));
+    porta = servidor.address().port;
+  });
+  after(() => new Promise((resolve) => servidor.close(resolve)));
+
+  test('JSON-LD da home: Organization, WebSite e WebPage válidos, sem FAQ nem avaliação', async () => {
+    const c = (await pedir(porta, '/', { host })).corpo;
+    const blocos = [...c.matchAll(/<script type="application\/ld\+json">([^]*?)<\/script>/g)];
+    assert.equal(blocos.length, 1);
+    const dados = JSON.parse(blocos[0][1]);
+    const porTipo = Object.fromEntries(dados['@graph'].map((n) => [n['@type'], n]));
+    assert.deepEqual(Object.keys(porTipo).sort(), ['Organization', 'WebPage', 'WebSite']);
+    const org = porTipo.Organization;
+    assert.equal(org['@id'], 'https://taakidelivery.com.br/#organization');
+    assert.equal(org.logo.url, 'https://taakidelivery.com.br/taaki/logo.jpg');
+    assert.equal(org.email, 'contato@exemplo.com');
+    assert.deepEqual(org.sameAs, ['https://www.instagram.com/taakidelivery']);
+    assert.equal(org.areaServed.name, 'Abatiá');
+    assert.equal(porTipo.WebPage.name, c.match(/<title>([^<]+)<\/title>/)[1]);
+    assert.doesNotMatch(blocos[0][1], /FAQPage|AggregateRating|Review|telephone|address/);
+    // Link do Instagram sem rastreio também na página.
+    assert.doesNotMatch(c, /igsh|utm_/);
+    assert.match(c, /<meta name="robots" content="index, follow, max-image-preview:large">/);
+    for (const nome of ['twitter:title', 'twitter:description', 'twitter:image']) assert.match(c, new RegExp(`name="${nome}" content="[^"]+"`), nome);
+    assert.match(c, /<link rel="manifest" href="\/site\.webmanifest">/);
+    assert.equal(c.match(/<h1[ >]/g).length, 1);
+    assert.match(c, /href="\/parceiro" rel="nofollow">Acessar painel do parceiro/);
+  });
+
+  test('robots.txt, sitemap.xml, llms.txt e manifesto', async () => {
+    const robots = await pedir(porta, '/robots.txt', { host });
+    assert.equal(robots.status, 200);
+    assert.match(robots.headers['content-type'], /^text\/plain/);
+    assert.match(robots.corpo, /Sitemap: https:\/\/taakidelivery\.com\.br\/sitemap\.xml/);
+    assert.doesNotMatch(robots.corpo, /Disallow: \/parceiro/, 'bloqueado, o Google não leria o noindex');
+
+    const mapa = await pedir(porta, '/sitemap.xml', { host });
+    assert.equal(mapa.status, 200);
+    assert.match(mapa.headers['content-type'], /^application\/xml/);
+    const locs = [...mapa.corpo.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+    assert.deepEqual(locs, ['https://taakidelivery.com.br/', 'https://taakidelivery.com.br/privacidade-app', 'https://taakidelivery.com.br/termos-app']);
+    assert.match(mapa.corpo, /<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/);
+
+    const llms = await pedir(porta, '/llms.txt', { host });
+    assert.equal(llms.status, 200);
+    assert.match(llms.headers['content-type'], /^text\/plain/);
+    assert.match(llms.corpo, /^# Taaki Delivery/);
+    assert.match(llms.corpo, /Abatiá-PR/);
+    for (const proibido of [/acompanh/i, /rastre/i, /entregador/i, /comiss[ãa]o|mensalidade/i]) assert.doesNotMatch(llms.corpo, proibido);
+
+    const manifesto = await pedir(porta, '/site.webmanifest', { host });
+    assert.equal(manifesto.status, 200);
+    assert.equal(JSON.parse(manifesto.corpo).theme_color, '#0A1428');
+  });
+
+  test('/parceiro com noindex; endereço inexistente = 404 de verdade', async () => {
+    const parceiro = await pedir(porta, '/parceiro', { host });
+    assert.equal(parceiro.status, 302);
+    assert.match(parceiro.headers['x-robots-tag'], /noindex/);
+    const nada = await pedir(porta, '/uma-url-que-nao-existe', { host });
+    assert.equal(nada.status, 404);
+    assert.match(nada.corpo, /<meta name="robots" content="noindex">/);
+    assert.match(nada.corpo, /href="\/#parceiros">Sou parceiro/);
+  });
+
+  test('páginas legais: description, canonical no domínio principal e link para o início', async () => {
+    for (const caminho of ['/privacidade-app', '/termos-app', '/excluir-conta']) {
+      const c = (await pedir(porta, caminho, { host: 'cabana.managerpix.com.br' })).corpo;
+      assert.match(c, /<html lang="pt-BR">/, caminho);
+      const descricao = c.match(/<meta name="description" content="([^"]+)">/)?.[1];
+      assert.ok(descricao && descricao.length <= 160, caminho);
+      assert.match(c, new RegExp(`<link rel="canonical" href="https://taakidelivery\\.com\\.br${caminho}">`), caminho);
+      assert.match(c, /<a href="https:\/\/taakidelivery\.com\.br\/">Início do Taaki Delivery<\/a>/, caminho);
     }
   });
 });

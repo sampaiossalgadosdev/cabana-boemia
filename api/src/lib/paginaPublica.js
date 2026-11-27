@@ -40,15 +40,28 @@ button:hover{background:${C.laranjaClaro}}
 .erro{color:${C.destaque};margin:4px 0 0}.ok{border-left:4px solid #2E7D4F}.isca{position:absolute;left:-9999px}small,.nota{color:#4B5568}
 footer{max-width:720px;margin:0 auto;padding:0 16px 32px;color:#4B5568;font-size:14px}`;
 
-/** Documento completo. `corpo` já é HTML (escapar o que vier do usuário antes). */
-export function documento({ titulo, corpo, rodape = '' }) {
+/** Domínio principal do Taaki quando ninguém informa outro (canonical e link do início). */
+export const ORIGEM_TAAKI_PADRAO = 'https://taakidelivery.com.br';
+
+/**
+ * Documento completo. `corpo` já é HTML (escapar o que vier do usuário antes).
+ * `descricao` = meta description; `caminho` = caminho da página, para o canonical
+ * absoluto no domínio principal (`origem`): estas páginas também abrem pelo
+ * domínio da Cabana e pelo api., e o Google deve indexar uma só.
+ */
+export function documento({ titulo, corpo, rodape = '', descricao = '', caminho = '', origem = ORIGEM_TAAKI_PADRAO }) {
+  const meta = [
+    descricao ? `<meta name="description" content="${escapar(descricao)}">` : '',
+    caminho ? `<link rel="canonical" href="${escapar(origem)}${escapar(caminho)}">` : '',
+  ].filter(Boolean).join('\n');
+  const inicio = `<a href="${escapar(origem)}/">Início do Taaki Delivery</a>`;
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapar(titulo)} · Taaki Delivery</title>
-<style>${ESTILO}</style></head><body>
+${meta ? `${meta}\n` : ''}<style>${ESTILO}</style></head><body>
 <header><h1>${escapar(titulo)} · Taaki Delivery</h1></header>
 <main>${corpo}</main>
-${rodape ? `<footer>${rodape}</footer>` : ''}
+<footer>${rodape ? `${rodape} · ` : ''}${inicio}</footer>
 </body></html>`;
 }
 

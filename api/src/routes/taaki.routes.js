@@ -8,12 +8,17 @@ import {
   CAMINHO_FAVICON_TAAKI,
   CAMINHO_ICONE_TAAKI,
   CAMINHO_LOGO_TAAKI,
+  CAMINHO_MANIFESTO_TAAKI,
   CSP_LANDING,
   FAVICON_SVG,
   FONTES_TAAKI,
   lerConfigLanding,
+  manifestoTaaki,
   paginaLanding,
   paginaNaoEncontradaTaaki,
+  sitemapXml,
+  textoLlms,
+  textoRobots,
 } from '../lib/landing.js';
 
 /**
@@ -27,7 +32,8 @@ import {
  *   /taaki/*    logo, favicon, ícone, imagem de compartilhamento e fonte da landing
  *   /app        302 para o app (TAAKI_APP_URL / TAAKI_APP_URL_IOS) com TAAKI_APP_LANCADO=sim;
  *               antes disso, para /#em-breve
- *   /parceiro   302 para a retaguarda (/admin/)
+ *   /parceiro   302 para a retaguarda (/admin/), com X-Robots-Tag noindex
+ *   /robots.txt, /sitemap.xml, /llms.txt, /site.webmanifest  SEO (links no domínio principal)
  *   /privacidade, /termos  302 para as do app (as do site são da Cabana)
  *   /sw.js      service worker que se desfaz (se alguém abriu o site da Cabana
  *               por este host antes da separação, o worker antigo sai)
@@ -73,6 +79,11 @@ function html(res, status, corpo) {
  */
 export function criarRotasTaaki({ hosts, destinosApp, email = null, landing = lerConfigLanding() }) {
   const rotas = Router();
+  // Domínio principal (o primeiro de TAAKI_HOSTS; padrão taakidelivery.com.br): canonical,
+  // sitemap e JSON-LD apontam sempre para ele, venha o acesso por www., api. ou ele mesmo.
+  const origem = `https://${hosts[0]}`;
+  const texto = (res, tipo, corpo) =>
+    res.status(200).set({ 'Content-Type': tipo, 'Cache-Control': 'public, max-age=3600' }).send(corpo);
 
   rotas.use((req, res, next) => {
     if (!ehHostTaaki(req, hosts) || COMPARTILHADOS.test(req.path)) return next('router');
@@ -81,13 +92,22 @@ export function criarRotasTaaki({ hosts, destinosApp, email = null, landing = le
   });
 
   // Gerada a cada pedido: o Open Graph usa o host (só hosts do Taaki chegam aqui) e o rodapé o ano.
-  rotas.get('/', (req, res) => html(res, 200, paginaLanding({ ...landing, email, host: req.hostname })));
+  rotas.get('/', (req, res) => html(res, 200, paginaLanding({ ...landing, email, host: req.hostname, origem })));
   rotas.get('/app', (req, res) => {
     // Antes do lançamento (TAAKI_APP_LANCADO != "sim") o app não está na loja: /app leva à seção "Em breve".
     const destino = landing.appLancado ? destinoDoApp(req.get('user-agent'), destinosApp) : '/#em-breve';
     res.set('Cache-Control', 'no-store').redirect(302, destino);
   });
-  rotas.get('/parceiro', (req, res) => res.set('Cache-Control', 'no-store').redirect(302, '/admin/'));
+  // O painel não deve aparecer na busca (o /admin também tem <meta name="robots" content="noindex">).
+  rotas.get('/parceiro', (req, res) =>
+    res.set({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' }).redirect(302, '/admin/'),
+  );
+  rotas.get('/robots.txt', (req, res) => texto(res, 'text/plain; charset=utf-8', textoRobots(origem)));
+  rotas.get('/sitemap.xml', (req, res) => texto(res, 'application/xml; charset=utf-8', sitemapXml(origem)));
+  rotas.get('/llms.txt', (req, res) =>
+    texto(res, 'text/plain; charset=utf-8', textoLlms({ origem, email, instagramUrl: landing.instagramUrl, appLancado: landing.appLancado })),
+  );
+  rotas.get(CAMINHO_MANIFESTO_TAAKI, (req, res) => texto(res, 'application/manifest+json; charset=utf-8', manifestoTaaki()));
   rotas.get('/privacidade', (req, res) => res.redirect(302, '/privacidade-app'));
   rotas.get('/termos', (req, res) => res.redirect(302, '/termos-app'));
   for (const [caminho, arquivo] of Object.entries(ARQUIVOS)) {

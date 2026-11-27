@@ -57,6 +57,8 @@ function Navegacao() {
         <Stack.Screen name="produto" options={{ presentation: 'modal', headerShown: false }} />
         <Stack.Screen name="sacola" options={{ presentation: 'modal', headerShown: false }} />
         <Stack.Screen name="sobre" options={{ title: 'Sobre' }} />
+        {/* Volta do Checkout Pro (cartão): só retorna à tela do cartão. */}
+        <Stack.Screen name="cartao-retorno" options={{ headerShown: false, animation: 'none' }} />
       </Stack>
       <AceiteTermos />
       <PedirNome />

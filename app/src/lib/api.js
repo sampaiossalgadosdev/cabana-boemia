@@ -238,6 +238,12 @@ export const buscarPrevia = (token, { itens, enderecoId, lojaSlug }) =>
 /** GET /cliente/pedidos/:id/pagamento → { pedido, pagamento } (a tela do Pix consulta a cada 5 s). */
 export const situacaoDoPagamento = (token, pedidoId) => requisitar('GET', `/cliente/pedidos/${pedidoId}/pagamento`, { token });
 
+/**
+ * "Escolher outra forma de pagamento" (cartão): desiste do pedido que espera o pagamento → { pedido, pagamento }.
+ * Pago no último segundo: volta aprovado.
+ */
+export const desistirDoPagamento = (token, pedidoId) => requisitar('POST', `/cliente/pedidos/${pedidoId}/desistir-pagamento`, { token });
+
 /** Cancela o pedido pago online que a loja ainda não aceitou (o valor volta pelo Mercado Pago). */
 export const cancelarPedido = (token, pedidoId) => requisitar('POST', `/cliente/pedidos/${pedidoId}/cancelar`, { token });
 

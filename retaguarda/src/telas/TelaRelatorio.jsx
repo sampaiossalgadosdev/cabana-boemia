@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../lib/api.js';
 import { formatarReais } from '../lib/dinheiro.js';
+import { NOME_TIPO_CARTAO_ONLINE, linhasPorTipo } from '@restaurante/shared/formasPagamento';
 import {
   descreverDiferenca,
   descreverExpediente,
@@ -174,6 +175,11 @@ function Conteudo({ r, caixas }) {
                       {formatarReais(p.totalCentavos)}
                       <small>{p.quantidade} ped.</small>
                     </span>
+                    {linhasPorTipo(p).length > 0 && (
+                      <small className="barra__detalhe">
+                        {linhasPorTipo(p).map((t) => `${NOME_TIPO_CARTAO_ONLINE[t.tipo] ?? t.tipo}: ${t.quantidade} (${formatarReais(t.totalCentavos)})`).join(' · ')}
+                      </small>
+                    )}
                   </li>
                 ))}
               </ul>

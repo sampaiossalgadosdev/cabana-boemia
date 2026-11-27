@@ -3,6 +3,8 @@
  * destaque da busca. Lógica pura, testada com node:test.
  */
 
+import { nomeDoPagamentoOnline } from '@restaurante/shared/formasPagamento';
+
 /**
  * O painel mostra TODOS os canais menos a comanda do salão (que tem a aba própria) e menos os
  * status que não existem para a equipe (pagamento online ainda não aprovado, ou expirado). Lista
@@ -198,7 +200,6 @@ export function problemaNaChaveNfce(texto) {
 /** Pedido pago online sem aceite há 5 minutos: o PDV toca de novo e destaca (Decisão 7). */
 export const SEM_ACEITE_ALERTA_MS = 5 * 60_000;
 
-const MEIO_ONLINE = { PIX: 'Pix', CARTAO_ONLINE: 'Cartão' };
 
 /** Pago online pelo app (com o meio). */
 export const pagoOnline = (p) => Boolean(p?.pagamentoOnline);
@@ -222,11 +223,11 @@ const pagamentoValendo = (p) => pagoOnline(p) && ['PAGO', 'ESTORNADO_PARCIAL'].i
 /** "PAGO ONLINE (Pix) — não cobrar na entrega": pedido aberto com o pagamento valendo. */
 export function faixaPagoOnline(p) {
   if (!pagamentoValendo(p) || !estaAberto(p)) return null;
-  return `PAGO ONLINE (${MEIO_ONLINE[p.pagamentoOnline.meio] ?? 'online'}) — não cobrar na entrega`;
+  return `PAGO ONLINE (${nomeDoPagamentoOnline(p.pagamentoOnline)}) — não cobrar na entrega`;
 }
 
 /** Pedido encerrado que foi pago online: selo pequeno "Pago online · Pix" no lugar da faixa. */
-export const seloPagoOnline = (p) => (pagamentoValendo(p) && !estaAberto(p) ? `Pago online · ${MEIO_ONLINE[p.pagamentoOnline.meio] ?? 'online'}` : null);
+export const seloPagoOnline = (p) => (pagamentoValendo(p) && !estaAberto(p) ? `Pago online · ${nomeDoPagamentoOnline(p.pagamentoOnline)}` : null);
 
 /** Selo do estorno/contestação (o pedido cancelado com estorno mostra "ESTORNADO"). */
 const SELOS_ESTORNO = {

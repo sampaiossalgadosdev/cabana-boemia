@@ -25,10 +25,10 @@ export function porFormaPagamento(lojaId, inicio, fim, db = prisma) {
   });
 }
 
-/** Pago online (Pix e cartão pelo app), por meio. */
+/** Pago online (Pix e cartão pelo app), por meio e, no cartão, pelo tipo real (crédito, débito…). */
 export function porMeioOnline(lojaId, inicio, fim, db = prisma) {
   return db.pedido.groupBy({
-    by: ['meioOnline'],
+    by: ['meioOnline', 'tipoPagamentoOnline'],
     where: { ...finalizadosEntre(lojaId, inicio, fim), meioOnline: { not: null } },
     _count: { _all: true },
     _sum: { totalCentavos: true },

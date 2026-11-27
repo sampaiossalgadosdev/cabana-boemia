@@ -43,12 +43,17 @@ import { formatarDinheiro } from '@restaurante/shared/cupom';
 /** APP: o app Taaki Delivery (antes ia como SITE). Fica por último: a ordem dos relatórios não muda. */
 export const CANAIS = ['SITE', 'WHATSAPP', 'SALAO', 'APP'];
 export const FORMAS_PAGAMENTO = ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO'];
-/** Meios de pagamento online aceitos no pedido (Etapa 4: só Pix; cartão na Etapa 7). */
-export const PAGAMENTOS_ONLINE = ['PIX'];
-/** Prazo do Pix para o cliente (Decisão 5): cancelamos nós mesmos aos 15 minutos. */
+/** Meios de pagamento online aceitos no pedido: Pix (Etapa 4) e cartão pelo Checkout Pro (Etapa 7). */
+export const PAGAMENTOS_ONLINE = ['PIX', 'CARTAO'];
+/** Prazo do pagamento online (Pix e cartão) para o cliente (Decisão 5): encerramos aos 15 minutos. */
 export const PRAZO_PIX_MS = 15 * 60 * 1000;
 /** Meio pedido no corpo → `Pedido.meioOnline` / `Pagamento.metodo`. */
 const MEIO_ONLINE = { PIX: 'PIX', CARTAO: 'CARTAO_ONLINE' };
+/**
+ * Forma gravada enquanto o pagamento online não é aprovado: PIX no Pix, CREDITO no cartão (na
+ * aprovação o cartão passa à forma do tipo real: crédito, débito, pré-pago; ver lib/cartaoOnline.js).
+ */
+export const FORMA_DO_ONLINE = { PIX: 'PIX', CARTAO: 'CREDITO' };
 
 /**
  * Situação do pagamento online para a equipe e o cliente (Etapa 5), a partir do status do
@@ -67,12 +72,14 @@ const SITUACAO_DO_PAGAMENTO = {
   CANCELADO: 'NAO_PAGO',
 };
 
-/** `{ meio, situacao, aprovadoEm, valorEstornadoCentavos }` do pedido pago online, ou null. */
+/** `{ meio, tipo, situacao, aprovadoEm, valorEstornadoCentavos }` do pedido pago online, ou null. */
 export function pagamentoOnlineDoPedido(p) {
   if (!p.meioOnline) return null;
   const ultimo = p.pagamentos?.[0] ?? null;
   return {
     meio: p.meioOnline,
+    // Cartão: o tipo real (CREDITO, DEBITO, PRE_PAGO, SALDO_MERCADO_PAGO, OUTRO), depois da aprovação.
+    tipo: p.tipoPagamentoOnline ?? null,
     situacao: ultimo ? (SITUACAO_DO_PAGAMENTO[ultimo.status] ?? 'AGUARDANDO') : 'AGUARDANDO',
     aprovadoEm: ultimo?.aprovadoEm ?? null,
     valorEstornadoCentavos: ultimo?.valorReembolsadoCentavos ?? 0,
@@ -469,7 +476,7 @@ export async function estornarVendas(tx, vendas, usuarioId = null) {
  *   cliente?: { id?: number, nome: string, telefone?: string | null, telefoneVerificado?: boolean } | null,
  *   endereco?: { texto: string, bairroId: number, pin?: { latitude: number, longitude: number } | null } | null,
  *   pagamento?: { forma?: string | null, trocoParaCentavos?: number | null },
- *   pagamentoOnline?: 'PIX' | null,  // só APP: pedido nasce AGUARDANDO_PAGAMENTO (o Pix é criado depois)
+ *   pagamentoOnline?: 'PIX' | 'CARTAO' | null,  // só APP: nasce AGUARDANDO_PAGAMENTO (Pix ou preferência criados depois)
  *   entrega?: { encomenda?: boolean, agendadoPara?: Date | null, retirarNoBalcao?: boolean },
  *   ajustes?: { descontoCentavos?: number, taxaManualCentavos?: number | null },  // só equipe (WHATSAPP)
  *   observacao?: string | null,
@@ -827,7 +834,7 @@ async function criarNaTransacao(tx, d) {
       taxaEntregaCentavos: valores.taxaEntregaCentavos,
       descontoCentavos: valores.descontoCentavos,
       totalCentavos: valores.totalCentavos,
-      formaPagamento: d.pagamentoOnline ? 'PIX' : (d.pagamento?.forma ?? null),
+      formaPagamento: d.pagamentoOnline ? FORMA_DO_ONLINE[d.pagamentoOnline] : (d.pagamento?.forma ?? null),
       trocoParaCentavos: d.pagamentoOnline ? null : (d.pagamento?.trocoParaCentavos ?? null),
       meioOnline: d.pagamentoOnline ? MEIO_ONLINE[d.pagamentoOnline] : null,
       mesaRotulo: d.mesaRotulo,
@@ -911,7 +918,7 @@ export async function criarPedidoDoSite(
 ) {
   garantirTelefone(cliente);
   if (pagamentoOnline && !cliente.email) {
-    throw new ErroHttp(422, 'Informe seu e-mail para pagar com Pix', { codigo: 'EMAIL_OBRIGATORIO' });
+    throw new ErroHttp(422, 'Informe seu e-mail para pagar pelo app', { codigo: 'EMAIL_OBRIGATORIO' });
   }
   const endereco = await enderecoDoCliente(cliente, enderecoId);
   return criarPedido({
@@ -920,7 +927,7 @@ export async function criarPedidoDoSite(
     itens,
     cliente: clienteDoPedido(cliente),
     endereco,
-    pagamento: { forma: pagamentoOnline ? 'PIX' : formaPagamento, trocoParaCentavos: pagamentoOnline ? null : (trocoParaCentavos ?? null) },
+    pagamento: { forma: pagamentoOnline ? FORMA_DO_ONLINE[pagamentoOnline] : formaPagamento, trocoParaCentavos: pagamentoOnline ? null : (trocoParaCentavos ?? null) },
     pagamentoOnline: pagamentoOnline ?? null,
     chaveIdempotencia,
     totalEsperadoCentavos,
@@ -990,12 +997,10 @@ export async function previaDoPedido(lojaId, cliente, { itens, enderecoId, orige
 
 /** Formas que o cliente pode escolher (o online só no app e com a loja apta). */
 function formasDePagamentoDaLoja(loja, conexao, env, canal) {
-  const formas = formasDePagamento({
+  return formasDePagamento({
     modoEntrega: loja?.modoEntrega ?? 'PROPRIO',
     onlineDisponivel: canal === 'APP' && pagamentoOnlineDisponivel(loja, conexao, env),
   });
-  // Cartão online é da Etapa 7: por enquanto só o Pix.
-  return { ...formas, online: formas.online.filter((m) => PAGAMENTOS_ONLINE.includes(m)) };
 }
 
 export const PEDIDOS_POR_PAGINA = 20;

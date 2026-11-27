@@ -1,8 +1,10 @@
 /**
  * Landing do Taaki Delivery (raiz dos domínios do Taaki; ver lib/dominios.js).
  *
- * HTML e CSS gerados aqui, mobile first, **sem nenhum script** (o "Em breve" é
- * uma âncora, o FAQ é <details>, o iPhone é detectado no servidor em /app).
+ * HTML e CSS gerados aqui, mobile first, **sem nenhum script executável** (o
+ * "Em breve" é uma âncora, o FAQ é <details>, o iPhone é detectado no servidor
+ * em /app). O único <script> é o bloco de dados JSON-LD (type
+ * application/ld+json), que o navegador não executa: a CSP não precisa liberá-lo.
  * Recursos só do próprio servidor (logo, ícones, imagem de compartilhamento e as
  * fontes: só Montserrat nos títulos e Poppins no texto, dos pacotes @fontsource, OFL).
  *
@@ -14,15 +16,24 @@
  */
 import { CORES_TAAKI as C, escapar } from './paginaPublica.js';
 import { linkHttps } from './dominios.js';
+import { DOCUMENTOS_APP } from './controlador.js';
 
-/** Sem script; imagem e fonte só do próprio servidor. */
+/** Sem script; imagem, fonte e manifesto só do próprio servidor. */
 export const CSP_LANDING =
-  "default-src 'none'; img-src 'self'; font-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+  "default-src 'none'; img-src 'self'; font-src 'self'; style-src 'unsafe-inline'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 export const CAMINHO_LOGO_TAAKI = '/taaki/logo.jpg';
 export const CAMINHO_FAVICON_TAAKI = '/taaki/favicon.svg';
 export const CAMINHO_ICONE_TAAKI = '/taaki/icone-180.png';
 export const CAMINHO_COMPARTILHAR_TAAKI = '/taaki/compartilhar.jpg';
+export const CAMINHO_MANIFESTO_TAAKI = '/site.webmanifest';
+/** Tamanho real de shared/assets/logo-taaki-320.jpg (vai no JSON-LD). */
+const LADO_LOGO = 320;
+/**
+ * Última mudança de conteúdo da landing (vai no <lastmod> do sitemap).
+ * Mudou o texto da página: atualizar esta data.
+ */
+export const ATUALIZADO_LANDING = '2026-11-27';
 /**
  * Fontes da landing (só estas duas, decisão do dono): Montserrat 800 nos títulos e
  * Poppins 400/600/700 no texto. Caminho público → arquivo latim do @fontsource.
@@ -54,8 +65,20 @@ export function lerConfigLanding(env = process.env) {
   return {
     appLancado: String(env.TAAKI_APP_LANCADO ?? '').trim().toLowerCase() === 'sim',
     textoIphone: String(env.TAAKI_FAQ_IPHONE ?? '').trim() || TEXTO_IPHONE_PADRAO,
-    instagramUrl: linkHttps(env.TAAKI_INSTAGRAM_URL),
+    instagramUrl: limparLink(linkHttps(env.TAAKI_INSTAGRAM_URL)),
   };
+}
+
+/**
+ * Tira parâmetros de rastreio, âncora e a barra final de um link (o do Instagram
+ * veio de um QR com ?igsh=…&utm_source=qr): "https://www.instagram.com/taakidelivery".
+ */
+export function limparLink(url) {
+  if (!url) return null;
+  const u = new URL(url);
+  u.search = '';
+  u.hash = '';
+  return u.toString().replace(/\/+$/, '');
 }
 
 /** Ano corrente em Brasília (rodapé). */
@@ -251,7 +274,7 @@ function topo({ appLancado, pagina = '' }) {
   return `<a class="pular" href="#conteudo">Pular para o conteúdo</a>
 <header class="topo"><div class="envelope">
   <a class="marca" href="/" aria-label="Taaki Delivery, início"><img src="${CAMINHO_LOGO_TAAKI}" width="40" height="40" alt=""><span>Taaki<span class="marca-resto"> Delivery</span></span></a>
-  <a class="topo-parceiro" href="/parceiro">Sou parceiro</a>
+  <a class="topo-parceiro" href="${pagina}#parceiros">Sou parceiro</a>
   <a class="topo-pedir" href="${destinoPedir(appLancado, pagina)}">Pedir agora</a>
 </div></header>`;
 }
@@ -271,9 +294,11 @@ function rodape({ email, ano }) {
 </div></footer>`;
 }
 
-function cabecalhoHtml({ titulo, descricao, host, indexar = true }) {
-  const base = host ? `https://${escapar(host)}` : '';
-  const og = host
+function cabecalhoHtml({ titulo, descricao, origem = null, indexar = true, jsonLd = '' }) {
+  // origem = https://<domínio principal do Taaki>: canonical e Open Graph sempre nele,
+  // mesmo quando a página foi aberta por www. ou api. (evita conteúdo duplicado).
+  const base = origem ? escapar(origem) : '';
+  const og = origem
     ? `<meta property="og:type" content="website">
 <meta property="og:site_name" content="Taaki Delivery">
 <meta property="og:locale" content="pt_BR">
@@ -286,19 +311,25 @@ function cabecalhoHtml({ titulo, descricao, host, indexar = true }) {
 <meta property="og:image:height" content="500">
 <meta property="og:image:alt" content="Logo do Taaki Delivery">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escapar(titulo)}">
+<meta name="twitter:description" content="${escapar(descricao)}">
+<meta name="twitter:image" content="${base}${CAMINHO_COMPARTILHAR_TAAKI}">
+<meta name="twitter:image:alt" content="Logo do Taaki Delivery">
 <link rel="canonical" href="${base}/">`
     : '';
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapar(titulo)}</title>
 <meta name="description" content="${escapar(descricao)}">
-${indexar ? '' : '<meta name="robots" content="noindex">\n'}<meta name="theme-color" content="${C.marinho}">
+${indexar ? '<meta name="robots" content="index, follow, max-image-preview:large">' : '<meta name="robots" content="noindex">'}
+<meta name="theme-color" content="${C.marinho}">
 ${og}
 <link rel="icon" href="${CAMINHO_FAVICON_TAAKI}" type="image/svg+xml">
 <link rel="icon" href="${CAMINHO_ICONE_TAAKI}" type="image/png" sizes="180x180">
 <link rel="apple-touch-icon" href="${CAMINHO_ICONE_TAAKI}">
+<link rel="manifest" href="${CAMINHO_MANIFESTO_TAAKI}">
 ${FONTES_PRECARREGAR.map((url) => `<link rel="preload" href="${url}" as="font" type="font/woff2" crossorigin>`).join('\n')}
-<style>${ESTILO}</style></head>`;
+<style>${ESTILO}</style>${jsonLd}</head>`;
 }
 
 export const TITULO_LANDING = 'Taaki Delivery · O delivery de Abatiá, num app só';
@@ -377,7 +408,7 @@ ${topo({ appLancado })}
     <p class="hero-sub">Veja o cardápio das lojas da cidade, faça seu pedido e receba na sua casa.</p>
     <div class="botoes">
       ${botaoPedir({ appLancado })}
-      <a class="botao botao--contorno" href="/parceiro">Sou parceiro</a>
+      <a class="botao botao--contorno" href="#parceiros">Sou parceiro</a>
     </div>
   </div>
 </div></section>
@@ -413,7 +444,7 @@ ${emBreve}
   </ul>
   <div class="botoes">
     ${contatoParceiro ? `<a class="botao botao--principal" href="${contatoParceiro}">${icone('email')}Quero ser parceiro</a>` : ''}
-    <a class="botao botao--contorno" href="/parceiro">Acessar painel do parceiro${icone('seta')}</a>
+    <a class="botao botao--contorno" href="/parceiro" rel="nofollow">Acessar painel do parceiro${icone('seta')}</a>
   </div>
 </div></section>
 <section class="secao" id="perguntas" aria-labelledby="titulo-faq"><div class="envelope">

@@ -252,6 +252,32 @@ describe('pagamento online (Etapa 5)', () => {
     assert.doesNotMatch(cupomParaTexto(montarCupom(pedidoSite, { colunas: 48 }), 48), /PAGO ONLINE/);
   });
 
+  test('cartão pelo app: o tipo real no cupom ("Cartão de débito - PAGO ONLINE"); sem tipo = "Cartão"', () => {
+    const cartao = (tipo) => ({
+      ...pedidoOnline,
+      pedido: { ...pedidoOnline.pedido, formaPagamento: 'DEBITO', pagamentoOnline: { ...pedidoOnline.pedido.pagamentoOnline, meio: 'CARTAO_ONLINE', tipo } },
+    });
+    assert.match(cupomParaTexto(montarCupom(cartao('DEBITO'), { colunas: 48 }), 48), /Cartão de débito - PAGO ONLINE/);
+    assert.match(cupomParaTexto(montarCupom(cartao('PRE_PAGO'), { colunas: 48 }), 48), /Cartão pré-pago - PAGO ONLINE/);
+    assert.match(cupomParaTexto(montarCupom(cartao(null), { colunas: 48 }), 48), /Cartão - PAGO ONLINE/);
+  });
+
+  test('resumo do dia: o cartão pelo app por tipo quando há mais de um (ou não é crédito)', () => {
+    const relatorio = {
+      ...relatorioDia.relatorio,
+      pagoOnline: [
+        { meio: 'PIX', quantidade: 0, totalCentavos: 0 },
+        { meio: 'CARTAO_ONLINE', quantidade: 3, totalCentavos: 9000, porTipo: [{ tipo: 'CREDITO', quantidade: 2, totalCentavos: 6000 }, { tipo: 'DEBITO', quantidade: 1, totalCentavos: 3000 }] },
+      ],
+    };
+    const texto = cupomParaTexto(montarCupom({ ...relatorioDia, relatorio }, { colunas: 48 }), 48);
+    assert.match(texto, /Cartão online \(3\)\s+R\$ 90,00/);
+    assert.match(texto, /Cartão de crédito \(2\)\s+R\$ 60,00/);
+    assert.match(texto, /Cartão de débito \(1\)\s+R\$ 30,00/);
+    const soCredito = { ...relatorio, pagoOnline: [relatorio.pagoOnline[0], { ...relatorio.pagoOnline[1], porTipo: [{ tipo: 'CREDITO', quantidade: 3, totalCentavos: 9000 }] }] };
+    assert.doesNotMatch(cupomParaTexto(montarCupom({ ...relatorioDia, relatorio: soCredito }, { colunas: 48 }), 48), /Cartão de crédito/);
+  });
+
   test('resumo do dia: "Pago na entrega", pago online à parte e estornos de entregues', () => {
     const relatorio = {
       ...relatorioDia.relatorio,

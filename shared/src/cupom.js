@@ -15,6 +15,7 @@
 import { formatarTelefone } from './telefone.js';
 import { agruparItens } from './itens.js';
 import { formatarDistancia } from './mapa.js';
+import { NOME_TIPO_CARTAO_ONLINE, linhasPorTipo, nomeDoPagamentoOnline } from './formasPagamento.js';
 
 export const LARGURAS = [48, 32];
 export const TIPOS_CUPOM = ['PEDIDO', 'CANCELAMENTO', 'CONTA', 'FECHAMENTO', 'RELATORIO_DIA'];
@@ -231,7 +232,7 @@ function blocoPagamento(m, pedido) {
   const forma = NOME_PAGAMENTO[pedido.formaPagamento] ?? pedido.formaPagamento;
   // Pago online pelo app (Etapa 5): o entregador não cobra nada.
   if (pedido.pagamentoOnline) {
-    const meio = NOME_MEIO_ONLINE[pedido.pagamentoOnline.meio] ?? forma;
+    const meio = pedido.pagamentoOnline.meio in NOME_MEIO_ONLINE ? nomeDoPagamentoOnline(pedido.pagamentoOnline) : forma;
     m.valor('Pagamento', `${meio} - PAGO ONLINE`, { negrito: true });
     m.texto('NÃO COBRAR NA ENTREGA', { negrito: true });
     return;
@@ -334,7 +335,10 @@ function cupomRelatorioDia(m, trabalho, restaurante) {
   if (comOnline) {
     m.texto('Pago online (fora do caixa)', { negrito: true });
     for (const p of r.pagoOnline) {
-      if (p.quantidade) m.valor(`${NOME_MEIO_ONLINE[p.meio] ?? p.meio} online (${p.quantidade})`, formatarDinheiro(p.totalCentavos));
+      if (!p.quantidade) continue;
+      m.valor(`${NOME_MEIO_ONLINE[p.meio] ?? p.meio} online (${p.quantidade})`, formatarDinheiro(p.totalCentavos));
+      // Cartão pelo app: o tipo real (crédito, débito, pré-pago, saldo), quando há mais de um ou não é crédito.
+      for (const t of linhasPorTipo(p)) m.valor(`  ${NOME_TIPO_CARTAO_ONLINE[t.tipo] ?? t.tipo} (${t.quantidade})`, formatarDinheiro(t.totalCentavos));
     }
   }
   m.texto('Por canal', { negrito: true });

@@ -294,7 +294,7 @@ Commits previstos:
 
 **Pendências**:
 - O atalho "Criar ajuste manual" depois do estorno de pedido finalizado não foi clicado no navegador (o estorno precisa do Mercado Pago; só o lembrete no diálogo foi conferido).
-- A semana atual da tela mostra todo lançamento ainda sem fechamento: entre a virada de segunda e a rotina (até 1 h), os da semana anterior aparecem junto.
+- ~~A semana atual mostrava todo lançamento sem fechamento~~ **Resolvido (2026-11-26)**: a semana atual mostra só os lançamentos cuja data cai nela (dia operacional da loja); os da semana anterior ainda sem fechamento (entre a virada de segunda e a rotina) aparecem à parte como "Semana anterior (fechando)". Se a semana anterior já foi fechada, um atrasado dela fica na atual (é o fechamento desta que vai levá-lo).
 - Uma instância só da API (como as outras rotinas); com várias, o índice único do fechamento evita duplicar, mas a rotina roda em todas.
 
 Texto do plano (escrito ao começar a etapa):

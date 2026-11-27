@@ -37,7 +37,7 @@ export function validarSolicitacao(corpo = {}) {
   };
 }
 
-function pagina({ enviado = false, erros = {}, valores = {} } = {}) {
+function pagina({ enviado = false, erros = {}, valores = {}, origem = undefined } = {}) {
   const erro = (campo) => (erros[campo] ? `<p class="erro">${escapar(erros[campo])}</p>` : '');
   const corpo = enviado
     ? `<div class="ok"><h2>Pedido recebido</h2><p>Vamos conferir os dados e excluir sua conta em até 15 dias. Se precisarmos confirmar que a conta é sua, falaremos pelo e-mail ou celular informado.</p></div>`
@@ -55,7 +55,12 @@ function pagina({ enviado = false, erros = {}, valores = {} } = {}) {
 </form>`;
   return documento({
     titulo: 'Excluir conta',
-    corpo: `<section>
+    // Continua noindex (X-Robots-Tag): description e canonical ajudam quem chega pelo link do app.
+    descricao:
+      'Peça a exclusão da sua conta do Taaki Delivery e veja quais dados são apagados e quais ficam guardados por obrigação legal.',
+    caminho: CAMINHO_EXCLUSAO,
+    origem,
+    corpo:`<section>
   <h2>Pelo app (na hora)</h2>
   <p>Abra o app <strong>Taaki Delivery</strong>, vá em <strong>Perfil › Excluir minha conta</strong> e confirme.</p>
 </section>
@@ -78,10 +83,9 @@ ${corpo}`,
   });
 }
 
-const responder = (res, status, opcoes) => responderPagina(res, status, pagina(opcoes));
-
-/** @param {{ limiteSolicitacoes?: number }} [opcoes] */
-export function criarRotasExclusao({ limiteSolicitacoes = 5 } = {}) {
+/** @param {{ limiteSolicitacoes?: number, origem?: string }} [opcoes] origem = domínio principal do Taaki */
+export function criarRotasExclusao({ limiteSolicitacoes = 5, origem = undefined } = {}) {
+  const responder = (res, status, opcoes) => responderPagina(res, status, pagina({ ...opcoes, origem }));
   const r = Router();
   const limitar = rateLimit({
     windowMs: 60 * 60 * 1000,

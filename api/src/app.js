@@ -123,8 +123,10 @@ export function criarApp({
   );
   // Páginas públicas do app (exclusão de conta, privacidade e termos; links do Play Console
   // e do app): antes do site, que pegaria qualquer caminho.
-  app.use(criarRotasExclusao({ limiteSolicitacoes }));
-  app.use(criarRotasLegais({ email: emailTitular }));
+  // Canonical delas no domínio principal do Taaki (o primeiro de TAAKI_HOSTS).
+  const origemTaaki = `https://${hostsTaaki[0]}`;
+  app.use(criarRotasExclusao({ limiteSolicitacoes, origem: origemTaaki }));
+  app.use(criarRotasLegais({ email: emailTitular, origem: origemTaaki }));
   // Hosts do Taaki: landing em /, /app, /parceiro; o site da Cabana não aparece ali.
   app.use(criarRotasTaaki({ hosts: hostsTaaki, destinosApp, email: emailTitular ?? emailDoTitular(), landing: landingTaaki }));
   servirSpa(app, { prefixo: '/admin', dist: distRetaguarda, csp: CSP_RETAGUARDA });

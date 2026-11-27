@@ -337,21 +337,27 @@ Commits previstos:
 - `feat(retaguarda): Financeiro (ADMIN) e Fechamento (loja)`
 - `docs: etapa 6 do pagamento online`
 
-### Etapa 7 — Cartão de crédito via Checkout Pro
+### Etapa 7 — Cartão pelo Checkout Pro (CONCLUÍDA em 2026-11-27, branch `feat/pagamento-online`, sem merge)
 
-API:
-- `pagamento.service.criarPreferencia(pedido)`: `POST /checkout/preferences` com o token da loja, itens (ou um item com o total), `marketplace_fee` só quando > 0, `external_reference`, `notification_url`, `back_urls` para uma página da própria API que fecha o navegador, `payment_methods` só com cartão de crédito (exclui Pix, boleto, débito, saldo) e `installments: 1`, `expires` com a mesma janela do pedido.
-- O webhook passa a receber os pagamentos criados pela preferência: o pagamento é ligado ao pedido pelo `external_reference` e conferido (valor, loja, `collector_id` = conta da loja).
-- Mesma conciliação, expiração e estorno das etapas 4 e 5.
+**Feito** (vale isto e as Decisões da Etapa 7 onde o rascunho divergir):
+- Migration `20261130120000_cartao_online` (só aditiva, aplicada no banco de dev): enum `TipoPagamentoOnline` (`CREDITO`, `DEBITO`, `PRE_PAGO`, `SALDO_MERCADO_PAGO`, `OUTRO`), `Pedido.tipoPagamentoOnline` (CHECK: só no `CARTAO_ONLINE`) e `Pagamento.checkoutUrl` (o `init_point`). `Pagamento.mpPreferenceId` e `CARTAO_ONLINE` já existiam.
+- Corpo do pedido `pagamentoOnline: 'CARTAO'` (só `APP`, loja apta, e-mail obrigatório): o mesmo `criarPedido`, `AGUARDANDO_PAGAMENTO`, `Pagamento` de 15 min; forma provisória `CREDITO`. `formasPagamento.online` passou a levar `CARTAO_ONLINE` (prévia e config).
+- `mercadoPago.js`: `criarPreferencia` (token DA LOJA, `X-Idempotency-Key`; um item "Pedido na <loja>" com o total; `marketplace_fee` só > 0; `external_reference` = id do pedido; `binary_mode`; `expires` + `expiration_date_to` = +15 min; `installments`/`default_installments` 1; `excluded_payment_types` boleto (`ticket`), lotérica (`atm`) e Pix/transferência (`bank_transfer`); `back_urls` + `auto_return: 'approved'` para `/api/mercadopago/cartao/retorno`; `notification_url`; `payer.email`), `buscarPagamentosDoPedido` (`/v1/payments/search` por `external_reference`) e `expirarPreferencia` (PUT com `expiration_date_to` = agora). O pagamento normalizado ganhou `tipo` (`payment_type_id`) e `metodo`.
+- `pagamento.service`: `gerarCartao` (falha = `EXPIRADO` + 502 `PAGAMENTO_FALHOU` / 422 `EMAIL_RECUSADO_PAGAMENTO`, como o Pix) e `gerarPagamento` (Pix ou cartão, chamado pelo controller). Sem id do pagamento (o cliente ainda não pagou), consulta do app, rotina, expiração e desistência acham o pagamento pela busca (`situacaoNoMp`: o aprovado, senão a tentativa mais nova). Consulta do app do cartão no máximo a cada 10 s (Pix: 30 s). `conciliar`: tentativa recusada do cartão com o pedido aguardando só grava `dadosMp.recusada` + `statusDetail` (o pedido NÃO expira); recusada depois da aprovação ou de outra tentativa = `TENTATIVA_ANTIGA` (sem alerta); `collector_id` diferente da conta conectada = divergência. `aprovar` grava a forma e o tipo reais (`lib/cartaoOnline.js`, `tipoDoPagamento`: crédito → `CREDITO`; débito → `DEBITO`; pré-pago → `PRE_PAGO` com forma `DEBITO`; saldo → `SALDO_MERCADO_PAGO` com forma `CREDITO`; outro → `OUTRO`). Desconectar encerra as preferências pendentes.
+- `GET /cliente/pedidos/:id/pagamento` devolve também `checkoutUrl` e `recusa: { mensagem }` (o `status_detail` em português, `mensagemDaRecusa`). Nova `POST /cliente/pedidos/:id/desistir-pagamento` (só o dono; aguardando: consulta uma última vez, aprovado vence; senão encerra a preferência e o pedido vira `EXPIRADO`, pagamento `CANCELADO`, estoque e campanha de volta).
+- Página `GET /api/mercadopago/cartao/retorno` (sem script, CSP fechada, query fora do log): "Pronto, pode voltar ao app" + `deliveryabatia://cartao-retorno` (meta refresh e link). **Não aprova nada.**
+- `pagamentoOnline` do pedido (equipe e cliente) ganhou `tipo`. Shared: `nomeDoPagamentoOnline` e `linhasPorTipo` (`formasPagamento.js`). Cupom "Cartão de débito - PAGO ONLINE" (sem tipo: "Cartão"); resumo do dia com o cartão por tipo quando há mais de um ou não é crédito. Relatório: `pagoOnline[CARTAO_ONLINE].porTipo`; tela da retaguarda com a linha embaixo da barra. PDV 0.3.4: faixa e selo com o tipo ("PAGO ONLINE (Cartão de débito)").
+- App: `expo-web-browser` ~58.1.0 (sem plugin: o dele só liga uma opção experimental). Opção "Cartão pelo app (pagar agora)"; botão "Pagar com cartão"; tela `sacola/cartao` (abre o `init_point` com `openAuthSessionAsync`, só link https do Mercado Pago (`checkoutSeguro`); consulta a nossa API a cada 5 s, ao voltar do navegador e ao voltar para o app; recusado: o motivo, "Tentar de novo" e "Escolher outra forma de pagamento" (desiste e volta ao checkout com as formas da loja); expirado/pago tarde: aviso e volta à sacola guardada); cartão pendente em `delivery-abatia:cartao-pendente:v1`, retomado pelo `RetomarPix`; rota `cartao-retorno` que só volta para a tela. Texto do estorno do cartão: "O valor volta pelo Mercado Pago para o cartão ou a conta usada (no crédito, na fatura)."
+- Testes (Mercado Pago falso): `test/pagamento-cartao.test.js` (15).
 
-App:
-- `expo-web-browser`; `Finalizacao.js` com "Cartão de crédito (pagar agora)"; ao voltar do navegador, consulta o pedido (o retorno do navegador nunca aprova nada sozinho).
+**Pendências**:
+- Conferir no teste real: se a Linha de Crédito Mercado Pago aparece no checkout (Decisão 2: não excluída por enquanto; o identificador não está na documentação) e como sai o `payment_type_id` dela; se `marketplace_fee` aparece como `fee_details` `application_fee` nos pagamentos do Checkout Pro (senão a comissão não é conferida); se `X-Idempotency-Key` é aceito em `/checkout/preferences`; se a busca funciona sem `range`/`begin_date` (a referência marca como obrigatórios, o exemplo não usa).
+- Segundo pagamento aprovado na mesma preferência (cliente pagou duas vezes): vira alerta `PAGAMENTO_DIVERGENTE`, sem estorno automático (o ADMIN estorna no Mercado Pago).
+- Não testado em aparelho: abrir o navegador, a volta pelo link (`deliveryabatia://cartao-retorno` no Expo Go é outro esquema: lá o cliente fecha o navegador à mão), a retomada ao reabrir o app.
+- `expo-doctor` acusa versões novas do SDK 58 publicadas depois do último lote (`expo` 58.1.0 e patches); não atualizadas nesta etapa.
+- PDV 0.3.4 nas lojas antes de ligar o cartão (o 0.3.3 mostra só "Cartão" e funciona).
 
-Testes: preferência sem parcelamento e só crédito; `marketplace_fee` ausente quando zero; pagamento de outra conta ou valor divergente recusado; voltar sem pagar mantém aguardando até expirar.
-
-Commits previstos:
-- `feat(api): pagamento com cartão pelo Checkout Pro`
-- `feat(app): pagar com cartão de crédito no navegador do app`
+Fora: parcelamento, cartão salvo, Checkout Transparente para cartão.
 
 ### Etapa 8 — Revisão final
 
@@ -487,3 +493,10 @@ Respostas às perguntas da Etapa 3:
 4. **Semana com saldo zero** (com lançamentos): gera o fechamento já `QUITADO`, com a observação "Saldo zero".
 5. **Variáveis**: `FECHAMENTO_ATRASO_DIAS` (padrão 7) e `CAMPANHA_ORCAMENTO_CENTAVOS` (padrão 70000); o resumo da campanha mostra "R$ X de R$ 700,00".
 6. **Menu "Fechamento"** para todas as lojas, com "Nenhum valor a acertar com o Taaki" quando não houver nada.
+
+### Decisões da Etapa 7 (2026-11-27)
+
+1. **Item da preferência**: um item só com o total ("Pedido na <loja>").
+2. **Formas no Checkout Pro**: saldo Mercado Pago aceito (não pode ser excluído). Excluídos só boleto, lotérica/caixa eletrônico e Pix (o Pix já é oferecido no app). **Débito e pré-pago continuam** (à vista, aprovam na hora, ajudam quem não tem crédito). Linha de Crédito Mercado Pago: não excluída por enquanto; conferir no teste real (pendência). Por isso a opção do app é "Cartão pelo app (pagar agora)" e a forma gravada na aprovação reflete o tipo real (crédito, débito, pré-pago) quando o Mercado Pago informa, para o relatório e o cupom.
+3. **Cartão recusado**: a recusa não encerra o pedido, que continua aguardando até os 15 minutos; o app mostra o motivo com "Tentar de novo"; "Escolher outra forma" desiste do pedido (estoque e campanha voltam) e volta ao checkout com as formas da loja.
+4. **Prazo**: 15 minutos na preferência; a rotina de 1 minuto expira o pedido; pago depois = estorno automático e alerta (caminho de hoje). Sem tolerância extra.

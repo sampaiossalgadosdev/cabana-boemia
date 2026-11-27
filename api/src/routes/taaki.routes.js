@@ -14,6 +14,7 @@ import {
   FONTES_TAAKI,
   lerConfigLanding,
   manifestoTaaki,
+  paginaApp,
   paginaLanding,
   paginaNaoEncontradaTaaki,
   sitemapXml,
@@ -30,8 +31,10 @@ import {
  *
  *   /           landing do Taaki (modo "Em breve" enquanto TAAKI_APP_LANCADO != "sim")
  *   /taaki/*    logo, favicon, ícone, imagem de compartilhamento e fonte da landing
- *   /app        302 para o app (TAAKI_APP_URL / TAAKI_APP_URL_IOS) com TAAKI_APP_LANCADO=sim;
- *               antes disso, para /#em-breve
+ *   /app        destino FIXO do QR code impresso (banners, panfletos): não pode mudar de
+ *               endereço. Antes do lançamento, página "Em breve nas lojas" (200, também
+ *               em /app/ e com ?origem=…); com TAAKI_APP_LANCADO=sim, 302 para o app
+ *               (TAAKI_APP_URL / TAAKI_APP_URL_IOS)
  *   /parceiro   302 para a retaguarda (/admin/), com X-Robots-Tag noindex
  *   /robots.txt, /sitemap.xml, /llms.txt, /site.webmanifest  SEO (links no domínio principal)
  *   /privacidade, /termos  302 para as do app (as do site são da Cabana)
@@ -93,10 +96,11 @@ export function criarRotasTaaki({ hosts, destinosApp, email = null, landing = le
 
   // Gerada a cada pedido: o Open Graph usa o host (só hosts do Taaki chegam aqui) e o rodapé o ano.
   rotas.get('/', (req, res) => html(res, 200, paginaLanding({ ...landing, email, host: req.hostname, origem })));
+  // /app é o destino do QR impresso: o endereço nunca muda (o Express aceita /app/ e a query).
   rotas.get('/app', (req, res) => {
-    // Antes do lançamento (TAAKI_APP_LANCADO != "sim") o app não está na loja: /app leva à seção "Em breve".
-    const destino = landing.appLancado ? destinoDoApp(req.get('user-agent'), destinosApp) : '/#em-breve';
-    res.set('Cache-Control', 'no-store').redirect(302, destino);
+    // Antes do lançamento (TAAKI_APP_LANCADO != "sim") o app não está na loja: página "Em breve".
+    if (!landing.appLancado) return html(res, 200, paginaApp());
+    res.set('Cache-Control', 'no-store').redirect(302, destinoDoApp(req.get('user-agent'), destinosApp));
   });
   // O painel não deve aparecer na busca (o /admin também tem <meta name="robots" content="noindex">).
   rotas.get('/parceiro', (req, res) =>

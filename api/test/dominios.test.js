@@ -133,14 +133,29 @@ describe('separação por host: Taaki x Cabana', () => {
     }
   });
 
-  test('antes do lançamento /app leva ao "Em breve"; /parceiro para a retaguarda', async () => {
+  test('antes do lançamento /app (destino do QR impresso) mostra "Em breve nas lojas"; /parceiro para a retaguarda', async () => {
     for (const host of HOSTS_TAAKI_PADRAO) {
-      for (const ua of [ANDROID, IOS]) {
-        const app = await pedir(porta, '/app', { host, cabecalhos: { 'User-Agent': ua } });
-        assert.equal(app.status, 302, host);
-        assert.equal(app.headers.location, '/#em-breve', host);
-        assert.equal(app.headers['cache-control'], 'no-store');
+      for (const rota of ['/app', '/app/', '/app?origem=banner', '/app/?origem=panfleto&x=1']) {
+        for (const ua of [ANDROID, IOS]) {
+          const app = await pedir(porta, rota, { host, cabecalhos: { 'User-Agent': ua } });
+          assert.equal(app.status, 200, `${host}${rota}`);
+          assert.match(app.headers['content-type'], /^text\/html/);
+          assert.equal(app.headers['cache-control'], 'no-cache');
+          assert.match(app.headers['content-security-policy'], /default-src 'none'/);
+          assert.match(app.corpo, /<title>Taaki Delivery: baixe o app<\/title>/);
+          assert.match(app.corpo, /<h1>Em breve nas lojas<\/h1>/);
+          assert.match(app.corpo, /O app do Taaki Delivery está chegando\. Fique de olho!/);
+          assert.match(app.corpo, /<img class="logo" src="\/taaki\/logo\.jpg"/);
+          assert.match(app.corpo, /#0A1428/);
+          assert.match(app.corpo, /#F26B1D/);
+          assert.match(app.corpo, /font-family:"Poppins"/);
+          assert.match(app.corpo, /<meta name="robots" content="noindex">/);
+          assert.doesNotMatch(app.corpo, /<script/i, 'sem script');
+          assert.doesNotMatch(app.corpo, /Montserrat/, 'só Poppins');
+        }
       }
+      const head = await pedir(porta, '/app', { host, metodo: 'HEAD' });
+      assert.equal(head.status, 200, host);
       const parceiro = await pedir(porta, '/parceiro', { host });
       assert.equal(parceiro.status, 302, host);
       assert.equal(parceiro.headers.location, '/admin/');

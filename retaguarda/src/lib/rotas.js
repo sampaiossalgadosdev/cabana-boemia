@@ -12,6 +12,7 @@ export const TELAS_LOJA = [
   { caminho: 'equipe', titulo: 'Equipe' },
   { caminho: 'perfil', titulo: 'Perfil da loja' },
   { caminho: 'pagamento-online', titulo: 'Pagamento online' },
+  { caminho: 'fechamento', titulo: 'Fechamento' },
   { caminho: 'configuracoes', titulo: 'Configurações' },
 ];
 
@@ -23,6 +24,7 @@ export const TELAS_PLATAFORMA = [
   { caminho: 'exclusoes', titulo: 'Exclusão de contas' },
   { caminho: 'alertas', titulo: 'Alertas' },
   { caminho: 'pagamentos', titulo: 'Pagamentos online' },
+  { caminho: 'financeiro', titulo: 'Financeiro' },
 ];
 
 /** Todas (para reconhecer o caminho). */

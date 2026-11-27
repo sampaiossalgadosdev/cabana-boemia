@@ -15,11 +15,12 @@ const publico = (a) => ({
   resolvidoPor: a.resolvidoPor?.nome ?? null,
   loja: a.loja,
   pedidoId: a.pedidoId,
+  fechamentoId: a.fechamentoId ?? null,
 });
 
-/** @param {{ tipo: string, lojaId?: number | null, pedidoId?: number | null, mensagem: string }} dados */
-export function criarAlerta({ tipo, lojaId = null, pedidoId = null, mensagem }, db) {
-  return alertaRepo.criar({ tipo, lojaId, pedidoId, mensagem: mensagem.slice(0, 500) }, db);
+/** @param {{ tipo: string, lojaId?: number | null, pedidoId?: number | null, fechamentoId?: number | null, mensagem: string }} dados */
+export function criarAlerta({ tipo, lojaId = null, pedidoId = null, fechamentoId = null, mensagem }, db) {
+  return alertaRepo.criar({ tipo, lojaId, pedidoId, fechamentoId, mensagem: mensagem.slice(0, 500) }, db);
 }
 
 /** Abertos (mais novos primeiro) e os últimos 50 resolvidos. */

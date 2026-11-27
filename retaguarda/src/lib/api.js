@@ -127,6 +127,11 @@ export const api = {
     desconectar: (confirmar) => post('/retaguarda/pagamento-online/desconectar', { confirmar }),
     ativo: (ativo) => put('/retaguarda/pagamento-online/ativo', { ativo }),
   },
+  // Fechamento semanal com o Taaki (livro-razão da loja).
+  fechamento: {
+    obter: () => get('/retaguarda/fechamento'),
+    detalhe: (id) => get(`/retaguarda/fechamento/${id}`),
+  },
   // Mapa do pino da loja (chave web e busca pelo servidor).
   mapa: {
     config: () => get('/retaguarda/mapa/config'),
@@ -162,6 +167,14 @@ export const api = {
       estornar: (pedidoId, dados) => post(`/plataforma/pedidos/${pedidoId}/estornar`, dados),
       tentarEstorno: (id) => post(`/plataforma/pagamentos/${id}/tentar-estorno`),
       resolvido: (id, observacao) => post(`/plataforma/pagamentos/${id}/resolvido`, { observacao }),
+    },
+    financeiro: {
+      listar: ({ status, lojaId } = {}) => get(`/plataforma/financeiro${consulta({ status, lojaId })}`),
+      campanha: () => get('/plataforma/financeiro/campanha'),
+      semanaAtual: (lojaId) => get(`/plataforma/financeiro/lojas/${lojaId}/semana-atual`),
+      detalhe: (id) => get(`/plataforma/financeiro/fechamentos/${id}`),
+      quitar: (id, dados) => post(`/plataforma/financeiro/fechamentos/${id}/quitar`, dados),
+      ajuste: (dados) => post('/plataforma/financeiro/ajustes', dados),
     },
     solicitacoes: {
       listar: () => get('/plataforma/solicitacoes-exclusao'),

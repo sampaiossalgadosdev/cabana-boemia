@@ -285,25 +285,57 @@ Commits previstos:
 - `feat(app): cancelar antes do aceite, estorno e e-mail recusado`
 - `docs: etapa 5 do pagamento online`
 
-### Etapa 6 — Livro-razão da loja e fechamento semanal
+### Etapa 6 — Livro-razão da loja e fechamento semanal (CONCLUÍDA em 2026-11-26, branch `feat/pagamento-online`, sem merge)
 
-Modelos:
-- `LancamentoLoja`: `lojaId`, `pedidoId?`, `tipo` (`TAXA_ENTREGA_EM_DINHEIRO` = loja deve à plataforma; `CREDITO_DESCONTO_PLATAFORMA` = plataforma deve à loja; `AJUSTE` manual do ADMIN com motivo; `ESTORNO_DE_LANCAMENTO`), `valorCentavos` com sinal (positivo = loja deve), `criadoEm`, `criadoPorId`, `fechamentoId?`. Só inserção: correção é outro lançamento (nunca update/delete; trigger como o dos anúncios).
-- `FechamentoSemanal`: `lojaId`, `inicio`, `fim` (semana conforme a pergunta 15), `saldoCentavos`, `situacao` (`ABERTO`, `FECHADO`, `QUITADO`), `fechadoEm`, `quitadoEm`, `quitadoPorId`, `observacao`. Único por `[lojaId, inicio]`.
-- Lançamentos nascem na finalização (dinheiro com entregador da plataforma) e na criação do pedido com desconto da plataforma (se existir: pergunta 4); cancelamento depois de lançado gera o lançamento oposto.
+**Feito** (vale isto e as Decisões da Etapa 6 onde o plano abaixo divergir):
+- Migrations `20261129120000_livro_razao_enums` e `20261129120100_livro_razao`, aplicadas no banco de dev (`migrate diff` sem diferença). O CHECK novo exige pedido nos lançamentos automáticos e observação no ajuste manual (o teste da Etapa 2 foi ajustado).
+- `api/src/services/livroRazao.service.js` (regras puras, lançamentos, leitura, quitar, ajuste, campanha, rotina de hora em hora com alerta de atraso); ganchos em `equipe.finalizarPedido`, `pagamento.aprovar` e `cancelarNaTransacao`. `controllers/financeiro.controller.js` com as rotas `/retaguarda/fechamento*` e `/plataforma/financeiro*`.
+- Retaguarda: "Fechamento" (toda loja) e "Financeiro" (plataforma); lembrete e atalho do ajuste manual em "Pagamentos online"; alertas `FECHAMENTO_ATRASADO`/`TAXA_ENTREGA_COMPLEMENTO` com botão para o Financeiro; tabelas empilhadas no celular. Conferido no Chrome headless (1280 e 390 px) num cenário montado no banco de teste: sem rolagem lateral e sem erro no console.
 
-API e telas:
-- `GET /retaguarda/financeiro?semana=` (DONO): lançamentos e saldo da semana.
-- `GET /plataforma/financeiro` (ADMIN): saldo por loja; `POST /plataforma/financeiro/fechar { semana }`, `POST /plataforma/financeiro/:id/quitado`, `POST /plataforma/financeiro/ajuste`.
-- Rotina semanal que fecha a semana anterior (ou só manual: pergunta 15).
-- Retaguarda: tela "Financeiro" (DONO) e "Financeiro das lojas" (ADMIN), no estilo atual.
+**Pendências**:
+- O atalho "Criar ajuste manual" depois do estorno de pedido finalizado não foi clicado no navegador (o estorno precisa do Mercado Pago; só o lembrete no diálogo foi conferido).
+- ~~A semana atual mostrava todo lançamento sem fechamento~~ **Resolvido (2026-11-26)**: a semana atual mostra só os lançamentos cuja data cai nela (dia operacional da loja); os da semana anterior ainda sem fechamento (entre a virada de segunda e a rotina) aparecem à parte como "Semana anterior (fechando)". Se a semana anterior já foi fechada, um atrasado dela fica na atual (é o fechamento desta que vai levá-lo).
+- Uma instância só da API (como as outras rotinas); com várias, o índice único do fechamento evita duplicar, mas a rotina roda em todas.
 
-Testes: saldo bate com a soma; lançamento imutável; cancelamento estorna; semana pelo fuso de Brasília e pelo dia operacional; fechar duas vezes = 409.
+Texto do plano (escrito ao começar a etapa):
+
+Texto revisto em 2026-11-26 ao começar a etapa (vale sobre o rascunho antigo; valem as Decisões 4, 14, 15 e 16 e as das Etapas 2 a 5). Os modelos `LancamentoLoja` e `FechamentoSemanal` já existem desde a Etapa 2 (trigger: lançamento só se insere e só ganha o fechamento). Respostas às perguntas desta etapa vão em "Decisões da Etapa 6".
+
+Hoje (gap): nada grava lançamento (a trava de 50% só gera alerta); o pedido não guarda a taxa cheia quando a loja `PROPRIO` dá frete grátis (o crédito da campanha não tem de onde sair); não há fechamento, tela nem rotina.
+
+Banco (migration só aditiva, enum em migration própria):
+- `TipoAlerta` + `FECHAMENTO_ATRASADO`.
+- `Pedido.taxaEntregaCheiaCentavos` (Int?, só com entrega): a taxa antes do frete grátis, gravada na criação (preenchida nos pedidos antigos quando dá para saber).
+- `LancamentoLoja.estornaId` (lançamento desfeito, único) e índice único parcial `(pedidoId, tipo)` para os tipos automáticos (nunca duplica). Trigger atualizado com o campo novo.
+- `AlertaPlataforma.fechamentoId` (um alerta de atraso por fechamento).
+- Trigger no `FechamentoSemanal`: depois de fechado, loja, semana e saldo não mudam; status só `AGUARDANDO_PAGAMENTO → QUITADO`.
+
+Lançamentos automáticos (`services/livroRazao.service.js`, dentro da transação de quem chama; o modo da loja é o do pedido na criação: `origemTaxaEntrega` preenchida = entregador da plataforma):
+- `TAXA_ENTREGA_DINHEIRO` (+, loja deve): na finalização do pedido pago na entrega de loja `PLATAFORMA` com entrega ("Recebi o dinheiro"; PDV e site inclusive). Valor = taxa cheia; frete grátis da loja = taxa cheia (Decisão 16); campanha = nada.
+- `TAXA_ENTREGA_COMPLEMENTO` (+): na aprovação do pagamento online, a parte do devido que não coube no split (trava de 50%).
+- `CREDITO_CAMPANHA` (−, Taaki deve): na finalização do pedido de loja `PROPRIO` com frete grátis da campanha, qualquer forma. Valor = `taxaEntregaCheiaCentavos`.
+- `ESTORNO`: cancelamento (PDV, cliente, ADMIN, com ou sem estorno do Pix) desfaz cada lançamento automático do pedido, na semana atual.
+- Online de loja `PLATAFORMA` (fora o complemento) e loja `PROPRIO` sem campanha: nada.
+
+Fechamento (Decisão 15): semana de segunda a domingo pelo dia operacional da loja (America/Sao_Paulo, `horaViradaDia`); o lançamento é da semana do dia operacional em que foi criado. Rotina de hora em hora (`iniciarFechamentoSemanal` no `server.js`): para cada loja, cada semana já terminada (com 10 min de folga) que tem lançamento sem fechamento vira um `FechamentoSemanal` `AGUARDANDO_PAGAMENTO` com o saldo (positivo = a loja deve; negativo = o Taaki deve) e os lançamentos ligados a ele. Idempotente (único `[lojaId, inicio]`); semana sem lançamento não gera nada. A semana atual é calculada na hora (parcial), nunca gravada.
+
+API:
+- Loja (DONO; ADMIN com `X-Loja`): `GET /retaguarda/fechamento` (semana atual parcial + fechamentos) e `GET /retaguarda/fechamento/:id` (lançamentos com o pedido).
+- ADMIN: `GET /plataforma/financeiro` (fechamentos por loja/status + semana atual de cada loja), `GET /plataforma/financeiro/fechamentos/:id`, `POST /plataforma/financeiro/fechamentos/:id/quitar { quitadoEm (data), observacao? }`, `POST /plataforma/financeiro/ajustes { lojaId, valorCentavos (com sinal), observacao (obrigatória) }` (`AJUSTE_MANUAL` na semana atual), `GET /plataforma/financeiro/campanha` (usos e custo).
+- Alerta `FECHAMENTO_ATRASADO`: fechamento aguardando há mais de `FECHAMENTO_ATRASO_DIAS` (padrão 7) dias; um por fechamento; quitar resolve. Nada é bloqueado.
+
+Retaguarda: "Financeiro" na plataforma (ADMIN: fechamentos, detalhe, quitar, ajuste, resumo da campanha) e "Fechamento" no menu da loja (semana atual e anteriores, "Você deve ao Taaki R$ X" / "O Taaki deve a você R$ X").
+
+Testes: cada tipo (PDV, site, frete grátis da loja, complemento, campanha nos dois modos), online `PLATAFORMA` sem lançamento, sem duplicidade, cancelamento gera inverso, semana pelo dia operacional e fuso (domingo perto da meia-noite e da virada), semana fechada imutável, semana vazia, quitar, ajuste, campanha, atraso.
+
+Fora: mensalidade, saldo diário dos entregadores, cobrança automática/Pix de cobrança, bloqueio automático, cartão.
 
 Commits previstos:
-- `feat(api): livro-razão da loja (lançamentos imutáveis)`
-- `feat(api): fechamento semanal e quitação`
-- `feat(retaguarda): financeiro da loja e das lojas`
+- `feat(api): migrations da etapa 6 (taxa cheia, estorno do lançamento, atraso do fechamento)`
+- `feat(api): lançamentos automáticos do livro-razão`
+- `feat(api): fechamento semanal, quitação, ajuste e resumo da campanha`
+- `feat(retaguarda): Financeiro (ADMIN) e Fechamento (loja)`
+- `docs: etapa 6 do pagamento online`
 
 ### Etapa 7 — Cartão de crédito via Checkout Pro
 
@@ -446,3 +478,12 @@ Respostas às perguntas da Etapa 3:
 5. **Estorno feito direto no Mercado Pago** com o pedido aberto: atualiza o pagamento, alerta o ADMIN e o PDV mostra "ESTORNADO"; o pedido não é cancelado sozinho.
 6. **App**: "Cancelar pedido" só no pedido pago online ainda não aceito, com "Aguardando a loja aceitar".
 7. **Pedido sem aceite**: sem recusa automática nesta etapa (**pendência**: recusa automática). Aos **5 minutos** sem aceite o PDV toca o alerta de novo e destaca o pedido; aos **10 minutos**, alerta `PEDIDO_SEM_ACEITE` para o ADMIN ligar para a loja; o cliente pode cancelar pelo app enquanto não for aceito.
+
+### Decisões da Etapa 6 (2026-11-26)
+
+1. **Débito da taxa** (`TAXA_ENTREGA_DINHEIRO`): todo pedido com entrega pelo Taaki que **não foi pago online** (dinheiro na entrega ou "pago agora" no balcão com Pix ou cartão) gera o débito da taxa para a loja.
+2. **Complemento da trava**: lançado na **aprovação do Pix** e desfeito se o pedido for cancelado com estorno.
+3. **Estorno total ou parcial de pedido finalizado** (ADMIN): não mexe no livro-razão. O Mercado Pago devolve ao cliente também a parte da plataforma (estorno proporcional), mas o entregador já entregou e recebe os 95%; quem arca depende de quem errou, e o ADMIN decide caso a caso com ajuste manual. Ao estornar um pedido finalizado de loja `PLATAFORMA`, a tela mostra esse aviso e um atalho para o ajuste manual com a loja e o pedido preenchidos.
+4. **Semana com saldo zero** (com lançamentos): gera o fechamento já `QUITADO`, com a observação "Saldo zero".
+5. **Variáveis**: `FECHAMENTO_ATRASO_DIAS` (padrão 7) e `CAMPANHA_ORCAMENTO_CENTAVOS` (padrão 70000); o resumo da campanha mostra "R$ X de R$ 700,00".
+6. **Menu "Fechamento"** para todas as lojas, com "Nenhum valor a acertar com o Taaki" quando não houver nada.

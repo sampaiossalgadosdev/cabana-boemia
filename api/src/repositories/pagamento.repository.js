@@ -146,6 +146,7 @@ export function listarParaAdmin({ status, lojaId, pedidoId, numeroDia }, db = pr
           nomeCliente: true,
           totalCentavos: true,
           meioOnline: true,
+          origemTaxaEntrega: true, // entrega pelo Taaki (lembrete do ajuste no estorno de finalizado)
           loja: { select: { id: true, nome: true, slug: true } },
         },
       },

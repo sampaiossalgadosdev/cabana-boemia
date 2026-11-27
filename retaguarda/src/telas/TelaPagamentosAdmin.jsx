@@ -3,6 +3,7 @@ import { api } from '../lib/api.js';
 import { formatarDataHora } from '../lib/formatar.js';
 import { formatarReais } from '../lib/dinheiro.js';
 import { Campo, CampoDinheiro, Confirmar, Dialogo, EstadoCarga, useAvisar, useCarregar } from '../componentes/comuns.jsx';
+import { LEMBRETE_AJUSTE, pedeLembreteDeAjuste, pedirAjuste } from '../lib/financeiro.js';
 import { NOMES_ORIGEM_ESTORNO, NOMES_STATUS_ESTORNO, NOMES_STATUS_PAGAMENTO, acoesDoPagamento, restanteParaEstornar } from '../lib/pagamentosAdmin.js';
 
 const STATUS_PEDIDO = {
@@ -20,7 +21,7 @@ const STATUS_PEDIDO = {
  * (pedido aberto: o estoque volta) ou estornar pedido finalizado (sem cancelar), total ou parcial
  * e com motivo; reembolsos pendentes (o Mercado Pago recusou): tentar de novo ou resolvido por fora.
  */
-export function TelaPagamentosAdmin() {
+export function TelaPagamentosAdmin({ ir }) {
   const [filtro, setFiltro] = useState('acao');
   const [busca, setBusca] = useState('');
   const pedidoId = /^\d+$/.test(busca.trim()) ? Number(busca.trim()) : undefined;
@@ -168,7 +169,7 @@ export function TelaPagamentosAdmin() {
       <DialogoEstorno
         pagamento={estornar}
         aoFechar={() => setEstornar(null)}
-        aoFeito={async (r) => {
+        aoFeito={async (r, pagamento) => {
           setEstornar(null);
           const pendente = r.pedido.pagamentoOnline?.situacao === 'ESTORNO_PENDENTE';
           avisar(
@@ -180,6 +181,18 @@ export function TelaPagamentosAdmin() {
             pendente ? 'erro' : undefined,
           );
           await carga.recarregar();
+          // Decisão 3 da Etapa 6: o livro-razão não muda sozinho; lembra e oferece o ajuste.
+          if (!r.cancelado && pedeLembreteDeAjuste(pagamento.pedido) && ir) {
+            setConfirmar({
+              titulo: 'Ajuste no fechamento da loja?',
+              texto: LEMBRETE_AJUSTE,
+              confirmar: 'Criar ajuste manual',
+              acao: async () => {
+                pedirAjuste({ lojaId: pagamento.pedido.loja.id, pedidoId: pagamento.pedido.id, lembrete: LEMBRETE_AJUSTE });
+                ir('financeiro');
+              },
+            });
+          }
         }}
       />
       <DialogoResolvido
@@ -223,7 +236,7 @@ function DialogoEstorno({ pagamento, aoFechar, aoFeito }) {
       setValor(null);
       setTexto('');
       setMotivo('');
-      await aoFeito(r);
+      await aoFeito(r, pagamento);
     } catch (err) {
       setErro(err.message);
     } finally {
@@ -255,6 +268,7 @@ function DialogoEstorno({ pagamento, aoFechar, aoFeito }) {
               ? 'O pedido é cancelado, o estoque volta, sai o cupom de cancelamento na loja e o valor volta ao cliente pelo Mercado Pago.'
               : 'O pedido continua finalizado (o estoque não volta); o valor volta ao cliente pelo Mercado Pago e aparece à parte no relatório do dia.'}
           </p>
+          {!aberto && pedeLembreteDeAjuste(pagamento.pedido) && <div className="alerta">{LEMBRETE_AJUSTE}</div>}
           <Campo rotulo="Valor a estornar (R$)" ajuda={`Vazio = tudo o que ainda não voltou (${formatarReais(restante)}).`}>
             {(id, d) => (
               <CampoDinheiro

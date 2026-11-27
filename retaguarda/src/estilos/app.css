@@ -1593,3 +1593,77 @@ textarea.entrada {
 .lista-estornos li + li {
   margin-top: 4px;
 }
+
+/* ───────── Fechamento (loja) e Financeiro (ADMIN) ───────── */
+
+.saldo-fechamento {
+  margin: 0 0 6px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--cor-texto);
+}
+
+.saldo-fechamento--deve {
+  color: var(--cor-primaria-na-base);
+}
+
+.barra-campanha {
+  height: 12px;
+  margin: 8px 0 10px;
+  border-radius: 6px;
+  background: var(--cor-borda);
+  overflow: hidden;
+}
+
+.barra-campanha__marca {
+  display: block;
+  height: 100%;
+  background: var(--cor-ok);
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.barra-campanha__marca--estourou {
+  background: var(--cor-vermelho);
+}
+
+/* Tabelas do Fechamento/Financeiro no celular: cada linha vira um bloco (sem colunas espremidas). */
+@media (max-width: 640px) {
+  .tabela--empilhada thead {
+    display: none;
+  }
+  .tabela--empilhada,
+  .tabela--empilhada tbody,
+  .tabela--empilhada tr,
+  .tabela--empilhada td {
+    display: block;
+    width: 100%;
+  }
+  .tabela--empilhada tr {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--cor-borda);
+  }
+  .tabela--empilhada tr:last-child {
+    border-bottom: 0;
+  }
+  .tabela--empilhada td {
+    padding: 2px 0;
+    border: 0;
+    max-width: none !important;
+    white-space: normal !important;
+    text-align: left;
+  }
+  .tabela--empilhada td:first-child {
+    font-weight: 700;
+  }
+  .tabela--empilhada td.num {
+    text-align: left;
+    font-weight: 700;
+  }
+  .tabela--empilhada td.fim {
+    padding-top: 8px;
+  }
+  .tabela--empilhada .acoes {
+    justify-content: flex-start;
+  }
+}

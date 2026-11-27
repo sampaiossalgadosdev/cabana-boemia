@@ -6,6 +6,7 @@ import * as c from '../controllers/plataforma.controller.js';
 import { criarLimitadorMapa, criarMapaController } from '../controllers/mapa.controller.js';
 import { criarPagamentosController } from '../controllers/pagamentosAdmin.controller.js';
 import { pagamentosPadrao } from '../services/pagamento.service.js';
+import { criarFinanceiroController } from '../controllers/financeiro.controller.js';
 
 /**
  * Rotas da plataforma (Taaki Delivery): só ADMIN (o DONO leva 403), nunca em cache.
@@ -26,6 +27,7 @@ export const corpoImagem = () => express.raw({ type: () => true, limit: '520kb' 
 export function criarPlataformaRoutes({ relogio, mapas, pagamentos = pagamentosPadrao() } = {}) {
   const anuncios = c.criarAnunciosController(relogio);
   const pag = criarPagamentosController(pagamentos, relogio);
+  const fin = criarFinanceiroController(relogio);
   const mapa = criarMapaController(mapas);
   const r = Router();
   r.use((req, res, next) => {
@@ -57,6 +59,13 @@ export function criarPlataformaRoutes({ relogio, mapas, pagamentos = pagamentosP
   r.post('/pedidos/:id/estornar', assincrono(pag.estornar));
   r.post('/pagamentos/:id/tentar-estorno', assincrono(pag.tentarDeNovo));
   r.post('/pagamentos/:id/resolvido', assincrono(pag.resolvidoPorFora));
+  // Financeiro (Etapa 6): fechamentos semanais das lojas, quitar, ajuste manual e a campanha.
+  r.get('/financeiro', assincrono(fin.listar));
+  r.get('/financeiro/campanha', assincrono(fin.campanha));
+  r.get('/financeiro/lojas/:id/semana-atual', assincrono(fin.semanaAtual));
+  r.get('/financeiro/fechamentos/:id', assincrono(fin.detalhe));
+  r.post('/financeiro/fechamentos/:id/quitar', assincrono(fin.quitar));
+  r.post('/financeiro/ajustes', assincrono(fin.ajuste));
   r.get('/solicitacoes-exclusao', assincrono(c.listarSolicitacoesExclusao));
   r.patch('/solicitacoes-exclusao/:id/atendida', assincrono(c.marcarSolicitacaoAtendida));
   return r;

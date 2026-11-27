@@ -10,6 +10,7 @@ import { ehProducao, problemasNoVerificador } from './lib/verificadorTelefone.js
 import { campanhaLigada, problemasNoPagamentoOnline } from './lib/pagamentoOnline.js';
 import { iniciarLimpezaDiaria } from './services/registroAcesso.service.js';
 import { iniciarLimpezaDoCache, mapasPadrao } from './services/mapa.service.js';
+import { iniciarFechamentoSemanal } from './services/livroRazao.service.js';
 import { conexaoMpPadrao } from './services/conexaoMp.service.js';
 import { pagamentosPadrao } from './services/pagamento.service.js';
 
@@ -83,6 +84,8 @@ const pararLimpezaMapas = iniciarLimpezaDoCache();
 const pararRenovacaoMp = conexaoMpPadrao().iniciarRenovacaoDiaria();
 // Pix: a cada minuto expira os pendentes com mais de 15 min e consulta os outros (webhook perdido).
 const pararRotinaPagamentos = pagamentosPadrao().iniciarRotina();
+// Livro-razão: de hora em hora fecha as semanas terminadas e alerta os fechamentos atrasados.
+const pararFechamento = iniciarFechamentoSemanal();
 
 const porta = Number(process.env.PORT) || 3000;
 const app = criarApp();
@@ -101,6 +104,7 @@ function encerrar(sinal) {
   pararLimpezaMapas();
   pararRenovacaoMp();
   pararRotinaPagamentos();
+  pararFechamento();
   // io.close desconecta os sockets e fecha também o servidor HTTP.
   io.close(async () => {
     await prisma.$disconnect();

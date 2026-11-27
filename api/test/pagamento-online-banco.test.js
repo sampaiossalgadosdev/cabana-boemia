@@ -116,7 +116,12 @@ describe('pagamento online: regras no banco', { skip: semBancoDeTeste }, () => {
       prisma.lancamentoLoja.create({ data: { lojaId, tipo: 'AJUSTE_MANUAL', valorCentavos: 0 } }),
       'LancamentoLoja_valor_check',
     );
-    const l = await prisma.lancamentoLoja.create({ data: { lojaId, tipo: 'TAXA_ENTREGA_DINHEIRO', valorCentavos: 500 } });
+    // Etapa 6: lançamento automático sempre com o pedido; ajuste manual sempre com a observação.
+    await violaCheck(
+      prisma.lancamentoLoja.create({ data: { lojaId, tipo: 'TAXA_ENTREGA_DINHEIRO', valorCentavos: 500 } }),
+      'LancamentoLoja_tipo_check',
+    );
+    const l = await prisma.lancamentoLoja.create({ data: { lojaId, tipo: 'AJUSTE_MANUAL', valorCentavos: 500, observacao: 'teste' } });
     await assert.rejects(prisma.lancamentoLoja.update({ where: { id: l.id }, data: { valorCentavos: 400 } }), /não pode ser alterado/);
     await assert.rejects(prisma.lancamentoLoja.delete({ where: { id: l.id } }), /não pode ser apagado/);
 

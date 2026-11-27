@@ -653,14 +653,22 @@ const NOME_FORMA = { PIX: 'Pix', DINHEIRO: 'dinheiro', DEBITO: 'cartão de débi
  *   Etapa 3). Retirada no balcão não tem taxa.
  * Loja com motoboy próprio: nada muda.
  */
-export function conferirModoEntrega(loja, { canal, endereco, pagamento, pagamentoOnline = null, pagoAgora = false, ajustes = {}, entrega = {} }) {
+/**
+ * PINO_ENTREGA_OPCIONAL=sim desliga o PINO_OBRIGATORIO (fase de testes, enquanto o Google Maps
+ * não está configurado): o pedido do app sem pino usa a taxa da área. Vazio = exige o pino.
+ */
+export function pinoEntregaOpcional(env = process.env) {
+  return String(env?.PINO_ENTREGA_OPCIONAL ?? '').trim().toLowerCase() === 'sim';
+}
+
+export function conferirModoEntrega(loja, { canal, endereco, pagamento, pagamentoOnline = null, pagoAgora = false, ajustes = {}, entrega = {}, env = process.env }) {
   if (loja?.modoEntrega !== 'PLATAFORMA' || canal === 'SALAO') return;
   if (ajustes.taxaManualCentavos != null && !entrega.retirarNoBalcao) {
     throw new ErroHttp(422, 'Nesta loja a entrega é dos entregadores do Taaki e a taxa é a da área de entrega: não dá para digitar outra.', {
       codigo: 'TAXA_MANUAL_PROIBIDA',
     });
   }
-  if (canal === 'APP' && endereco && !endereco.pin) {
+  if (canal === 'APP' && endereco && !endereco.pin && !pinoEntregaOpcional(env)) {
     throw new ErroHttp(422, 'Marque no mapa onde fica o endereço de entrega para pedir nesta loja.', {
       codigo: 'PINO_OBRIGATORIO',
     });

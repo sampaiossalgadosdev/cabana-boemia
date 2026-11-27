@@ -26,6 +26,19 @@ describe('regras do entregador da plataforma no pedido (conferirModoEntrega)', (
     }
   });
 
+  test('PINO_ENTREGA_OPCIONAL=sim: app sem pino passa; vazio ou outro valor continua exigindo', () => {
+    const semPino = (env) =>
+      codigo(() => conferirModoEntrega(PLATAFORMA, { canal: 'APP', endereco: SEM_PINO, pagamento: { forma: 'DINHEIRO' }, env }));
+    assert.equal(semPino({ PINO_ENTREGA_OPCIONAL: ' SIM ' }), null);
+    assert.equal(semPino({ PINO_ENTREGA_OPCIONAL: '' }), 'PINO_OBRIGATORIO');
+    assert.equal(semPino({ PINO_ENTREGA_OPCIONAL: 'true' }), 'PINO_OBRIGATORIO');
+    // Continua só dinheiro na entrega.
+    assert.equal(
+      codigo(() => conferirModoEntrega(PLATAFORMA, { canal: 'APP', endereco: SEM_PINO, pagamento: { forma: 'DEBITO' }, env: { PINO_ENTREGA_OPCIONAL: 'sim' } })),
+      'FORMA_INDISPONIVEL',
+    );
+  });
+
   test('app sem pino em loja PLATAFORMA: 422 PINO_OBRIGATORIO; o site passa (taxa da área)', () => {
     assert.equal(
       codigo(() => conferirModoEntrega(PLATAFORMA, { canal: 'APP', endereco: SEM_PINO, pagamento: { forma: 'DINHEIRO' } })),

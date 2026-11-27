@@ -87,6 +87,15 @@ export function TelaFinanceiro() {
                           {textoDoSaldoAdmin(s.saldoCentavos, s.loja.nome)}
                           <br />
                           <span className="suave">{s.quantidade} lançamento(s)</span>
+                          {s.anterior && (
+                            <>
+                              <br />
+                              <span className="suave">
+                                Semana anterior (fechando), {nomeDaSemana(s.anterior.inicio, s.anterior.domingo)}:{' '}
+                                {textoDoSaldoAdmin(s.anterior.saldoCentavos, s.loja.nome)}
+                              </span>
+                            </>
+                          )}
                         </td>
                         <td className="fim">
                           <button type="button" className="botao botao--pequeno" onClick={() => setSemana(s.loja)}>
@@ -230,7 +239,9 @@ function CartaoCampanha({ campanha: c }) {
 
 function DialogoSemanaAtual({ loja, aoFechar }) {
   const carga = useCarregar(() => (loja ? api.plataforma.financeiro.semanaAtual(loja.id) : Promise.resolve(null)), [loja?.id]);
-  const s = carga.dados?.loja?.id === loja?.id ? carga.dados?.semanaAtual : null;
+  const doPedido = carga.dados?.loja?.id === loja?.id;
+  const s = doPedido ? carga.dados?.semanaAtual : null;
+  const anterior = doPedido ? carga.dados?.semanaAnterior : null;
   return (
     <Dialogo
       aberto={Boolean(loja)}
@@ -245,6 +256,15 @@ function DialogoSemanaAtual({ loja, aoFechar }) {
     >
       {carga.erro && <p className="erro">{carga.erro.message}</p>}
       {!s && !carga.erro && <p className="estado">Carregando…</p>}
+      {anterior && (
+        <>
+          <p className="saldo-fechamento">
+            Semana anterior (fechando), {nomeDaSemana(anterior.inicio, anterior.domingo)}: {textoDoSaldoAdmin(anterior.saldoCentavos, loja.nome)}
+          </p>
+          <TabelaLancamentos lancamentos={anterior.lancamentos} valor={valorComSinal} />
+          <hr style={{ border: 0, borderTop: '1px solid var(--cor-borda)', margin: '16px 0' }} />
+        </>
+      )}
       {s && (
         <>
           <p className="saldo-fechamento">

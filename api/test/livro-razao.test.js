@@ -18,6 +18,7 @@ import {
   orcamentoCampanha,
   segundaDaSemana,
   semanaDe,
+  separarPorSemana,
   textoDoSaldo,
 } from '../src/services/livroRazao.service.js';
 
@@ -72,6 +73,26 @@ describe('livro-razão: regras puras', () => {
     assert.equal(s.domingo, '2026-11-15');
     assert.equal(s.de.toISOString(), '2026-11-09T07:00:00.000Z');
     assert.equal(s.ate.toISOString(), '2026-11-16T07:00:00.000Z');
+  });
+
+  test('semana atual × anterior fechando: pela data do lançamento no dia operacional, não pelo fechamento', () => {
+    const l = (id, quando) => ({ id, criadoEm: new Date(quando) });
+    const lista = [
+      l(1, '2026-11-29T23:50:00-03:00'), // domingo
+      l(2, '2026-11-30T03:59:00-03:00'), // segunda antes da virada = domingo
+      l(3, '2026-11-30T04:00:00-03:00'), // segunda na virada = semana nova
+      l(4, '2026-11-18T12:00:00-03:00'), // atrasado de semana mais antiga: entra no próximo fechamento
+    ];
+    const s = separarPorSemana(lista, new Date('2026-11-30T05:00:00-03:00'), 4);
+    assert.equal(s.semana.inicio, '2026-11-30');
+    assert.deepEqual([s.anterior.inicio, s.anterior.domingo], ['2026-11-23', '2026-11-29']);
+    assert.deepEqual(s.daAtual.map((x) => x.id), [3]);
+    assert.deepEqual(s.daAnterior.map((x) => x.id), [1, 2, 4]);
+    // Semana anterior já fechada: o que sobrou dela vai no fechamento desta, então fica na atual.
+    const fechada = separarPorSemana(lista, new Date('2026-11-30T05:00:00-03:00'), 4, { anteriorFechada: true });
+    assert.deepEqual([fechada.daAtual.length, fechada.daAnterior.length], [4, 0]);
+    // Virada à meia-noite: segunda 03:59 já é a semana nova.
+    assert.deepEqual(separarPorSemana(lista, new Date('2026-11-30T05:00:00-03:00'), 0).daAtual.map((x) => x.id), [2, 3]);
   });
 
   test('textos e variáveis', () => {
@@ -540,5 +561,51 @@ describe('livro-razão e fechamento semanal (Etapa 6)', { skip: semBancoDeTeste 
     const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(agora);
     assert.equal((await api('POST', `/plataforma/financeiro/fechamentos/${f.id}/quitar`, { token: tk.admin, corpo: { quitadoEm: hoje } })).status, 200);
     assert.ok((await prisma.alertaPlataforma.findUnique({ where: { id: alerta.id } })).resolvidoEm);
+  });
+
+  test('virada de segunda antes da rotina: semana atual só com os desta semana; a anterior aparece "fechando"', async () => {
+    const loja = await prisma.loja.create({ data: { slug: 'loja-virada', nome: 'Loja Virada' } });
+    const ajuste = (valor, quando) => livro.ajusteManual({ lojaId: loja.id, valorCentavos: valor, observacao: 'teste', usuarioId: null }, new Date(quando));
+    await ajuste(1000, '2026-12-06T23:50:00-03:00'); // domingo
+    await ajuste(200, '2026-12-07T02:00:00-03:00'); // segunda antes da virada (4h) = domingo
+    const desta = await ajuste(700, '2026-12-07T05:00:00-03:00'); // segunda depois da virada
+    agora = new Date('2026-12-07T06:00:00-03:00'); // a rotina ainda não fechou a semana de 30/11
+    const r = await api('GET', '/retaguarda/fechamento', { token: tk.admin, loja: 'loja-virada' });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.equal(r.corpo.semanaAtual.inicio, '2026-12-07');
+    assert.deepEqual(r.corpo.semanaAtual.lancamentos.map((l) => l.id), [desta.lancamento.id]);
+    assert.equal(r.corpo.semanaAtual.saldoCentavos, 700);
+    assert.equal(r.corpo.semanaAnterior.inicio, '2026-11-30');
+    assert.equal(r.corpo.semanaAnterior.domingo, '2026-12-06');
+    assert.equal(r.corpo.semanaAnterior.saldoCentavos, 1200);
+    assert.equal(r.corpo.semanaAnterior.lancamentos.length, 2);
+
+    // ADMIN: a mesma separação na lista e no detalhe da loja.
+    const lista = await api('GET', '/plataforma/financeiro', { token: tk.admin });
+    const linha = lista.corpo.semanaAtual.find((s) => s.loja.slug === 'loja-virada');
+    assert.equal(linha.saldoCentavos, 700);
+    assert.equal(linha.quantidade, 1);
+    assert.deepEqual([linha.anterior.inicio, linha.anterior.saldoCentavos, linha.anterior.quantidade], ['2026-11-30', 1200, 2]);
+    const det = await api('GET', `/plataforma/financeiro/lojas/${loja.id}/semana-atual`, { token: tk.admin });
+    assert.equal(det.corpo.semanaAtual.saldoCentavos, 700);
+    assert.equal(det.corpo.semanaAnterior.saldoCentavos, 1200);
+
+    // A rotina fecha a anterior: a seção some e o fechamento leva os dois lançamentos dela.
+    await livro.fecharSemanas(new Date('2026-12-07T06:00:00-03:00'));
+    const depois = await api('GET', '/retaguarda/fechamento', { token: tk.admin, loja: 'loja-virada' });
+    assert.equal(depois.corpo.semanaAnterior, null);
+    assert.equal(depois.corpo.semanaAtual.saldoCentavos, 700);
+    assert.deepEqual(depois.corpo.fechamentos.map((f) => [f.inicio, f.saldoCentavos]), [['2026-11-30', 1200]]);
+
+    // Atrasado de uma semana JÁ fechada (a semana não reabre): fica na atual e entra no fechamento dela.
+    const atrasado = await ajuste(50, '2026-12-06T22:00:00-03:00');
+    const comAtrasado = await api('GET', '/retaguarda/fechamento', { token: tk.admin, loja: 'loja-virada' });
+    assert.equal(comAtrasado.corpo.semanaAnterior, null);
+    assert.deepEqual(comAtrasado.corpo.semanaAtual.lancamentos.map((l) => l.id), [desta.lancamento.id, atrasado.lancamento.id]);
+    assert.equal(comAtrasado.corpo.semanaAtual.saldoCentavos, 750);
+    const linha2 = (await api('GET', '/plataforma/financeiro', { token: tk.admin })).corpo.semanaAtual.find((s) => s.loja.slug === 'loja-virada');
+    assert.deepEqual([linha2.saldoCentavos, linha2.anterior], [750, null]);
+    const f = (await livro.fecharSemanas(new Date('2026-12-14T05:00:00-03:00'))).find((x) => x.lojaId === loja.id);
+    assert.deepEqual([f.inicio.toISOString().slice(0, 10), f.saldoCentavos], ['2026-12-07', 750]);
   });
 });

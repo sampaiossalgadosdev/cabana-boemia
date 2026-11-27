@@ -240,29 +240,63 @@ const fechamentoPublico = (f) => ({
 
 const naoEncontrado = () => new ErroHttp(404, 'Fechamento não encontrado', { codigo: 'NAO_ENCONTRADO' });
 
-/** Semana atual (parcial): lançamentos ainda sem fechamento da loja. */
-async function semanaAtualDaLoja(loja, agora) {
-  const semana = semanaDe(agora, horaViradaDe(loja));
-  const lancamentos = await prisma.lancamentoLoja.findMany({
-    where: { lojaId: loja.id, fechamentoId: null },
-    orderBy: { id: 'asc' },
-    select: SELECT_LANCAMENTO,
-  });
+/**
+ * Lançamentos ainda sem fechamento, separados pela semana do dia operacional da loja:
+ * `atual` = criados a partir da segunda (virada) desta semana; `anterior` = criados antes, que a
+ * rotina ainda não fechou (entre a virada de segunda e a próxima passada, ou um atrasado: é
+ * exatamente o que o próximo fechamento vai levar). Com a semana anterior JÁ fechada
+ * (`anteriorFechada`), um atrasado dela entra no fechamento desta semana: fica na atual. Puro.
+ * @param {{ criadoEm: Date }[]} lancamentos
+ */
+export function separarPorSemana(lancamentos, agora, horaVirada, { anteriorFechada = false } = {}) {
+  const semana = semanaDe(agora, horaVirada);
+  const anterior = semanaQueComecaEm(somarDias(semana.inicio, -7), horaVirada);
+  const daAtual = [];
+  const daAnterior = [];
+  for (const l of lancamentos) (anteriorFechada || new Date(l.criadoEm) >= semana.de ? daAtual : daAnterior).push(l);
+  return { semana, anterior, daAtual, daAnterior };
+}
+
+/** Lojas (ids) que já têm o fechamento da semana anterior a `agora` (pela virada de cada uma). */
+async function comAnteriorFechada(lojas, agora) {
+  if (!lojas.length) return new Set();
+  const inicios = lojas.map((l) => ({ lojaId: l.id, inicio: paraCampoData(somarDias(semanaDe(agora, horaViradaDe(l)).inicio, -7)) }));
+  const achados = await prisma.fechamentoSemanal.findMany({ where: { OR: inicios }, select: { lojaId: true } });
+  return new Set(achados.map((f) => f.lojaId));
+}
+
+const blocoDaSemana = (semana, lancamentos, publico = true) => {
   const saldo = soma(lancamentos);
   return {
     inicio: semana.inicio,
     domingo: semana.domingo,
     saldoCentavos: saldo,
     saldoTexto: textoDoSaldo(saldo),
-    lancamentos: lancamentos.map(lancamentoPublico),
+    quantidade: lancamentos.length,
+    ...(publico && { lancamentos: lancamentos.map(lancamentoPublico) }),
+  };
+};
+
+/** Semana atual (parcial) e, se houver, a semana anterior ainda fechando. */
+async function emAbertoDaLoja(loja, agora) {
+  const lancamentos = await prisma.lancamentoLoja.findMany({
+    where: { lojaId: loja.id, fechamentoId: null },
+    orderBy: { id: 'asc' },
+    select: SELECT_LANCAMENTO,
+  });
+  const anteriorFechada = (await comAnteriorFechada([loja], agora)).has(loja.id);
+  const { semana, anterior, daAtual, daAnterior } = separarPorSemana(lancamentos, agora, horaViradaDe(loja), { anteriorFechada });
+  return {
+    semanaAtual: blocoDaSemana(semana, daAtual),
+    semanaAnterior: daAnterior.length ? blocoDaSemana(anterior, daAnterior) : null,
   };
 }
 
-/** Retaguarda da loja: semana atual (parcial) e os fechamentos (mais novos primeiro). */
+/** Retaguarda da loja: semana atual (parcial), a anterior fechando e os fechamentos (mais novos primeiro). */
 export async function fechamentoDaLoja(lojaId, agora = new Date()) {
   const loja = await prisma.loja.findUnique({ where: { id: lojaId } });
-  const [semanaAtual, fechamentos] = await Promise.all([
-    semanaAtualDaLoja(loja, agora),
+  const [emAberto, fechamentos] = await Promise.all([
+    emAbertoDaLoja(loja, agora),
     prisma.fechamentoSemanal.findMany({
       where: { lojaId },
       orderBy: { inicio: 'desc' },
@@ -270,7 +304,7 @@ export async function fechamentoDaLoja(lojaId, agora = new Date()) {
       include: { quitadoPor: { select: { nome: true } }, _count: { select: { lancamentos: true } } },
     }),
   ]);
-  return { semanaAtual, fechamentos: fechamentos.map(fechamentoPublico) };
+  return { ...emAberto, fechamentos: fechamentos.map(fechamentoPublico) };
 }
 
 /** Detalhe de um fechamento (com os lançamentos). `lojaId` = só daquela loja (senão 404). */
@@ -303,32 +337,35 @@ export async function listarParaAdmin({ status, lojaId } = {}, agora = new Date(
         _count: { select: { lancamentos: true } },
       },
     }),
-    prisma.lancamentoLoja.groupBy({ by: ['lojaId'], where: { fechamentoId: null }, _sum: { valorCentavos: true }, _count: true }),
+    prisma.lancamentoLoja.findMany({ where: { fechamentoId: null }, select: { lojaId: true, valorCentavos: true, criadoEm: true } }),
   ]);
-  const lojas = await prisma.loja.findMany({ where: { id: { in: abertas.map((a) => a.lojaId) } } });
-  const semanaAtual = abertas
-    .map((a) => {
-      const loja = lojas.find((l) => l.id === a.lojaId);
-      const semana = semanaDe(agora, horaViradaDe(loja));
-      const saldo = a._sum.valorCentavos ?? 0;
+  const ids = [...new Set(abertas.map((a) => a.lojaId))];
+  const lojas = await prisma.loja.findMany({ where: { id: { in: ids } } });
+  const fechadas = await comAnteriorFechada(lojas, agora);
+  // Uma linha por loja com lançamento sem fechamento: a semana atual e, se houver, a anterior fechando.
+  const semanaAtual = lojas
+    .map((loja) => {
+      const { semana, anterior, daAtual, daAnterior } = separarPorSemana(
+        abertas.filter((a) => a.lojaId === loja.id),
+        agora,
+        horaViradaDe(loja),
+        { anteriorFechada: fechadas.has(loja.id) },
+      );
       return {
         loja: { id: loja.id, nome: loja.nome, slug: loja.slug },
-        inicio: semana.inicio,
-        domingo: semana.domingo,
-        saldoCentavos: saldo,
-        saldoTexto: textoDoSaldo(saldo),
-        quantidade: a._count,
+        ...blocoDaSemana(semana, daAtual, false),
+        anterior: daAnterior.length ? blocoDaSemana(anterior, daAnterior, false) : null,
       };
     })
     .sort((a, b) => a.loja.nome.localeCompare(b.loja.nome, 'pt-BR'));
   return { fechamentos: fechamentos.map(fechamentoPublico), semanaAtual };
 }
 
-/** ADMIN: lançamentos da semana atual (ainda sem fechamento) de uma loja. */
+/** ADMIN: lançamentos ainda sem fechamento de uma loja (semana atual e a anterior fechando). */
 export async function semanaAtualParaAdmin(lojaId, agora = new Date()) {
   const loja = await prisma.loja.findUnique({ where: { id: lojaId } });
   if (!loja) throw new ErroHttp(404, 'Loja não encontrada', { codigo: 'LOJA_NAO_ENCONTRADA' });
-  return { loja: { id: loja.id, nome: loja.nome, slug: loja.slug }, semanaAtual: await semanaAtualDaLoja(loja, agora) };
+  return { loja: { id: loja.id, nome: loja.nome, slug: loja.slug }, ...(await emAbertoDaLoja(loja, agora)) };
 }
 
 // ───────── Ações do ADMIN ─────────

@@ -28,8 +28,23 @@ export function TelaFechamento() {
       </div>
 
       <EstadoCarga carga={carga}>
-        {({ semanaAtual, fechamentos }) => (
+        {({ semanaAtual, semanaAnterior, fechamentos }) => (
           <>
+            {semanaAnterior && (
+              <section className="cartao" style={{ marginBottom: 16 }}>
+                <div className="cartao__topo">
+                  <h2 className="cartao__titulo">Semana anterior ({nomeDaSemana(semanaAnterior.inicio, semanaAnterior.domingo)})</h2>
+                  <span className="etiqueta etiqueta--aviso">fechando</span>
+                </div>
+                <div className="cartao__corpo">
+                  <p className={`saldo-fechamento${semanaAnterior.saldoCentavos > 0 ? ' saldo-fechamento--deve' : ''}`}>
+                    {textoDoSaldo(semanaAnterior.saldoCentavos)}
+                  </p>
+                  <p className="suave">Esta semana já terminou e está sendo fechada. Em instantes ela aparece em "Semanas fechadas".</p>
+                </div>
+                <TabelaLancamentos lancamentos={semanaAnterior.lancamentos} />
+              </section>
+            )}
             <section className="cartao">
               <div className="cartao__topo">
                 <h2 className="cartao__titulo">Semana de {nomeDaSemana(semanaAtual.inicio, semanaAtual.domingo)}</h2>

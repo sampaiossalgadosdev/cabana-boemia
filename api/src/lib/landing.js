@@ -608,3 +608,47 @@ export function manifestoTaaki() {
     icons: [{ src: CAMINHO_ICONE_TAAKI, sizes: '180x180', type: 'image/png' }],
   });
 }
+
+/** Título da aba da página /app (destino do QR impresso). */
+export const TITULO_PAGINA_APP = 'Taaki Delivery: baixe o app';
+
+/**
+ * Página "Em breve nas lojas" de /app enquanto o app não foi lançado
+ * (TAAKI_APP_LANCADO != "sim"). /app é o destino FIXO do QR code impresso em
+ * banners e panfletos: o endereço não pode mudar. Leve e sem script: só Poppins,
+ * o logo e CSS inline (a mesma CSP_LANDING). Fora da busca (noindex).
+ */
+export function paginaApp() {
+  const fontes = Object.entries(FONTES_TAAKI).filter(([, f]) => f.familia === 'Poppins');
+  return `<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapar(TITULO_PAGINA_APP)}</title>
+<meta name="description" content="O app do Taaki Delivery está chegando. Fique de olho!">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="${C.marinho}">
+<link rel="icon" href="${CAMINHO_FAVICON_TAAKI}" type="image/svg+xml">
+<link rel="apple-touch-icon" href="${CAMINHO_ICONE_TAAKI}">
+<link rel="preload" href="/taaki/poppins-700.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+${fontes.map(([url, f]) => `@font-face{font-family:"Poppins";src:url(${url}) format("woff2");font-weight:${f.peso};font-style:normal;font-display:swap}`).join('\n')}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;
+background:${C.marinho};color:${C.branco};font:16px/1.6 "Poppins",sans-serif;text-align:center;padding:32px 16px}
+main{width:100%;max-width:420px;display:flex;flex-direction:column;align-items:center;gap:20px}
+.logo{width:160px;height:160px;border-radius:50%;box-shadow:0 0 0 5px ${C.laranja},0 0 0 16px rgba(242,107,29,.16),0 24px 70px rgba(242,107,29,.3)}
+.rotulo{color:${C.laranja};font-weight:700;font-size:14px;letter-spacing:.08em;text-transform:uppercase;margin-top:12px}
+h1{margin:0;font-weight:700;font-size:clamp(28px,8vw,40px);line-height:1.15;letter-spacing:-.01em;text-wrap:balance}
+.traco{width:56px;height:4px;border-radius:4px;background:${C.laranja}}
+p{margin:0;font-size:17px;color:${C.textoSuaveEscuro};text-wrap:balance}
+@media (min-width:640px){.logo{width:200px;height:200px}}
+</style></head><body>
+<main>
+  <img class="logo" src="${CAMINHO_LOGO_TAAKI}" width="200" height="200" alt="Logo do Taaki Delivery">
+  <span class="rotulo">Taaki Delivery</span>
+  <h1>Em breve nas lojas</h1>
+  <span class="traco" aria-hidden="true"></span>
+  <p>O app do Taaki Delivery está chegando. Fique de olho!</p>
+</main>
+</body></html>`;
+}

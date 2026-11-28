@@ -537,6 +537,11 @@ Respostas às perguntas da Etapa 3:
 - **Mapas**: chaves do Google (servidor, web, Android, iOS; `app/CONFIGURACAO_MAPAS.md`). Loja com entregador do Taaki exige o pino e cobra por km. **Apagar `PINO_ENTREGA_OPCIONAL`** do Railway antes da primeira loja real.
 - **Modo teste do telefone em produção**: apagar `PHONE_VERIFIER=test`, `PHONE_TEST_EM_PRODUCAO` e `PHONE_TEST_NUMBERS` antes da primeira loja real (o log do deploy não pode trazer "TESTE EM PRODUÇÃO").
 - **Play Console**: Segurança dos dados com o pagamento (e-mail e histórico de compras compartilhados com o processador de pagamentos), questionário de conteúdo (hoje diz "sem compras no app, pagamento na entrega"), textos da ficha ("O pagamento é feito na entrega") e link da política e da exclusão de conta no domínio do Taaki (`app/PUBLICACAO.md`). Na App Store, a observação da revisão ("pagamento feito na entrega") também muda.
+- **Contrato comercial com cada loja**: mensalidade, taxa de entrega do Taaki (com os entregadores do Taaki), tarifa do Mercado Pago descontada da loja, fechamento semanal (o que a loja deve e o que o Taaki deve, prazo de pagamento) e estornos (quem arca em cada caso). Junto com o termo do uso dos dados.
+- **Verificação (KYC) da conta Mercado Pago do CNPJ do Taaki** (a que recebe a comissão) e **credenciais de produção** da aplicação ativadas.
+- **Railway: o serviço da API roda com 1 réplica** (as rotinas de pagamento, renovação dos tokens e fechamento supõem uma instância só). Conferir em Settings › Deploy › Replicas antes de ligar.
+- **Railway: backup automático do Postgres** ligado e conferido (há um backup recente e dá para restaurar). Livro-razão, fechamentos e pagamentos não se refazem.
+- **Orientação da contadora sobre as notas**: quem emite o quê (a loja pelos produtos; o Taaki pela taxa de entrega e pela mensalidade) com o split do Mercado Pago e o fechamento semanal.
 - **Campanha (só se ela entrar no lançamento)**: SMS real no `PHONE_VERIFIER` (Firebase previsto; sem ele ninguém verifica o telefone e a campanha nunca vale). Ligar `CAMPANHA_FRETE_GRATIS_ATIVA=sim` só no dia, com o `CAMPANHA_TELEFONE_SECRET` definido.
 
 ### Roteiro de teste antes de ligar em produção
@@ -567,4 +572,5 @@ Contas: **Pix = conta Mercado Pago REAL com chave Pix** (a loja; o pagador paga 
 - Saldo diário e pagamento dos entregadores; arredondamento da taxa por km para R$ 0,50 (lote dos entregadores).
 - Liberação do `/app` por loja (Android e iOS separados): **vira bloqueante se o lançamento for primeiro no iPhone**.
 - Versões novas do SDK 58 apontadas pelo `expo-doctor`; README sem a seção do pagamento online.
+- Aviso dos alertas do ADMIN fora da tela (WhatsApp ou e-mail): hoje o ADMIN só vê os alertas abrindo a retaguarda (contador no menu da plataforma).
 - Risco aceito: primeira compra depois da exclusão da conta (Etapa 8).

@@ -21,8 +21,28 @@ import { CANAIS, FORMAS_PAGAMENTO } from './pedido.service.js';
 export const TOP = 10;
 // Ordem fixa (o gráfico tem sempre as 4 barras; Dinheiro primeiro, como no caixa).
 const ORDEM_FORMAS = ['DINHEIRO', 'PIX', 'DEBITO', 'CREDITO'];
-// Pago online (o cartão entra na Etapa 7; aparece zerado até lá).
+// Pago online: Pix e cartão pelo app (o cartão vem com o tipo real, Etapa 7).
 const MEIOS_ONLINE = ['PIX', 'CARTAO_ONLINE'];
+// Tipos do cartão pelo app, na ordem do relatório (sem tipo = pedido antigo: conta como crédito).
+export const TIPOS_CARTAO_ONLINE = ['CREDITO', 'DEBITO', 'PRE_PAGO', 'SALDO_MERCADO_PAGO', 'OUTRO'];
+
+/**
+ * Pago online por meio; o cartão leva `porTipo` (só os tipos que venderam). Os grupos vêm por
+ * meio + tipo do groupBy.
+ */
+export function pagoOnlinePorMeio(grupos) {
+  return MEIOS_ONLINE.map((meio) => {
+    const doMeio = grupos.filter((g) => g.meioOnline === meio);
+    const soma = (lista, campo) => lista.reduce((s, g) => s + (campo === 'q' ? g._count._all : (g._sum.totalCentavos ?? 0)), 0);
+    const linha = { meio, quantidade: soma(doMeio, 'q'), totalCentavos: soma(doMeio, 't') };
+    if (meio !== 'CARTAO_ONLINE') return linha;
+    const porTipo = TIPOS_CARTAO_ONLINE.map((tipo) => {
+      const doTipo = doMeio.filter((g) => (g.tipoPagamentoOnline ?? 'CREDITO') === tipo);
+      return { tipo, quantidade: soma(doTipo, 'q'), totalCentavos: soma(doTipo, 't') };
+    }).filter((t) => t.quantidade > 0);
+    return { ...linha, porTipo };
+  });
+}
 
 /** Grupos do groupBy → lista completa na ordem dada, com zero no que não vendeu. */
 function completar(grupos, chave, ordem) {
@@ -86,7 +106,7 @@ export async function relatorioDoDia(lojaId, data, agora = new Date()) {
     descontoCentavos: resumo._sum.descontoCentavos ?? 0,
     // Pagas na entrega (com a gaveta ou a maquininha da loja); o pago online vem à parte (Decisão 19).
     porFormaPagamento: completar(formas, 'formaPagamento', ORDEM_FORMAS.filter((f) => FORMAS_PAGAMENTO.includes(f))),
-    pagoOnline: completar(online, 'meioOnline', MEIOS_ONLINE),
+    pagoOnline: pagoOnlinePorMeio(online),
     estornosDeFinalizados: { quantidade: estornos._count._all, totalCentavos: estornos._sum.valorCentavos ?? 0 },
     porCanal: completar(canais, 'canal', CANAIS),
     topPorQuantidade: [...linhas].sort(porQuantidade).slice(0, TOP),

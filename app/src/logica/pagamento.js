@@ -1,13 +1,24 @@
 /**
- * Pagamento pelo app (Pix): opções da tela, contagem regressiva, estado do Pix, o Pix pendente
- * guardado no aparelho (para retomar se o app fechar) e os erros. Lógica pura, testada
- * (test/pagamento.test.js). Regras em docs/pagamento-online.md (Etapa 4).
+ * Pagamento pelo app (Pix e cartão): opções da tela, contagem regressiva, estado do Pix e do
+ * cartão, o pagamento pendente guardado no aparelho (para retomar se o app fechar) e os erros.
+ * Lógica pura, testada (test/pagamento.test.js). Regras em docs/pagamento-online.md (Etapas 4 e 7).
  */
 import { lerTexto, gravarTexto, removerTexto } from './armazenamento.js';
 import { FORMAS_PAGAMENTO } from './pedido.js';
 
 /** Opção "Pix pelo app" na escolha da forma (o resto são as formas na entrega). */
 export const PIX_ONLINE = 'PIX_ONLINE';
+/**
+ * Opção "Cartão pelo app" (Etapa 7): Checkout Pro no navegador do app. Crédito à vista, débito,
+ * pré-pago ou saldo Mercado Pago (Decisão 2 da Etapa 7), por isso "Cartão" e não "crédito".
+ */
+export const CARTAO_APP = 'CARTAO_APP';
+export const CHAVE_CARTAO_PENDENTE = 'delivery-abatia:cartao-pendente:v1';
+export const MENSAGEM_FALHA_CARTAO = 'Não foi possível abrir o pagamento com cartão agora. Tente de novo ou escolha outra forma de pagamento.';
+export const MENSAGEM_CARTAO_PAGO_TARDE =
+  'O pagamento chegou depois do prazo e o pedido não foi enviado à loja. O valor será devolvido pelo Mercado Pago (no cartão de crédito, na fatura). Sua sacola continua guardada.';
+export const MENSAGEM_CARTAO_EXPIRADO =
+  'O prazo para pagar acabou e o pedido não foi enviado. Sua sacola continua guardada: é só fazer o pedido de novo.';
 /** A tela do Pix consulta a nossa API a cada 5 s. */
 export const INTERVALO_CONSULTA_MS = 5_000;
 /** Pix guardado há mais disto não é retomado (o pedido já expirou faz tempo). */
@@ -31,7 +42,22 @@ export const TEXTO_CAMPANHA = 'Verifique seu telefone para ganhar frete grátis 
 export function opcoesDePagamento(formas) {
   const naEntrega = formas?.naEntrega ?? FORMAS_PAGAMENTO.map((f) => f.valor);
   const opcoes = [];
-  if (formas?.online?.includes('PIX')) opcoes.push({ valor: PIX_ONLINE, rotulo: 'Pix pelo app (pagar agora)', agora: true });
+  if (formas?.online?.includes('PIX')) {
+    opcoes.push({
+      valor: PIX_ONLINE,
+      rotulo: 'Pix pelo app (pagar agora)',
+      agora: true,
+      detalhe: 'Pix com QR code ou copia e cola; o pedido vai para a loja quando o pagamento for aprovado.',
+    });
+  }
+  if (formas?.online?.includes('CARTAO_ONLINE')) {
+    opcoes.push({
+      valor: CARTAO_APP,
+      rotulo: 'Cartão pelo app (pagar agora)',
+      agora: true,
+      detalhe: 'Crédito à vista ou débito, na página segura do Mercado Pago; o pedido vai para a loja quando o pagamento for aprovado.',
+    });
+  }
   for (const f of FORMAS_PAGAMENTO) if (naEntrega.includes(f.valor)) opcoes.push({ ...f, agora: false });
   return opcoes;
 }
@@ -105,14 +131,15 @@ export const apagarPixPendente = (storage) => removerTexto(CHAVE_PIX_PENDENTE, s
  * o pedido expirou); `formas`: a loja parou de aceitar Pix pelo app.
  * Outros erros: null (o checkout trata como sempre).
  */
-export function interpretarErroDoPix(erro) {
+export function interpretarErroDoPix(erro, meio = 'PIX') {
+  const cartao = meio === 'CARTAO';
   switch (erro?.codigo) {
     case 'PAGAMENTO_FALHOU':
-      return { acao: 'novaChave', mensagem: MENSAGEM_FALHA_PIX };
+      return { acao: 'novaChave', mensagem: cartao ? MENSAGEM_FALHA_CARTAO : MENSAGEM_FALHA_PIX };
     case 'PIX_EXPIRADO':
-      return { acao: 'novaChave', mensagem: MENSAGEM_PIX_EXPIRADO };
+      return { acao: 'novaChave', mensagem: cartao ? MENSAGEM_CARTAO_EXPIRADO : MENSAGEM_PIX_EXPIRADO };
     case 'EMAIL_OBRIGATORIO':
-      return { acao: 'email', mensagem: 'Informe seu e-mail para pagar com Pix.' };
+      return { acao: 'email', mensagem: 'Informe seu e-mail para pagar pelo app.' };
     case 'EMAIL_RECUSADO_PAGAMENTO':
       return { acao: 'email', novaChave: true, mensagem: MENSAGEM_EMAIL_RECUSADO };
     case 'PAGAMENTO_ONLINE_INDISPONIVEL':
@@ -122,13 +149,72 @@ export function interpretarErroDoPix(erro) {
   }
 }
 
+// ───────── Cartão pelo app (Etapa 7: Checkout Pro) ─────────
+
+/**
+ * Estado da tela do cartão a partir do pagamento da API: 'aguardando' (PENDENTE, ainda sem
+ * tentativa recusada), 'recusado' (PENDENTE com a última tentativa recusada: o pedido continua
+ * esperando, Decisão 3 da Etapa 7), 'aprovado', 'pago_tarde' (A_ESTORNAR) ou 'expirado' (o resto).
+ */
+export function estadoDoCartao(pagamento) {
+  if (pagamento?.status === 'PENDENTE') return pagamento.recusa ? 'recusado' : 'aguardando';
+  const pix = estadoDoPix(pagamento);
+  return pix === 'aguardando' ? 'expirado' : pix;
+}
+
+/** O que fica no aparelho enquanto o cartão não é pago (o link do checkout para "Tentar de novo"). */
+export function cartaoParaGuardar({ pedido, pagamento }, loja) {
+  return {
+    pedidoId: pedido.id,
+    loja: loja ? { slug: loja.slug, nome: loja.nome } : null,
+    valorCentavos: pagamento.valorCentavos ?? pedido.totalCentavos,
+    checkoutUrl: pagamento.checkoutUrl,
+    expiraEm: pagamento.expiraEm,
+    guardadoEm: new Date().toISOString(),
+  };
+}
+
+/** Só abre link https do Mercado Pago (o que a API mandou); outro = null. */
+export function checkoutSeguro(url) {
+  try {
+    const u = new URL(String(url));
+    return u.protocol === 'https:' && /(^|\.)mercadopago\.com(\.br)?$|(^|\.)mercadolivre\.com(\.br)?$/.test(u.hostname) ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Cartão guardado com o formato certo e não velho demais; senão null. */
+export function cartaoGuardadoValido(dados, agora = Date.now()) {
+  if (!dados || !Number.isInteger(dados.pedidoId) || typeof dados.checkoutUrl !== 'string' || !dados.expiraEm) return null;
+  const expira = new Date(dados.expiraEm).getTime();
+  if (!Number.isFinite(expira) || Number(agora) - expira > VALIDADE_RETOMADA_MS) return null;
+  return dados;
+}
+
+export async function salvarCartaoPendente(dados, storage) {
+  return gravarTexto(CHAVE_CARTAO_PENDENTE, JSON.stringify(dados), storage);
+}
+
+export async function lerCartaoPendente(storage, agora = Date.now()) {
+  const texto = await lerTexto(CHAVE_CARTAO_PENDENTE, storage);
+  if (!texto) return null;
+  try {
+    return cartaoGuardadoValido(JSON.parse(texto), agora);
+  } catch {
+    return null;
+  }
+}
+
+export const apagarCartaoPendente = (storage) => removerTexto(CHAVE_CARTAO_PENDENTE, storage);
+
 /** E-mail com formato aceitável (a API confere de novo). */
 export const emailValido = (texto) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(texto ?? '').trim());
 
 // ───────── Pedido pago online: aceite, cancelamento e estorno (Etapa 5) ─────────
 
 /** Para onde o dinheiro volta, conforme o meio. */
-const VOLTA = { PIX: 'O valor do Pix volta para a sua conta.', CARTAO_ONLINE: 'O valor volta na fatura do cartão.' };
+const VOLTA = { PIX: 'O valor do Pix volta para a sua conta.', CARTAO_ONLINE: 'O valor volta pelo Mercado Pago para o cartão ou a conta usada (no crédito, na fatura).' };
 
 /**
  * Texto do pedido pago online no histórico (aba Pedidos), ou null. Recusado ou cancelado com

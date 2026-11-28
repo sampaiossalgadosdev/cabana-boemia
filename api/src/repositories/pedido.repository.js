@@ -50,6 +50,7 @@ export const SELECT_PEDIDO = {
   criadoPor: { select: { nome: true } },
   // Pago online (Etapa 5): meio, aceite da loja, entrega da plataforma e o último pagamento.
   meioOnline: true,
+  tipoPagamentoOnline: true,
   aceitoEm: true,
   valorEntregadorCentavos: true,
   pagamentos: {

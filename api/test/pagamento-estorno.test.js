@@ -305,7 +305,7 @@ describe('estorno, aceite e PDV (pagamento online, Etapa 5)', { skip: semBancoDe
     assert.equal(banco.meioOnline, 'PIX');
     assert.equal(banco.aceitoEm, null);
     const equipe = await daEquipe(id);
-    assert.deepEqual(equipe.pagamentoOnline, { meio: 'PIX', situacao: 'PAGO', aprovadoEm: banco.pagamentos[0].aprovadoEm.toISOString(), valorEstornadoCentavos: 0 });
+    assert.deepEqual(equipe.pagamentoOnline, { meio: 'PIX', tipo: null, situacao: 'PAGO', aprovadoEm: banco.pagamentos[0].aprovadoEm.toISOString(), valorEstornadoCentavos: 0 });
     assert.equal(equipe.entregaPlataforma, true);
     const lista = (await api('GET', '/cliente/pedidos', { token: c.token })).corpo.pedidos;
     assert.equal(lista.find((p) => p.id === id).podeCancelar, true);

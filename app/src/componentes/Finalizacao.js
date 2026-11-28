@@ -10,11 +10,14 @@ import * as api from '../lib/api.js';
 import { formatarPreco } from '../logica/dinheiro.js';
 import { corpoDoPedido, novaChavePedido, resumoDoPedido, textoTaxa } from '../logica/pedido.js';
 import {
+  CARTAO_APP,
   PIX_ONLINE,
+  cartaoParaGuardar,
   emailValido,
   interpretarErroDoPix,
   opcoesDePagamento,
   pixParaGuardar,
+  salvarCartaoPendente,
   salvarPixPendente,
 } from '../logica/pagamento.js';
 import { VerificarTelefone } from './VerificarTelefone.js';
@@ -41,6 +44,7 @@ import { corpoDoEndereco, precisaConfirmarPino } from '../logica/mapa.js';
  * (por km na loja com entregadores do Taaki), o frete grátis (da loja ou da primeira compra) e as
  * formas da loja; sem ela (API antiga, sem rede), fica a prévia local de antes. "Pix pelo app"
  * cria o pedido aguardando o pagamento e abre a tela do Pix (a sacola só esvazia na aprovação).
+ * "Cartão pelo app" (Etapa 7) faz o mesmo e abre a tela do cartão, que abre o Checkout Pro.
  */
 export function Finalizacao({ onEditarTelefone }) {
   const s = useEstilos(criarEstilos);
@@ -247,14 +251,16 @@ export function Finalizacao({ onEditarTelefone }) {
   }
 
   const pixOnline = forma === PIX_ONLINE;
-  const precisaEmail = pixOnline && (!cliente.email || pedirEmail);
+  const cartaoOnline = forma === CARTAO_APP;
+  const online = pixOnline || cartaoOnline;
+  const precisaEmail = online && (!cliente.email || pedirEmail);
 
   const enviar = async () => {
     setErro('');
     if (!forma) return setErro('Escolha a forma de pagamento.');
     if (troco.erro) return setErro(troco.erro);
     if (!podePedir) return setErro('Estamos fechados ou sem conexão agora: não dá para enviar o pedido.');
-    if (precisaEmail && !emailValido(emailTexto)) return setErro('Informe um e-mail válido para pagar com Pix.');
+    if (precisaEmail && !emailValido(emailTexto)) return setErro('Informe um e-mail válido para pagar pelo app.');
     setEnviando(true);
     let criado = false;
     try {
@@ -275,8 +281,14 @@ export function Finalizacao({ onEditarTelefone }) {
       const r = await chamar((token) => api.enviarPedido(token, corpo));
       criado = true;
       if (r.pagamento) {
-        // Pix: a tela do Pix acompanha o pagamento; a sacola fica até a aprovação.
-        await salvarPixPendente(pixParaGuardar(r, loja ? { slug, nome: loja.nome } : null));
+        // Pix ou cartão: a tela própria acompanha o pagamento; a sacola fica até a aprovação.
+        const daLoja = loja ? { slug, nome: loja.nome } : null;
+        if (r.pagamento.metodo === 'CARTAO_ONLINE') {
+          await salvarCartaoPendente(cartaoParaGuardar(r, daLoja));
+          router.replace('/sacola/cartao?abrir=1');
+          return;
+        }
+        await salvarPixPendente(pixParaGuardar(r, daLoja));
         router.replace('/sacola/pix');
         return;
       }
@@ -286,7 +298,7 @@ export function Finalizacao({ onEditarTelefone }) {
       substituir([]); // o pedido já existe: a sacola esvazia na hora
       recarregarUltimo();
     } catch (e) {
-      const pix = interpretarErroDoPix(e);
+      const pix = interpretarErroDoPix(e, cartaoOnline ? 'CARTAO' : 'PIX');
       if (pix) {
         // O pedido anterior foi encerrado (Pix não gerado ou expirado): o próximo é outro.
         if (pix.acao === 'novaChave' || pix.novaChave) chave.current = novaChavePedido();
@@ -336,13 +348,13 @@ export function Finalizacao({ onEditarTelefone }) {
       {opcoes.map((f, i) => (
         <View key={f.valor}>
           {!f.agora && i > 0 && opcoes[i - 1].agora && <Text style={[s.rotulo, s.grupo]}>Pagar na entrega</Text>}
-          <Opcao titulo={f.rotulo} detalhe={f.agora ? 'Pix com QR code ou copia e cola; o pedido vai para a loja quando o pagamento for aprovado.' : undefined} marcada={forma === f.valor} onPress={() => setForma(f.valor)} />
+          <Opcao titulo={f.rotulo} detalhe={f.detalhe} marcada={forma === f.valor} onPress={() => setForma(f.valor)} />
         </View>
       ))}
 
       {precisaEmail && (
         <Campo
-          rotulo="Seu e-mail (o Mercado Pago pede para o Pix)"
+          rotulo="Seu e-mail (o Mercado Pago pede para pagar pelo app)"
           value={emailTexto}
           onChangeText={setEmailTexto}
           keyboardType="email-address"
@@ -404,7 +416,7 @@ export function Finalizacao({ onEditarTelefone }) {
 
       <TextoErro>{erro}</TextoErro>
       <Botao
-        titulo={enviando ? 'Enviando…' : `${pixOnline ? 'Gerar Pix' : 'Enviar pedido'} · ${formatarPreco(resumo.totalCentavos)}`}
+        titulo={enviando ? 'Enviando…' : `${pixOnline ? 'Gerar Pix' : cartaoOnline ? 'Pagar com cartão' : 'Enviar pedido'} · ${formatarPreco(resumo.totalCentavos)}`}
         onPress={enviar}
         carregando={enviando}
         desabilitado={itens.length === 0}

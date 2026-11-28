@@ -1357,6 +1357,13 @@ textarea.entrada {
   font-weight: 600;
 }
 
+/* Cartão pelo app: o tipo real (crédito, débito, pré-pago, saldo) embaixo da barra. */
+.barra__detalhe {
+  grid-column: 1 / -1;
+  color: var(--cor-texto-suave);
+  font-size: 0.85rem;
+}
+
 .barra__trilho {
   height: 22px;
   border-left: 1px solid var(--cor-borda-forte); /* linha de base */

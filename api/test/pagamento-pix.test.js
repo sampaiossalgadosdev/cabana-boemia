@@ -448,7 +448,7 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     assert.equal(p.corpo.previa.taxaEntregaCentavos, 676);
     assert.equal(p.corpo.previa.origemTaxa, 'KM');
     assert.equal(p.corpo.previa.distanciaMetros, DISTANCIA);
-    assert.deepEqual(p.corpo.previa.formasPagamento, { naEntrega: ['DINHEIRO'], online: ['PIX'] });
+    assert.deepEqual(p.corpo.previa.formasPagamento, { naEntrega: ['DINHEIRO'], online: ['PIX', 'CARTAO_ONLINE'] });
     const r = await pedir(c, { formaPagamento: 'DINHEIRO' });
     assert.equal(r.status, 201, JSON.stringify(r.corpo));
     const banco = await pedidoNoBanco(r.corpo.pedido.id);

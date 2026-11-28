@@ -1,6 +1,16 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  CARTAO_APP,
+  CHAVE_CARTAO_PENDENTE,
+  MENSAGEM_FALHA_CARTAO,
+  apagarCartaoPendente,
+  cartaoGuardadoValido,
+  cartaoParaGuardar,
+  checkoutSeguro,
+  estadoDoCartao,
+  lerCartaoPendente,
+  salvarCartaoPendente,
   PIX_ONLINE,
   MENSAGEM_FALHA_PIX,
   apagarPixPendente,
@@ -37,8 +47,11 @@ describe('pagamento pelo app (Pix)', () => {
     );
     // Sem prévia da API: as quatro formas na entrega, como antes (nada de Pix pelo app).
     assert.deepEqual(opcoesDePagamento(null).map((o) => o.valor), ['PIX', 'DINHEIRO', 'DEBITO', 'CREDITO']);
-    // Cartão online (Etapa 7) ainda não aparece.
-    assert.deepEqual(opcoesDePagamento({ naEntrega: [], online: ['PIX', 'CARTAO_ONLINE'] }).map((o) => o.valor), [PIX_ONLINE]);
+    // Cartão pelo app (Etapa 7): depois do Pix, com o texto "Cartão pelo app" (débito também vale).
+    const comCartao = opcoesDePagamento({ naEntrega: ['DINHEIRO'], online: ['PIX', 'CARTAO_ONLINE'] });
+    assert.deepEqual(comCartao.map((o) => o.valor), [PIX_ONLINE, CARTAO_APP, 'DINHEIRO']);
+    assert.equal(comCartao[1].rotulo, 'Cartão pelo app (pagar agora)');
+    assert.equal(comCartao[1].agora, true);
   });
 
   test('contagem regressiva: mm:ss, nunca negativa', () => {
@@ -141,7 +154,7 @@ describe('pago online: e-mail recusado, cancelar antes do aceite e estorno (Etap
     );
     assert.equal(
       m.avisoDoPedidoOnline(pedido({ status: 'CANCELADO' }, { meio: 'CARTAO_ONLINE', situacao: 'ESTORNADO' })).texto,
-      'Pedido cancelado e estornado. O valor volta na fatura do cartão.',
+      'Pedido cancelado e estornado. O valor volta pelo Mercado Pago para o cartão ou a conta usada (no crédito, na fatura).',
     );
     assert.match(m.avisoDoPedidoOnline(pedido({ status: 'CANCELADO' }, { situacao: 'ESTORNO_PENDENTE' })).texto, /devolução do valor está em andamento/);
     assert.equal(
@@ -155,5 +168,62 @@ describe('pago online: e-mail recusado, cancelar antes do aceite e estorno (Etap
     assert.match(m.mensagemDoCancelamento({ codigo: 'PEDIDO_JA_ACEITO' }), /já aceitou/);
     assert.equal(m.mensagemDoCancelamento({ codigo: 'PEDIDO_ENCERRADO' }), 'Este pedido já foi encerrado.');
     assert.match(m.mensagemDoCancelamento(new TypeError('Network')), /Network|conexão/);
+  });
+});
+
+describe('pagamento pelo app (cartão, Etapa 7)', () => {
+  test('corpo do pedido: cartão pelo app vai como pagamentoOnline CARTAO, sem forma nem troco', () => {
+    const corpo = corpoDoPedido([{ produtoId: 1, quantidade: 2 }], {
+      enderecoId: 3,
+      formaPagamento: CARTAO_APP,
+      trocoParaCentavos: 5000,
+      chaveIdempotencia: 'k',
+      totalEsperadoCentavos: 1000,
+      lojaSlug: 'cabana-boemia',
+    });
+    assert.equal(corpo.pagamentoOnline, 'CARTAO');
+    assert.equal('formaPagamento' in corpo, false);
+    assert.equal('trocoParaCentavos' in corpo, false);
+    assert.equal(corpoDoPedido([], { formaPagamento: PIX_ONLINE }).pagamentoOnline, 'PIX');
+  });
+
+  test('estado da tela: recusa mantém esperando; aprovado, pago tarde e expirado', () => {
+    assert.equal(estadoDoCartao({ status: 'PENDENTE', recusa: null }), 'aguardando');
+    assert.equal(estadoDoCartao({ status: 'PENDENTE', recusa: { mensagem: 'Saldo insuficiente' } }), 'recusado');
+    assert.equal(estadoDoCartao({ status: 'APROVADO' }), 'aprovado');
+    assert.equal(estadoDoCartao({ status: 'A_ESTORNAR' }), 'pago_tarde');
+    for (const status of ['EXPIRADO', 'CANCELADO', 'RECUSADO', undefined]) assert.equal(estadoDoCartao({ status }), 'expirado');
+  });
+
+  test('link do checkout: só https do Mercado Pago', () => {
+    assert.equal(checkoutSeguro('https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=1'), 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=1');
+    assert.ok(checkoutSeguro('https://sandbox.mercadopago.com.br/checkout/v1/redirect?pref_id=1'));
+    for (const url of ['http://www.mercadopago.com.br/x', 'https://mercadopago.com.br.golpe.com/x', 'javascript:alert(1)', '', null]) {
+      assert.equal(checkoutSeguro(url), null, String(url));
+    }
+  });
+
+  test('cartão pendente: guarda, lê, descarta velho ou malformado, apaga', async () => {
+    const storage = storageFalso();
+    const dados = cartaoParaGuardar(
+      { pedido: { id: 9, totalCentavos: 3000 }, pagamento: { checkoutUrl: 'https://www.mercadopago.com.br/c', expiraEm: '2026-11-14T20:15:00Z', valorCentavos: 3000 } },
+      { slug: 'cabana-boemia', nome: 'Cabana Boemia' },
+    );
+    await salvarCartaoPendente(dados, storage);
+    const lido = await lerCartaoPendente(storage, Date.parse('2026-11-14T20:10:00Z'));
+    assert.equal(lido.pedidoId, 9);
+    assert.equal(lido.checkoutUrl, 'https://www.mercadopago.com.br/c');
+    assert.equal(await lerCartaoPendente(storage, Date.parse('2026-11-16T20:16:00Z')), null, 'velho demais');
+    assert.equal(cartaoGuardadoValido({ pedidoId: 'x' }), null);
+    await storage.setItem(CHAVE_CARTAO_PENDENTE, '{lixo');
+    assert.equal(await lerCartaoPendente(storage), null);
+    await apagarCartaoPendente(storage);
+    assert.equal(await lerCartaoPendente(storage), null);
+  });
+
+  test('erros: falha ao abrir o cartão tem mensagem própria; e-mail vale para os dois', () => {
+    assert.deepEqual(interpretarErroDoPix({ codigo: 'PAGAMENTO_FALHOU' }, 'CARTAO'), { acao: 'novaChave', mensagem: MENSAGEM_FALHA_CARTAO });
+    assert.equal(interpretarErroDoPix({ codigo: 'PAGAMENTO_FALHOU' }).mensagem, MENSAGEM_FALHA_PIX);
+    assert.equal(interpretarErroDoPix({ codigo: 'EMAIL_OBRIGATORIO' }, 'CARTAO').acao, 'email');
   });
 });

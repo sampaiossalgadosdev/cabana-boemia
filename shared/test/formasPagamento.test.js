@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formasDePagamento, formaNaEntregaPermitida } from '../src/formasPagamento.js';
+import { formasDePagamento, formaNaEntregaPermitida, linhasPorTipo, nomeDoPagamentoOnline } from '../src/formasPagamento.js';
 
 test('motoboy próprio sem online: exatamente as formas de hoje', () => {
   assert.deepEqual(formasDePagamento({ modoEntrega: 'PROPRIO' }), {
@@ -36,4 +36,20 @@ test('forma na entrega: plataforma recusa Pix e maquininha; próprio aceita toda
 test('plataforma: retirada no balcão e pago agora no balcão aceitam todas as formas', () => {
   assert.equal(formaNaEntregaPermitida({ modoEntrega: 'PLATAFORMA', forma: 'DEBITO', comEntrega: false }), true);
   assert.equal(formaNaEntregaPermitida({ modoEntrega: 'PLATAFORMA', forma: 'PIX', pagoAgora: true }), true);
+});
+
+test('nome do pagamento online: Pix, o tipo real do cartão ou "Cartão"', () => {
+  assert.equal(nomeDoPagamentoOnline({ meio: 'PIX' }), 'Pix');
+  assert.equal(nomeDoPagamentoOnline({ meio: 'CARTAO_ONLINE', tipo: 'CREDITO' }), 'Cartão de crédito');
+  assert.equal(nomeDoPagamentoOnline({ meio: 'CARTAO_ONLINE', tipo: 'SALDO_MERCADO_PAGO' }), 'Saldo Mercado Pago');
+  assert.equal(nomeDoPagamentoOnline({ meio: 'CARTAO_ONLINE', tipo: null }), 'Cartão');
+  assert.equal(nomeDoPagamentoOnline(null), 'online');
+});
+
+test('linhas por tipo do cartão: só quando dizem algo além de "Cartão"', () => {
+  const t = (tipo, quantidade = 1) => ({ tipo, quantidade, totalCentavos: 100 });
+  assert.deepEqual(linhasPorTipo({ porTipo: [t('CREDITO', 2)] }), []);
+  assert.deepEqual(linhasPorTipo({ porTipo: [t('DEBITO')] }), [t('DEBITO')]);
+  assert.deepEqual(linhasPorTipo({ porTipo: [t('CREDITO'), t('DEBITO')] }).length, 2);
+  assert.deepEqual(linhasPorTipo({}), []);
 });

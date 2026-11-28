@@ -238,8 +238,8 @@ export function criarClienteController(
       const { pedido, criado } = await pedidoService.criarPedidoDoSite(lojaId, req.cliente, dados, { agora, mapas });
       await registrarAcesso({ clienteId: req.cliente.id, ip: req.ip, evento: 'PEDIDO' });
       if (!dados.pagamentoOnline) return res.status(criado ? 201 : 200).json({ pedido });
-      // Pix: criado no Mercado Pago depois do commit (falhou = pedido EXPIRADO e 502).
-      const r = await pagamentos.gerarPix(pedido.id, { email: req.cliente.email, agora });
+      // Pix ou preferência do cartão: criados no Mercado Pago depois do commit (falhou = pedido EXPIRADO e 502).
+      const r = await pagamentos.gerarPagamento(pedido.id, { email: req.cliente.email, agora });
       res.status(criado ? 201 : 200).json(r);
     },
 
@@ -250,10 +250,16 @@ export function criarClienteController(
       res.json({ previa: await pedidoService.previaDoPedido(lojaId, req.cliente, dados, { agora: relogio(), mapas }) });
     },
 
-    /** Situação do Pix do pedido (a tela do app consulta a cada 5 s). */
+    /** Situação do pagamento online do pedido (a tela do Pix ou do cartão consulta a cada 5 s). */
     async situacaoPagamento(req, res) {
       const { id } = validar(idSchema, req.params);
       res.json(await pagamentos.situacaoParaCliente(req.cliente.id, id, relogio()));
+    },
+
+    /** "Escolher outra forma de pagamento": desiste do pedido que espera o pagamento (estoque e campanha voltam). */
+    async desistirPagamento(req, res) {
+      const { id } = validar(idSchema, req.params);
+      res.json(await pagamentos.desistirDoPagamento(req.cliente.id, id, relogio()));
     },
 
     /** Cancelar pelo app o pedido pago online que a loja ainda não aceitou (estorno total). */

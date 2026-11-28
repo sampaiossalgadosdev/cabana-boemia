@@ -11,7 +11,8 @@
  *   validarAssinaturaWebhook (x-signature com MP_WEBHOOK_SECRET).
  * - Etapa 5: estornar (total ou parcial, com o token DA LOJA e X-Idempotency-Key) e
  *   erroNoEmailDoPagador (recusa do Pix por causa do e-mail).
- * - Próxima: criarPreferencia.
+ * - Etapa 7 (cartão pelo Checkout Pro): criarPreferencia, buscarPagamentosDoPedido e
+ *   expirarPreferencia (com o token DA LOJA).
  *
  * Nunca registra token, code nem client_secret em log; o erro leva só o status HTTP e o
  * código do Mercado Pago (`error`), nunca o corpo inteiro.
@@ -22,6 +23,14 @@ export const URL_AUTORIZACAO = 'https://auth.mercadopago.com.br/authorization';
 export const URL_API = 'https://api.mercadopago.com';
 /** Caminho da notificação (webhook) dentro da API; a URL é montada com a origem do MP_REDIRECT_URI. */
 export const CAMINHO_WEBHOOK = '/api/mercadopago/webhook';
+/** Página de volta do Checkout Pro (back_urls): só manda o cliente de volta ao app, não aprova nada. */
+export const CAMINHO_RETORNO_CARTAO = '/api/mercadopago/cartao/retorno';
+/**
+ * Formas que o Checkout Pro do cartão NÃO oferece (Decisão 2 da Etapa 7): boleto, lotérica/caixa
+ * eletrônico e Pix/transferência (o Pix já é oferecido no app). Débito, pré-pago e o saldo
+ * Mercado Pago (que não pode ser excluído) continuam. Linha de Crédito: a conferir no teste real.
+ */
+export const TIPOS_EXCLUIDOS_CARTAO = Object.freeze(['ticket', 'atm', 'bank_transfer']);
 const TEMPO_LIMITE_MS = 10_000;
 
 /** Falha numa chamada ao Mercado Pago (rede, tempo esgotado ou resposta recusada). */
@@ -97,6 +106,15 @@ export function urlDeNotificacao(config = configMercadoPago()) {
   }
 }
 
+/** URL da página de volta do Checkout Pro (mesma origem do MP_REDIRECT_URI). Sem ela = null. */
+export function urlDeRetornoCartao(config = configMercadoPago()) {
+  try {
+    return `${new URL(config.redirectUri).origin}${CAMINHO_RETORNO_CARTAO}`;
+  } catch {
+    return null;
+  }
+}
+
 /** Centavos → reais com 2 casas (o Mercado Pago recebe número em reais). */
 const emReais = (centavos) => Math.round(centavos) / 100;
 /** Reais → centavos (arredondado: 12.3 → 1230). */
@@ -116,6 +134,7 @@ function comissaoInformada(dados) {
  * Pagamento do Mercado Pago no nosso formato (só o que usamos; nada do pagador).
  * @returns {{ id: string, status: string, statusDetail: string | null, valorCentavos: number | null,
  *   comissaoCentavos: number | null, valorReembolsadoCentavos: number, referenciaExterna: string | null, collectorId: string | null,
+ *   tipo: string | null, metodo: string | null,
  *   qrCode: string | null, qrCodeBase64: string | null, expiraEm: string | null, aprovadoEm: string | null }}
  */
 export function pagamentoNormalizado(dados) {
@@ -131,6 +150,9 @@ export function pagamentoNormalizado(dados) {
     comissaoCentavos: comissaoInformada(dados),
     referenciaExterna: dados.external_reference != null ? String(dados.external_reference) : null,
     collectorId: dados.collector_id != null ? String(dados.collector_id) : null,
+    // Cartão: tipo (credit_card, debit_card, prepaid_card, account_money…) e bandeira; nada do cartão.
+    tipo: typeof dados.payment_type_id === 'string' ? dados.payment_type_id : null,
+    metodo: typeof dados.payment_method_id === 'string' ? dados.payment_method_id : null,
     qrCode: typeof tx.qr_code === 'string' ? tx.qr_code : null,
     qrCodeBase64: typeof tx.qr_code_base64 === 'string' ? tx.qr_code_base64 : null,
     expiraEm: typeof dados.date_of_expiration === 'string' ? dados.date_of_expiration : null,
@@ -314,6 +336,63 @@ export function criarClienteMercadoPago({ fetch: buscar = globalThis.fetch, conf
         status: typeof dados.status === 'string' ? dados.status : null,
         valorCentavos: emCentavos(dados.amount),
       };
+    },
+
+    /**
+     * Preferência do Checkout Pro para o cartão (POST /checkout/preferences) na conta DA LOJA.
+     * Um item só com o total (Decisão 1 da Etapa 7); `marketplace_fee` = a comissão (zero =
+     * omitido); à vista (`installments: 1`); `binary_mode` (só aprovado ou recusado); vigência
+     * até `expiraEm` (15 min); volta para a página da API (`back_urls`, `auto_return`).
+     * @param {string} accessToken token da loja
+     * @param {{ valorCentavos: number, comissaoCentavos: number, pedidoId: number, titulo: string, email: string,
+     *   agora: Date, expiraEm: Date, idempotencyKey: string, notificacao?: string | null, retorno?: string | null }} dados
+     * @returns {Promise<{ id: string, checkoutUrl: string }>}
+     */
+    async criarPreferencia(
+      accessToken,
+      { valorCentavos, comissaoCentavos, pedidoId, titulo, email, agora, expiraEm, idempotencyKey, notificacao = urlDeNotificacao(config), retorno = urlDeRetornoCartao(config) },
+    ) {
+      const corpo = {
+        items: [{ id: String(pedidoId), title: String(titulo).slice(0, 250), quantity: 1, currency_id: 'BRL', unit_price: emReais(valorCentavos) }],
+        payer: { email },
+        external_reference: String(pedidoId),
+        binary_mode: true,
+        expires: true,
+        expiration_date_from: dataComFusoBrasilia(new Date(agora.getTime() - 60_000)),
+        expiration_date_to: dataComFusoBrasilia(expiraEm),
+        payment_methods: {
+          installments: 1,
+          default_installments: 1,
+          excluded_payment_types: TIPOS_EXCLUIDOS_CARTAO.map((id) => ({ id })),
+        },
+        ...(retorno && { back_urls: { success: retorno, pending: retorno, failure: retorno }, auto_return: 'approved' }),
+        ...(notificacao && { notification_url: notificacao }),
+        ...(comissaoCentavos > 0 && { marketplace_fee: emReais(comissaoCentavos) }),
+      };
+      const dados = await chamarPagamentos('POST', '/checkout/preferences', accessToken, { corpo, idempotencyKey });
+      if (dados?.id == null || typeof dados.init_point !== 'string') {
+        throw new ErroMercadoPago('Resposta do Mercado Pago sem preferência', { codigo: 'RESPOSTA_INVALIDA' });
+      }
+      return { id: String(dados.id), checkoutUrl: dados.init_point };
+    },
+
+    /** Encerra a vigência da preferência agora (desistência, loja desconectando): ninguém paga mais nela. */
+    async expirarPreferencia(accessToken, preferenciaId, agora = new Date()) {
+      await chamarPagamentos('PUT', `/checkout/preferences/${encodeURIComponent(preferenciaId)}`, accessToken, {
+        corpo: { expires: true, expiration_date_to: dataComFusoBrasilia(agora) },
+      });
+    },
+
+    /**
+     * Pagamentos do pedido na conta DA LOJA (GET /v1/payments/search por external_reference), o
+     * mais novo primeiro. No Checkout Pro o id do pagamento só existe depois que o cliente paga:
+     * é assim que a consulta do app e a rotina acham o pagamento quando o webhook não chegou.
+     */
+    async buscarPagamentosDoPedido(accessToken, pedidoId) {
+      const q = new URLSearchParams({ external_reference: String(pedidoId), sort: 'date_created', criteria: 'desc', limit: '20' });
+      const dados = await chamarPagamentos('GET', `/v1/payments/search?${q}`, accessToken);
+      const lista = Array.isArray(dados?.results) ? dados.results : [];
+      return lista.filter((p) => p?.id != null && typeof p.status === 'string').map(pagamentoNormalizado);
     },
 
     /** Cancela um Pix ainda pendente (o Mercado Pago só cancela pending/in_process). */

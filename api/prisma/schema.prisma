@@ -472,6 +472,8 @@ model Pedido {
   valorPlataformaEntregaCentavos Int?
   /// Pago online (gravado na criação; nulo = pago na entrega). Nunca muda.
   meioOnline                     MetodoPagamentoOnline?
+  /// Cartão pelo app: o tipo real que o Mercado Pago informou na aprovação (CHECK: só no CARTAO_ONLINE).
+  tipoPagamentoOnline            TipoPagamentoOnline?
   /// Aceite da loja (só pedido pago online; CHECK). Depois dele, só o ADMIN cancela.
   aceitoEm                       DateTime?
   /// Taxa de entrega antes do frete grátis (só com entrega; gravada na criação). Base do
@@ -783,6 +785,15 @@ enum MetodoPagamentoOnline {
   CARTAO_ONLINE
 }
 
+/// Tipo real do pagamento com cartão pelo app (Etapa 7).
+enum TipoPagamentoOnline {
+  CREDITO
+  DEBITO
+  PRE_PAGO
+  SALDO_MERCADO_PAGO
+  OUTRO // ex.: Linha de Crédito Mercado Pago
+}
+
 enum StatusPagamento {
   PENDENTE
   APROVADO
@@ -866,6 +877,8 @@ model Pagamento {
   expiraEm                 DateTime
   pixQrCode                String?
   pixQrCodeBase64          String?
+  /// Cartão: init_point da preferência do Checkout Pro (o app reabre em "Tentar de novo").
+  checkoutUrl              String?               @db.VarChar(500)
   /// Campos relevantes da resposta do Mercado Pago (status_detail, datas, ids). Nunca dado de cartão.
   dadosMp                  Json?
   estornos                 Estorno[]

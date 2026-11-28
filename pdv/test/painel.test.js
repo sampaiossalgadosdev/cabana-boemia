@@ -144,6 +144,7 @@ describe('pagamento online no painel (Etapa 5)', async () => {
   test('faixa "PAGO ONLINE (Pix) — não cobrar na entrega" só enquanto o pagamento vale', () => {
     assert.equal(p.faixaPagoOnline(online()), 'PAGO ONLINE (Pix) — não cobrar na entrega');
     assert.equal(p.faixaPagoOnline(online({}, { meio: 'CARTAO_ONLINE' })), 'PAGO ONLINE (Cartão) — não cobrar na entrega');
+    assert.equal(p.faixaPagoOnline(online({}, { meio: 'CARTAO_ONLINE', tipo: 'DEBITO' })), 'PAGO ONLINE (Cartão de débito) — não cobrar na entrega');
     assert.equal(p.faixaPagoOnline(online({}, { situacao: 'ESTORNADO' })), null);
     assert.equal(p.faixaPagoOnline(pedido()), null);
     // Encerrado: a faixa some e fica o selo pequeno.

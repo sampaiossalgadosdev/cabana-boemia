@@ -1,7 +1,14 @@
 /**
- * Pagamento online do pedido do app (Etapa 4 de docs/pagamento-online.md): Pix no Mercado Pago
- * com o token DA LOJA, webhook, conciliação, expiração aos 15 minutos e o desligamento quando a
- * loja desconecta. Toda chamada ao Mercado Pago passa por lib/mercadoPago.js.
+ * Pagamento online do pedido do app (Etapas 4 a 7 de docs/pagamento-online.md): Pix e cartão
+ * (Checkout Pro) no Mercado Pago com o token DA LOJA, webhook, conciliação, expiração aos 15
+ * minutos, estorno e o desligamento quando a loja desconecta. Toda chamada ao Mercado Pago passa
+ * por lib/mercadoPago.js.
+ *
+ * Cartão (Etapa 7): a preferência é criada depois do commit (como o Pix) e o cliente paga no
+ * navegador do app. O id do pagamento só existe quando o cliente paga: até a aprovação, a
+ * consulta e a rotina acham o pagamento pela busca por `external_reference`. Tentativa recusada
+ * NÃO encerra o pedido (Decisão 3 da Etapa 7): fica registrada e o cliente tenta de novo até os
+ * 15 minutos, ou desiste (`desistirDoPagamento`) para escolher outra forma.
  *
  * - A fonte da verdade é a consulta do pagamento (`consultarPagamento`): o webhook e o app só
  *   avisam que algo pode ter mudado. Nada muda pelo corpo da notificação.
@@ -21,6 +28,7 @@ import { ErroHttp } from '../lib/erros.js';
 import { decifrar, chaveDoAmbiente } from '../lib/cifra.js';
 import { criarClienteMercadoPago, erroNoEmailDoPagador, ErroMercadoPago, validarAssinaturaWebhook } from '../lib/mercadoPago.js';
 import { faltasParaConectar, segredoDoWebhook } from '../lib/pagamentoOnline.js';
+import { mensagemDaRecusa, tipoDoPagamento } from '../lib/cartaoOnline.js';
 import { diaOperacional, paraCampoData } from '../lib/fuso.js';
 import { emitirParaEquipe } from '../lib/eventos.js';
 import { formatarDinheiro } from '@restaurante/shared/cupom';
@@ -49,6 +57,8 @@ import * as lojaRepo from '../repositories/loja.repository.js';
 export const PRAZO_PIX_MERCADO_PAGO_MS = 30 * 60 * 1000;
 /** A tela do Pix consulta a nossa API a cada 5 s; nós consultamos o Mercado Pago no máximo a cada 30 s. */
 export const INTERVALO_CONSULTA_APP_MS = 30 * 1000;
+/** Cartão: o cliente volta do navegador logo depois de pagar; consultamos no máximo a cada 10 s. */
+export const INTERVALO_CONSULTA_CARTAO_MS = 10 * 1000;
 /** A rotina roda a cada minuto e consulta cada pendente no máximo uma vez por minuto. */
 export const INTERVALO_ROTINA_MS = 60 * 1000;
 /** Mais de 3 falhas ao gerar Pix na mesma loja em 1 hora = alerta (Decisão 5 da Etapa 4). */
@@ -59,14 +69,21 @@ const STATUS_MP_RECUSADO = { rejected: 'RECUSADO', cancelled: 'CANCELADO' };
 /** Status do nosso pagamento em que um "approved" do Mercado Pago ainda é a aprovação (ou a atrasada). */
 const STATUS_ANTES_DA_APROVACAO = ['PENDENTE', 'EXPIRADO', 'CANCELADO', 'RECUSADO'];
 
-/** Pagamento como o app vê (sem valores internos como a comissão). */
+/**
+ * Pagamento como o app vê (sem valores internos como a comissão). Cartão pendente: o link do
+ * Checkout Pro (`checkoutUrl`, para "Tentar de novo") e a última tentativa recusada (`recusa`).
+ */
 export function pagamentoParaCliente(p) {
+  const pendente = p.status === 'PENDENTE';
+  const cartao = p.metodo === 'CARTAO_ONLINE';
   return {
     id: p.id,
     metodo: p.metodo,
     status: p.status,
-    qrCode: p.status === 'PENDENTE' ? p.pixQrCode : null,
-    qrCodeBase64: p.status === 'PENDENTE' ? p.pixQrCodeBase64 : null,
+    qrCode: pendente ? p.pixQrCode : null,
+    qrCodeBase64: pendente ? p.pixQrCodeBase64 : null,
+    checkoutUrl: pendente && cartao ? (p.checkoutUrl ?? null) : null,
+    recusa: pendente && cartao && p.dadosMp?.recusada ? { mensagem: mensagemDaRecusa(p.dadosMp.statusDetail) } : null,
     expiraEm: p.expiraEm,
     valorCentavos: p.valorTotalCentavos,
   };
@@ -77,6 +94,7 @@ const resumoMp = (r) => ({
   id: r.id,
   status: r.status,
   statusDetail: r.statusDetail,
+  tipo: r.tipo ?? null,
   valorCentavos: r.valorCentavos,
   comissaoCentavos: r.comissaoCentavos,
   aprovadoEm: r.aprovadoEm,
@@ -87,11 +105,15 @@ const resumoMp = (r) => ({
  * id e loja sempre; valor e comissão só na aprovação (é quando o dinheiro conta). A comissão só
  * é conferida quando o Mercado Pago a informa.
  */
-export function divergencias(pagamento, r, lojaIdDaConta = null) {
+export function divergencias(pagamento, r, lojaIdDaConta = null, mpUserIdDaConta = null) {
   const problemas = [];
   if (r.referenciaExterna !== String(pagamento.pedidoId)) problemas.push(`pedido ${r.referenciaExterna ?? '-'} no Mercado Pago`);
   if (pagamento.mpPaymentId && pagamento.mpPaymentId !== r.id) problemas.push('id do pagamento diferente');
   if (lojaIdDaConta != null && pagamento.pedido?.lojaId !== lojaIdDaConta) problemas.push('conta Mercado Pago de outra loja');
+  // Cartão (Etapa 7): quem recebe (collector) tem de ser a conta conectada da loja.
+  if (pagamento.metodo === 'CARTAO_ONLINE' && mpUserIdDaConta != null && r.collectorId != null && r.collectorId !== String(mpUserIdDaConta)) {
+    problemas.push('pagamento recebido por outra conta do Mercado Pago');
+  }
   if (r.status !== 'approved') return problemas;
   // Valor e comissão só quando a notificação vai APROVAR (pagamento ainda não aprovado). Depois,
   // um estorno parcial pode mudar a comissão no Mercado Pago e não é divergência (Etapa 5).
@@ -152,9 +174,14 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
   const emAndamento = new Set();
 
   async function tokenDaLoja(lojaId) {
+    return (await contaDaLoja(lojaId)).token;
+  }
+
+  /** Token (decifrado só para a chamada) e a conta (`mpUserId`) da loja no Mercado Pago. */
+  async function contaDaLoja(lojaId) {
     const conexao = await conexaoRepo.buscarDaLoja(lojaId);
-    if (!conexao?.accessTokenCifrado) return null;
-    return decifrar(conexao.accessTokenCifrado, chaveDoAmbiente(env));
+    if (!conexao?.accessTokenCifrado) return { token: null, mpUserId: conexao?.mpUserId ?? null };
+    return { token: decifrar(conexao.accessTokenCifrado, chaveDoAmbiente(env)), mpUserId: conexao.mpUserId ?? null };
   }
 
   async function resposta(pedidoId) {
@@ -257,6 +284,59 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
   }
 
   /**
+   * Cria (ou devolve a já criada) preferência do Checkout Pro do pedido AGUARDANDO_PAGAMENTO com
+   * cartão (Etapa 7). Mesmas regras de falha do Pix: pedido EXPIRADO (estoque e campanha de
+   * volta) e 502 PAGAMENTO_FALHOU; e-mail recusado = 422 EMAIL_RECUSADO_PAGAMENTO.
+   */
+  async function gerarCartao(pedidoId, { email, agora = new Date() }) {
+    const pagamento = await pagamentoRepo.ultimoDoPedido(pedidoId);
+    if (!pagamento) return resposta(pedidoId);
+    const { pedido } = pagamento;
+    if (pedido.status !== 'AGUARDANDO_PAGAMENTO') {
+      if (pedido.status === 'EXPIRADO') {
+        throw new ErroHttp(409, 'O prazo para pagar este pedido acabou. Faça o pedido de novo.', { codigo: 'PIX_EXPIRADO' });
+      }
+      return resposta(pedidoId);
+    }
+    if (pagamento.mpPreferenceId && pagamento.checkoutUrl) return resposta(pedidoId); // reenvio da mesma chave
+
+    const loja = await lojaRepo.buscarPorId(pedido.lojaId);
+    let pref;
+    try {
+      pref = await mp.criarPreferencia(await tokenDaLoja(pedido.lojaId), {
+        valorCentavos: pagamento.valorTotalCentavos,
+        comissaoCentavos: pagamento.valorPlataformaCentavos,
+        pedidoId,
+        titulo: `Pedido na ${loja?.nome ?? 'Taaki Delivery'}`,
+        email,
+        agora,
+        expiraEm: pagamento.expiraEm,
+        idempotencyKey: pagamento.idempotencyKey,
+      });
+    } catch (err) {
+      log.warn(`[pagamento] pedido ${pedidoId}: preferência do cartão não criada (status ${err.status ?? '-'}, ${textoDoErro(err)})`);
+      await expirarPedido(pedidoId, { statusPagamento: 'RECUSADO', dadosMp: { erro: err.codigo ?? 'FALHA', status: err.status ?? null, ...(err.detalhe && { detalhe: err.detalhe }) }, agora });
+      if (erroNoEmailDoPagador(err)) {
+        throw new ErroHttp(422, 'O Mercado Pago não aceitou este e-mail para pagamento. Confira o e-mail no seu cadastro e tente de novo.', {
+          codigo: 'EMAIL_RECUSADO_PAGAMENTO',
+        });
+      }
+      await conferirFalhasDaLoja(pedido.lojaId, agora).catch((e) => log.warn(`[pagamento] alerta de falhas: ${e.message}`));
+      throw new ErroHttp(502, 'Não foi possível abrir o pagamento com cartão agora. Tente de novo ou escolha outra forma de pagamento.', {
+        codigo: 'PAGAMENTO_FALHOU',
+      });
+    }
+    await pagamentoRepo.atualizar(pagamento.id, { mpPreferenceId: pref.id, checkoutUrl: pref.checkoutUrl });
+    return resposta(pedidoId);
+  }
+
+  /** Pix ou cartão, conforme o pagamento do pedido (o controller chama depois do commit). */
+  async function gerarPagamento(pedidoId, dados) {
+    const pagamento = await pagamentoRepo.ultimoDoPedido(pedidoId);
+    return pagamento?.metodo === 'CARTAO_ONLINE' ? gerarCartao(pedidoId, dados) : gerarPix(pedidoId, dados);
+  }
+
+  /**
    * Aprovação (a única): numa transação com o pedido travado, AGUARDANDO_PAGAMENTO → CONFIRMADO
    * com número e dia operacional da aprovação, forma PIX, campanha usada e cupom PEDIDO; depois do
    * commit, `pedido:novo` e `impressao:nova`. Pedido já EXPIRADO: não revive (A_ESTORNAR + alerta).
@@ -268,9 +348,18 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
         const loja = await lojaRepo.buscarPorId(linha.lojaId, tx);
         const dia = diaOperacional(agora, horaViradaDe(loja));
         const numeroDia = await pedidoRepo.proximoNumeroDoDia(linha.lojaId, dia, tx);
+        // Cartão: a forma e o tipo reais (crédito, débito, pré-pago, saldo) que o Mercado Pago informou.
+        const cartao = pagamento.metodo === 'CARTAO_ONLINE' ? tipoDoPagamento(r.tipo) : null;
         await tx.pedido.update({
           where: { id: pagamento.pedidoId },
-          data: { status: 'CONFIRMADO', numeroDia, dataRef: paraCampoData(dia), formaPagamento: 'PIX', trocoParaCentavos: null },
+          data: {
+            status: 'CONFIRMADO',
+            numeroDia,
+            dataRef: paraCampoData(dia),
+            formaPagamento: cartao ? cartao.forma : 'PIX',
+            ...(cartao && { tipoPagamentoOnline: cartao.tipo }),
+            trocoParaCentavos: null,
+          },
         });
         await usarCampanha(tx, pagamento.pedidoId, agora);
         // Livro-razão: a parte da taxa que a trava de 50% deixou fora do split (Decisão 2 da Etapa 6).
@@ -299,7 +388,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
               lojaId: linha.lojaId,
               pedidoId: pagamento.pedidoId,
               mensagem:
-                `O Pix de ${formatarDinheiro(pagamento.valorTotalCentavos)} do pedido ${pagamento.pedidoId} foi pago depois que o ` +
+                `O ${pagamento.metodo === 'CARTAO_ONLINE' ? 'pagamento com cartão' : 'Pix'} de ${formatarDinheiro(pagamento.valorTotalCentavos)} do pedido ${pagamento.pedidoId} foi pago depois que o ` +
                 'pedido expirou. O pedido não foi para a loja e o valor precisa voltar ao cliente (estorno).',
             },
             tx,
@@ -327,8 +416,16 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
    * Concilia o nosso pagamento com a resposta do Mercado Pago (já consultada). Devolve o que
    * aconteceu (texto curto para o registro do webhook).
    */
-  async function conciliar(pagamento, r, { agora = new Date(), lojaIdDaConta = null } = {}) {
-    const problemas = divergencias(pagamento, r, lojaIdDaConta);
+  async function conciliar(pagamento, r, { agora = new Date(), lojaIdDaConta = null, mpUserIdDaConta = null } = {}) {
+    // Cartão: tentativa recusada (o cliente pode tentar de novo no mesmo checkout, Decisão 3 da
+    // Etapa 7). Com o pedido aguardando, só registra o motivo; depois (aprovado por outra tentativa,
+    // expirado, desistido) é uma tentativa antiga e não muda nada.
+    if (pagamento.metodo === 'CARTAO_ONLINE' && STATUS_MP_RECUSADO[r.status] && r.referenciaExterna === String(pagamento.pedidoId)) {
+      if (pagamento.status !== 'PENDENTE' || (pagamento.mpPaymentId && pagamento.mpPaymentId !== r.id)) return 'TENTATIVA_ANTIGA';
+      await pagamentoRepo.atualizarSeEm(pagamento.id, ['PENDENTE'], { consultadoEm: agora, dadosMp: { ...resumoMp(r), recusada: true } });
+      return 'TENTATIVA_RECUSADA';
+    }
+    const problemas = divergencias(pagamento, r, lojaIdDaConta, mpUserIdDaConta);
     if (problemas.length) {
       log.warn(`[pagamento] pedido ${pagamento.pedidoId}: divergência com o Mercado Pago (${problemas.length})`);
       await alertarUmaVez({
@@ -733,12 +830,28 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
     return criados;
   }
 
+  /**
+   * Situação do pagamento no Mercado Pago: pelo id (Pix, ou cartão já aprovado) ou, no cartão
+   * ainda sem id, pela busca do pedido: o aprovado, se houver; senão a tentativa mais nova.
+   * Nenhum pagamento ainda (o cliente não pagou) = null.
+   */
+  async function situacaoNoMp(pagamento, token) {
+    if (pagamento.mpPaymentId) return mp.consultarPagamento(token, pagamento.mpPaymentId);
+    if (pagamento.metodo !== 'CARTAO_ONLINE' || !pagamento.mpPreferenceId) return null;
+    const lista = await mp.buscarPagamentosDoPedido(token, pagamento.pedidoId);
+    return lista.find((p) => p.status === 'approved') ?? lista[0] ?? null;
+  }
+
   /** Consulta o Mercado Pago com o token da loja do pedido e concilia. */
   async function consultarEConciliar(pagamento, agora = new Date()) {
-    if (!pagamento.mpPaymentId) return 'SEM_ID';
-    const token = await tokenDaLoja(pagamento.pedido.lojaId);
-    const r = await mp.consultarPagamento(token, pagamento.mpPaymentId);
-    return conciliar(pagamento, r, { agora });
+    if (!pagamento.mpPaymentId && !pagamento.mpPreferenceId) return 'SEM_ID';
+    const { token, mpUserId } = await contaDaLoja(pagamento.pedido.lojaId);
+    const r = await situacaoNoMp(pagamento, token);
+    if (!r) {
+      await pagamentoRepo.atualizar(pagamento.id, { consultadoEm: agora });
+      return 'SEM_PAGAMENTO';
+    }
+    return conciliar(pagamento, r, { agora, mpUserIdDaConta: mpUserId });
   }
 
   /**
@@ -747,12 +860,13 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
    * (se ele aprovar depois, o webhook marca A_ESTORNAR).
    */
   async function expirarPendente(pagamento, agora = new Date(), statusPagamento = 'EXPIRADO') {
-    if (pagamento.mpPaymentId) {
+    if (pagamento.mpPaymentId || pagamento.mpPreferenceId) {
       try {
-        const token = await tokenDaLoja(pagamento.pedido.lojaId);
-        const r = await mp.consultarPagamento(token, pagamento.mpPaymentId);
-        if (r.status === 'approved') return conciliar(pagamento, r, { agora });
-        if (r.status === 'pending' || r.status === 'in_process') await mp.cancelarPagamento(token, pagamento.mpPaymentId);
+        const { token, mpUserId } = await contaDaLoja(pagamento.pedido.lojaId);
+        const r = await situacaoNoMp(pagamento, token);
+        if (r?.status === 'approved') return conciliar(pagamento, r, { agora, mpUserIdDaConta: mpUserId });
+        // Pix pendente: cancelado no Mercado Pago. Cartão: a preferência já venceu aos 15 minutos.
+        if (r && (r.status === 'pending' || r.status === 'in_process')) await mp.cancelarPagamento(token, r.id);
       } catch (err) {
         log.warn(`[pagamento] pedido ${pagamento.pedidoId}: cancelamento no Mercado Pago falhou (${err.status ?? '-'}, ${textoDoErro(err)})`);
       }
@@ -760,7 +874,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
     return (await expirarPedido(pagamento.pedidoId, { statusPagamento, agora })) ? 'EXPIRADO' : 'JA_TRATADO';
   }
 
-  /** Situação do Pix para a tela do app (só o dono do pedido; outro = 404). */
+  /** Situação do pagamento online (Pix ou cartão) para a tela do app (só o dono do pedido; outro = 404). */
   async function situacaoParaCliente(clienteId, pedidoId, agora = new Date()) {
     const pagamento = await pagamentoRepo.ultimoDoPedido(pedidoId);
     if (!pagamento || pagamento.pedido.clienteId !== clienteId) {
@@ -769,12 +883,43 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
     if (pagamento.status === 'PENDENTE') {
       try {
         if (pagamento.expiraEm <= agora) await expirarPendente(pagamento, agora);
-        else if (!pagamento.consultadoEm || agora - pagamento.consultadoEm >= INTERVALO_CONSULTA_APP_MS) {
+        else if (
+          !pagamento.consultadoEm ||
+          agora - pagamento.consultadoEm >= (pagamento.metodo === 'CARTAO_ONLINE' ? INTERVALO_CONSULTA_CARTAO_MS : INTERVALO_CONSULTA_APP_MS)
+        ) {
           await consultarEConciliar(pagamento, agora);
         }
       } catch (err) {
         log.warn(`[pagamento] consulta do pedido ${pedidoId} falhou (${err.status ?? '-'}, ${textoDoErro(err)})`);
       }
+    }
+    return resposta(pedidoId);
+  }
+
+  /**
+   * "Escolher outra forma de pagamento" no app (Etapa 7): o cliente desiste do pedido que espera
+   * o pagamento. Só o dono e só aguardando (senão devolve a situação como está). Consulta uma
+   * última vez (pago no último segundo vence); senão encerra a preferência no Mercado Pago e o
+   * pedido vira EXPIRADO com estoque e campanha de volta (pagamento CANCELADO).
+   */
+  async function desistirDoPagamento(clienteId, pedidoId, agora = new Date()) {
+    const pagamento = await pagamentoRepo.ultimoDoPedido(pedidoId);
+    if (!pagamento || pagamento.pedido.clienteId !== clienteId) {
+      throw new ErroHttp(404, 'Pedido não encontrado', { codigo: 'NAO_ENCONTRADO' });
+    }
+    if (pagamento.status === 'PENDENTE' && pagamento.pedido.status === 'AGUARDANDO_PAGAMENTO') {
+      let aprovado = false;
+      try {
+        const { token, mpUserId } = await contaDaLoja(pagamento.pedido.lojaId);
+        const r = await situacaoNoMp(pagamento, token);
+        if (r?.status === 'approved') aprovado = (await conciliar(pagamento, r, { agora, mpUserIdDaConta: mpUserId })) === 'APROVADO';
+        if (!aprovado && pagamento.mpPreferenceId) await mp.expirarPreferencia(token, pagamento.mpPreferenceId, agora);
+        if (!aprovado && r && pagamento.metodo === 'PIX' && r.status === 'pending') await mp.cancelarPagamento(token, r.id);
+      } catch (err) {
+        // Sem o Mercado Pago o cliente ainda desiste; se um pagamento for aprovado depois, ele é estornado (A_ESTORNAR).
+        log.warn(`[pagamento] desistência do pedido ${pedidoId}: Mercado Pago (${err.status ?? '-'}, ${textoDoErro(err)})`);
+      }
+      if (!aprovado) await expirarPedido(pedidoId, { statusPagamento: 'CANCELADO', agora });
     }
     return resposta(pedidoId);
   }
@@ -788,7 +933,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
           const s = await expirarPendente(p, agora);
           if (s === 'EXPIRADO') r.expirados += 1;
           if (s === 'APROVADO') r.aprovados += 1;
-        } else if (p.mpPaymentId && (!p.consultadoEm || agora - p.consultadoEm >= INTERVALO_ROTINA_MS)) {
+        } else if ((p.mpPaymentId || p.mpPreferenceId) && (!p.consultadoEm || agora - p.consultadoEm >= INTERVALO_ROTINA_MS)) {
           r.consultados += 1;
           if ((await consultarEConciliar(p, agora)) === 'APROVADO') r.aprovados += 1;
         }
@@ -816,9 +961,11 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
   async function cancelarPendentesDaLoja(lojaId, agora = new Date()) {
     let cancelados = 0;
     for (const p of await pagamentoRepo.pendentes({ lojaId })) {
-      if (p.mpPaymentId) {
+      if (p.mpPaymentId || p.mpPreferenceId) {
         try {
-          await mp.cancelarPagamento(await tokenDaLoja(lojaId), p.mpPaymentId);
+          // Pix: cancela o pagamento. Cartão: encerra a preferência (ninguém paga mais nela).
+          if (p.mpPaymentId) await mp.cancelarPagamento(await tokenDaLoja(lojaId), p.mpPaymentId);
+          else await mp.expirarPreferencia(await tokenDaLoja(lojaId), p.mpPreferenceId, agora);
         } catch (err) {
           log.warn(`[pagamento] desconectar, pedido ${p.pedidoId}: cancelamento falhou (${err.status ?? '-'}, ${textoDoErro(err)})`);
         }
@@ -866,7 +1013,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
     let pagamento = await pagamentoRepo.buscarPorMpPaymentId(r.id);
     if (!pagamento && /^\d+$/.test(r.referenciaExterna ?? '')) pagamento = await pagamentoRepo.ultimoDoPedido(Number(r.referenciaExterna));
     if (!pagamento) return 'PAGAMENTO_DESCONHECIDO';
-    return conciliar(pagamento, r, { agora, lojaIdDaConta: conexao.lojaId });
+    return conciliar(pagamento, r, { agora, lojaIdDaConta: conexao.lojaId, mpUserIdDaConta: conexao.mpUserId });
   }
 
   /**
@@ -940,6 +1087,9 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
 
   return {
     gerarPix,
+    gerarCartao,
+    gerarPagamento,
+    desistirDoPagamento,
     aprovar,
     conciliar,
     expirarPedido,

@@ -49,3 +49,11 @@ export function buscarPorMpUserId(mpUserId, db = prisma) {
 export function buscarQualquerPorMpUserId(mpUserId, db = prisma) {
   return db.conexaoMercadoPago.findFirst({ where: { mpUserId: String(mpUserId) }, orderBy: { atualizadoEm: 'desc' } });
 }
+
+/**
+ * Pedidos da loja pagos online que ainda não foram finalizados nem cancelados (`status` = os
+ * abertos; quem chama passa a lista). O Pix pendente (AGUARDANDO_PAGAMENTO) não conta.
+ */
+export function contarPedidosPagosAbertos(lojaId, status, db = prisma) {
+  return db.pedido.count({ where: { lojaId, meioOnline: { not: null }, status: { in: status } } });
+}

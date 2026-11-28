@@ -26,6 +26,7 @@ import * as lojaRepo from '../repositories/loja.repository.js';
 import * as usuarioRepo from '../repositories/usuario.repository.js';
 import { criarAlerta } from './alerta.service.js';
 import { pagamentosPadrao } from './pagamento.service.js';
+import { STATUS_ABERTOS } from './pedido.service.js';
 
 /** Renova quem vence em menos disto. */
 export const ANTECEDENCIA_RENOVACAO_MS = 30 * 24 * 60 * 60 * 1000;
@@ -51,10 +52,11 @@ export function criarServicoConexaoMp({ mercadoPago, env = process.env, log = co
   }
 
   async function situacao(lojaId) {
-    const [loja, conexao, pendentes] = await Promise.all([
+    const [loja, conexao, pendentes, pedidosPagosAbertos] = await Promise.all([
       lojaRepo.buscarPorId(lojaId),
       conexaoRepo.buscarDaLoja(lojaId),
       conexaoRepo.contarPagamentosPendentes(lojaId),
+      conexaoRepo.contarPedidosPagosAbertos(lojaId, STATUS_ABERTOS),
     ]);
     const status = conexao?.status ?? 'NAO_CONECTADA';
     return {
@@ -66,6 +68,8 @@ export function criarServicoConexaoMp({ mercadoPago, env = process.env, log = co
       flagGlobal: pagamentoOnlineLigado(env),
       configurado: faltasParaConectar(env).length === 0,
       pendentes,
+      // Pedidos pagos online ainda abertos: enquanto houver, "Desconectar" fica bloqueado.
+      pedidosPagosAbertos,
     };
   }
 
@@ -132,6 +136,17 @@ export function criarServicoConexaoMp({ mercadoPago, env = process.env, log = co
     const conexao = await conexaoRepo.buscarDaLoja(lojaId);
     if (!conexao || conexao.status === 'DESCONECTADA') {
       throw new ErroHttp(409, 'A loja não está conectada ao Mercado Pago', { codigo: 'MP_NAO_CONECTADO' });
+    }
+    // Pedido já pago online e ainda aberto: sem a conexão não haveria como estornar (recusa da loja,
+    // cancelamento pelo cliente ou pelo ADMIN). A loja finaliza ou cancela antes. O Pix pendente
+    // não conta: esse continua sendo cancelado na desconexão.
+    const abertos = await conexaoRepo.contarPedidosPagosAbertos(lojaId, STATUS_ABERTOS);
+    if (abertos > 0) {
+      throw new ErroHttp(
+        409,
+        `A loja tem ${abertos === 1 ? '1 pedido pago online em aberto' : `${abertos} pedidos pagos online em aberto`}. Finalize ou cancele ${abertos === 1 ? 'o pedido' : 'os pedidos'} antes de desconectar o Mercado Pago.`,
+        { codigo: 'PEDIDOS_PAGOS_ABERTOS', detalhes: { quantidade: abertos } },
+      );
     }
     if (!confirmar) return { desconectada: false, pendentes: await conexaoRepo.contarPagamentosPendentes(lojaId) };
     // Desliga primeiro (nenhum Pix novo entra) e cancela os pendentes antes de apagar os tokens.

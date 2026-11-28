@@ -271,6 +271,7 @@ describe('conexão da loja com o Mercado Pago (API)', { skip: semBancoDeTeste },
       flagGlobal: false,
       configurado: true,
       pendentes: 0,
+      pedidosPagosAbertos: 0,
     });
     assert.equal((await api('POST', '/retaguarda/pagamento-online/conectar', { token: tk.ana, corpo: {} })).status, 403);
     const outraLoja = await api('POST', '/retaguarda/pagamento-online/conectar', { token: tk.outra, loja: 'cabana-boemia', corpo: {} });
@@ -396,6 +397,43 @@ describe('conexão da loja com o Mercado Pago (API)', { skip: semBancoDeTeste },
     assert.equal((await api('POST', '/retaguarda/pagamento-online/desconectar', { token: tk.cabana, corpo: { confirmar: true } })).corpo.erro.codigo, 'MP_NAO_CONECTADO');
     await prisma.pagamento.deleteMany();
     await prisma.pedido.delete({ where: { id: pedido.id } });
+  });
+
+  test('desconectar com pedido pago online em aberto: bloqueado com a quantidade; finalizado ou Pix pendente não bloqueiam', async () => {
+    await conectar(tk.cabana);
+    const dataRef = new Date('2026-11-26T00:00:00Z');
+    const pago = await prisma.pedido.create({
+      data: { lojaId: 1, dataRef, numeroDia: 901, canal: 'APP', nomeCliente: 'Pago', status: 'CONFIRMADO', meioOnline: 'PIX', formaPagamento: 'PIX' },
+    });
+    const aguardando = await prisma.pedido.create({
+      data: { lojaId: 1, dataRef, canal: 'APP', nomeCliente: 'Pix pendente', status: 'AGUARDANDO_PAGAMENTO', meioOnline: 'PIX', formaPagamento: 'PIX' },
+    });
+    await prisma.pagamento.create({
+      data: { pedidoId: aguardando.id, metodo: 'PIX', valorTotalCentavos: 1000, idempotencyKey: 'k-desconectar-2', expiraEm: new Date() },
+    });
+    const naEntrega = await prisma.pedido.create({
+      data: { lojaId: 1, dataRef, numeroDia: 902, canal: 'APP', nomeCliente: 'Na entrega', status: 'CONFIRMADO', formaPagamento: 'DINHEIRO' },
+    });
+    try {
+      assert.equal((await api('GET', '/retaguarda/pagamento-online', { token: tk.cabana })).corpo.pedidosPagosAbertos, 1);
+      for (const corpo of [{}, { confirmar: true }]) {
+        const r = await api('POST', '/retaguarda/pagamento-online/desconectar', { token: tk.cabana, corpo });
+        assert.equal(r.status, 409);
+        assert.equal(r.corpo.erro.codigo, 'PEDIDOS_PAGOS_ABERTOS');
+        assert.equal(r.corpo.erro.detalhes.quantidade, 1);
+        assert.match(r.corpo.erro.mensagem, /1 pedido pago online em aberto/);
+      }
+      assert.equal((await prisma.conexaoMercadoPago.findUnique({ where: { lojaId: 1 } })).status, 'CONECTADA', 'nada mudou');
+      // A loja finaliza o pedido pago: desconectar libera (o Pix pendente segue sendo cancelado).
+      await prisma.pedido.update({ where: { id: pago.id }, data: { status: 'FINALIZADO', finalizadoEm: new Date() } });
+      assert.equal((await api('GET', '/retaguarda/pagamento-online', { token: tk.cabana })).corpo.pedidosPagosAbertos, 0);
+      const r = await api('POST', '/retaguarda/pagamento-online/desconectar', { token: tk.cabana, corpo: { confirmar: true } });
+      assert.equal(r.status, 200, JSON.stringify(r.corpo));
+      assert.equal((await prisma.pedido.findUnique({ where: { id: aguardando.id } })).status, 'EXPIRADO', 'Pix pendente cancelado como antes');
+    } finally {
+      await prisma.pagamento.deleteMany({ where: { pedidoId: aguardando.id } });
+      await prisma.pedido.deleteMany({ where: { id: { in: [pago.id, aguardando.id, naEntrega.id] } } });
+    }
   });
 
   test('interruptor: travado com a flag global desligada ou sem conexão; desligar sempre pode', async () => {

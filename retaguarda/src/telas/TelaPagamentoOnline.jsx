@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { formatarDataHora } from '../lib/formatar.js';
-import { avisoDesconectar, descreverSituacao, mensagemDoRetorno, motivoInterruptorTravado } from '../lib/pagamentoOnline.js';
+import { avisoDesconectar, avisoPedidosPagosAbertos, descreverSituacao, mensagemDoRetorno, motivoInterruptorTravado } from '../lib/pagamentoOnline.js';
 import { Confirmar, EstadoCarga, Interruptor, useAvisar, useCarregar } from '../componentes/comuns.jsx';
 
 /**
@@ -120,6 +120,9 @@ function Conteudo({ s, recarregar, avisar }) {
             Você entra na sua conta Mercado Pago e autoriza o Taaki Delivery. A tarifa do Mercado Pago é descontada da loja;
             com os entregadores do Taaki, a taxa de entrega vai para a plataforma no mesmo pagamento.
           </p>
+          {conectada && avisoPedidosPagosAbertos(s.pedidosPagosAbertos) && (
+            <div className="alerta" role="status">{avisoPedidosPagosAbertos(s.pedidosPagosAbertos)}</div>
+          )}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {s.situacao !== 'CONECTADA' && (
               <button type="button" className="botao botao--primario" disabled={ocupado || !s.configurado} onClick={conectar}>
@@ -127,7 +130,13 @@ function Conteudo({ s, recarregar, avisar }) {
               </button>
             )}
             {conectada && (
-              <button type="button" className="botao botao--perigo" disabled={ocupado} onClick={pedirDesconexao}>
+              <button
+                type="button"
+                className="botao botao--perigo"
+                disabled={ocupado || s.pedidosPagosAbertos > 0}
+                title={avisoPedidosPagosAbertos(s.pedidosPagosAbertos) ?? undefined}
+                onClick={pedirDesconexao}
+              >
                 Desconectar
               </button>
             )}

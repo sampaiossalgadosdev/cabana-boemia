@@ -179,14 +179,29 @@ export function dataComFusoBrasilia(data) {
   return `${local.toISOString().slice(0, 23)}-03:00`;
 }
 
+/** Diferença máxima entre o `ts` da assinatura e o relógio do servidor (notificação velha = reenvio). */
+export const TOLERANCIA_TS_WEBHOOK_MS = 10 * 60 * 1000;
+
+/**
+ * Instante do `ts` da assinatura em ms. O Mercado Pago manda em segundos ou em milissegundos
+ * (a documentação mostra os dois): até 11 dígitos = segundos. Não numérico = null.
+ */
+export function instanteDoTs(ts) {
+  if (!/^\d{1,16}$/.test(String(ts ?? ''))) return null;
+  const n = Number(ts);
+  return n < 1e11 ? n * 1000 : n;
+}
+
 /**
  * Assinatura da notificação (cabeçalho `x-signature: ts=…,v1=…`): HMAC-SHA256 (hex) com
  * MP_WEBHOOK_SECRET do manifesto `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`. O
  * `data.id` vai em minúsculas; a parte que não veio sai do manifesto. Comparação em tempo
- * constante. Sem segredo = sempre inválida.
- * @param {{ assinatura?: string, requestId?: string, dataId?: string | number | null, segredo?: string }} dados
+ * constante. Sem segredo = sempre inválida. Com `agora`, o `ts` também precisa estar a no
+ * máximo 10 minutos do relógio do servidor (uma notificação assinada antiga não vale de novo).
+ * @param {{ assinatura?: string, requestId?: string, dataId?: string | number | null, segredo?: string,
+ *   agora?: Date | null, toleranciaMs?: number }} dados
  */
-export function validarAssinaturaWebhook({ assinatura, requestId, dataId, segredo }) {
+export function validarAssinaturaWebhook({ assinatura, requestId, dataId, segredo, agora = null, toleranciaMs = TOLERANCIA_TS_WEBHOOK_MS }) {
   if (!segredo || typeof assinatura !== 'string') return false;
   const partes = Object.fromEntries(
     assinatura.split(',').map((p) => {
@@ -195,6 +210,10 @@ export function validarAssinaturaWebhook({ assinatura, requestId, dataId, segred
     }),
   );
   if (!partes.ts || !/^[0-9a-f]{64}$/i.test(partes.v1 ?? '')) return false;
+  if (agora) {
+    const instante = instanteDoTs(partes.ts);
+    if (instante == null || Math.abs(agora.getTime() - instante) > toleranciaMs) return false;
+  }
   const esperado = createHmac('sha256', segredo).update(manifestoDoWebhook({ requestId, dataId, ts: partes.ts })).digest();
   const recebido = Buffer.from(partes.v1, 'hex');
   return recebido.length === esperado.length && timingSafeEqual(recebido, esperado);

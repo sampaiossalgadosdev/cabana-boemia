@@ -1054,7 +1054,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
    */
   async function receberWebhook({ assinatura, requestId, dataIdQuery, corpo }, agora = new Date()) {
     const dataId = dataIdQuery ?? corpo?.data?.id ?? null;
-    if (!validarAssinaturaWebhook({ assinatura, requestId, dataId, segredo: segredoDoWebhook(env) })) {
+    if (!validarAssinaturaWebhook({ assinatura, requestId, dataId, segredo: segredoDoWebhook(env), agora })) {
       throw new ErroHttp(401, 'Assinatura inválida', { codigo: 'ASSINATURA_INVALIDA' });
     }
     const tipo = String(corpo?.type ?? corpo?.topic ?? 'desconhecido').slice(0, 60);

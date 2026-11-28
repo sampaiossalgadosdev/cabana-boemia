@@ -16,6 +16,7 @@ import {
   manifestoDoWebhook,
   urlDeNotificacao,
   validarAssinaturaWebhook,
+  instanteDoTs,
 } from '../src/lib/mercadoPago.js';
 import { resolverTaxa } from '../src/services/pedido.service.js';
 
@@ -29,6 +30,9 @@ const PINO_CLIENTE = { latitude: -23.31, longitude: -50.32 };
 const DISTANCIA = 3200; // 3,2 km → R$ 1,00 + 0,90 × 6,4 km = R$ 6,76
 
 /** Assinatura x-signature como o Mercado Pago manda. */
+/** ts da assinatura (segundos) no relógio do teste: o webhook recusa ts a mais de 10 min. */
+const tsDe = (instante) => String(Math.floor(instante.getTime() / 1000));
+
 function assinar({ dataId, requestId, ts = '1732700000', segredo = SEGREDO_WEBHOOK }) {
   const v1 = createHmac('sha256', segredo).update(manifestoDoWebhook({ dataId, requestId, ts })).digest('hex');
   return `ts=${ts},v1=${v1}`;
@@ -144,6 +148,25 @@ describe('módulo do Mercado Pago: Pix, consulta, cancelamento e assinatura', ()
     assert.equal(validarAssinaturaWebhook({ assinatura, requestId: 'req-1', dataId: 'ABC123', segredo: 'outro' }), false);
     assert.equal(validarAssinaturaWebhook({ assinatura, requestId: 'req-1', dataId: 'ABC123', segredo: '' }), false);
     assert.equal(validarAssinaturaWebhook({ assinatura: 'lixo', requestId: 'req-1', dataId: 'ABC123', segredo: SEGREDO_WEBHOOK }), false);
+  });
+
+  test('assinatura com o relógio: ts a até 10 min vale (segundos ou ms); mais velho ou no futuro = inválida', () => {
+    const agora = new Date('2026-11-28T12:00:00Z');
+    const valida = (instante, emMs = false) => {
+      const ts = emMs ? String(instante.getTime()) : tsDe(instante);
+      return validarAssinaturaWebhook({ assinatura: assinar({ dataId: '1', requestId: 'r', ts }), requestId: 'r', dataId: '1', segredo: SEGREDO_WEBHOOK, agora });
+    };
+    const min = (n) => new Date(agora.getTime() + n * 60_000);
+    assert.equal(valida(agora), true);
+    assert.equal(valida(min(-9.9)), true);
+    assert.equal(valida(min(9.9)), true);
+    assert.equal(valida(min(-10.1)), false, 'velha (reenvio de uma notificação assinada antiga)');
+    assert.equal(valida(min(10.1)), false, 'no futuro');
+    assert.equal(valida(min(-5), true), true, 'ts em milissegundos');
+    assert.equal(valida(min(-11), true), false);
+    assert.equal(instanteDoTs('1764331200'), 1764331200000);
+    assert.equal(instanteDoTs('1764331200000'), 1764331200000);
+    assert.equal(instanteDoTs('abc'), null);
   });
 
   test('tokenAindaAutorizado: /users/me com o token; 401/403 = false; outro erro lança', async () => {
@@ -343,7 +366,7 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     const rota = dataId != null ? `/mercadopago/webhook?data.id=${dataId}&type=${corpo.type}` : '/mercadopago/webhook';
     const r = await api('POST', rota, {
       corpo,
-      headers: { 'x-signature': assinatura ?? assinar({ dataId, requestId }), 'x-request-id': requestId },
+      headers: { 'x-signature': assinatura ?? assinar({ dataId, requestId, ts: tsDe(agora) }), 'x-request-id': requestId },
     });
     await pagamentos.aguardarProcessamentos();
     return r;
@@ -662,6 +685,13 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     const notificacao = notificacaoDePagamento(mpPaymentId);
     const invalida = await notificar(notificacao, { assinatura: assinar({ dataId: mpPaymentId, requestId: 'x', segredo: 'errado' }) });
     assert.equal(invalida.status, 401);
+    // Assinada certo, mas com ts de 11 minutos atrás (reenvio de uma notificação velha): 401 também.
+    const velhaReq = `req-velha-${seq}`;
+    const velha = await notificar(notificacao, {
+      requestId: velhaReq,
+      assinatura: assinar({ dataId: mpPaymentId, requestId: velhaReq, ts: tsDe(new Date(agora.getTime() - 11 * 60_000)) }),
+    });
+    assert.equal(velha.status, 401);
 
     agora = new Date(SABADO_20H.getTime() + 3 * 60_000);
     mp.mudar(mpPaymentId, { status: 'approved', statusDetail: 'accredited', aprovadoEm: agora.toISOString() });

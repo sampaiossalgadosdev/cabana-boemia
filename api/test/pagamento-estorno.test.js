@@ -20,6 +20,9 @@ const PINO_LOJA = { latitude: -23.3049, longitude: -50.3133 };
 const PINO_CLIENTE = { latitude: -23.31, longitude: -50.32 };
 const MINUTO = 60_000;
 
+/** ts da assinatura (segundos) no relógio do teste: o webhook recusa ts a mais de 10 min. */
+const tsDe = (instante) => String(Math.floor(instante.getTime() / 1000));
+
 function assinar({ dataId, requestId, ts = '1732700000' }) {
   const v1 = createHmac('sha256', SEGREDO_WEBHOOK).update(manifestoDoWebhook({ dataId, requestId, ts })).digest('hex');
   return `ts=${ts},v1=${v1}`;
@@ -241,7 +244,7 @@ describe('estorno, aceite e PDV (pagamento online, Etapa 5)', { skip: semBancoDe
     const corpo = { id: Number(`${Date.now()}${seq}`.slice(-12)), type: 'payment', action: 'payment.updated', user_id: Number(CONTA_MP), data: { id: String(mpPaymentId) } };
     const res = await fetch(`${base}/mercadopago/webhook?data.id=${mpPaymentId}&type=payment`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-signature': assinar({ dataId: mpPaymentId, requestId }), 'x-request-id': requestId },
+      headers: { 'content-type': 'application/json', 'x-signature': assinar({ dataId: mpPaymentId, requestId, ts: tsDe(agora) }), 'x-request-id': requestId },
       body: JSON.stringify(corpo),
     });
     assert.equal(res.status, 200);

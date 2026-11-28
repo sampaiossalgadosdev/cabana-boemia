@@ -23,6 +23,9 @@ const PINO_CLIENTE = { latitude: -23.31, longitude: -50.32 };
 const DISTANCIA = 3200; // R$ 1,00 + 0,90 × 6,4 km = R$ 6,76
 const QUINZE_MIN = 15 * 60 * 1000;
 
+/** ts da assinatura (segundos) no relógio do teste: o webhook recusa ts a mais de 10 min. */
+const tsDe = (instante) => String(Math.floor(instante.getTime() / 1000));
+
 function assinar({ dataId, requestId, ts = '1732700000' }) {
   const v1 = createHmac('sha256', SEGREDO_WEBHOOK).update(manifestoDoWebhook({ dataId, requestId, ts })).digest('hex');
   return `ts=${ts},v1=${v1}`;
@@ -307,7 +310,7 @@ describe('cartão pelo Checkout Pro na API', { skip: semBancoDeTeste }, () => {
     const corpo = { id: Number(`${Date.now()}${seq}`.slice(-12)), type: 'payment', action: 'payment.updated', user_id: Number(CONTA_MP), data: { id: String(id) } };
     const r = await api('POST', `/mercadopago/webhook?data.id=${id}&type=payment`, {
       corpo,
-      headers: { 'x-signature': assinar({ dataId: id, requestId }), 'x-request-id': requestId },
+      headers: { 'x-signature': assinar({ dataId: id, requestId, ts: tsDe(agora) }), 'x-request-id': requestId },
     });
     await pagamentos.aguardarProcessamentos();
     return r;

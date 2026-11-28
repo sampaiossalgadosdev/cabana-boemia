@@ -956,6 +956,13 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     const c = await novoCliente();
     const r = await pedir(c, { pagamentoOnline: 'PIX' });
     const { mpPaymentId } = (await pedidoNoBanco(r.corpo.pedido.id)).pagamentos[0];
+    // Pedidos pagos (aprovados nos testes anteriores) ainda abertos bloqueiam a desconexão; a loja
+    // finaliza antes. O Pix pendente deste teste não bloqueia.
+    const pagosAbertos = { lojaId: 1, meioOnline: { not: null }, status: { in: ['ABERTO', 'CONFIRMADO', 'EM_PREPARO', 'SAIU_ENTREGA'] } };
+    if (await prisma.pedido.count({ where: pagosAbertos })) {
+      await assert.rejects(() => conexaoMp.desconectar(1, { confirmar: true }), (e) => e.codigo === 'PEDIDOS_PAGOS_ABERTOS');
+      await prisma.pedido.updateMany({ where: pagosAbertos, data: { status: 'FINALIZADO', finalizadoEm: agora } });
+    }
     const aviso = await conexaoMp.desconectar(1, { confirmar: false });
     assert.ok(aviso.pendentes >= 1);
     const feito = await conexaoMp.desconectar(1, { confirmar: true });

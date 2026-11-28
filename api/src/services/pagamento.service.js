@@ -1033,13 +1033,40 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
     return 'DESCONECTADA';
   }
 
+  /**
+   * Notificação de pagamento numa conta que o Taaki conhece mas que está desconectada (sem token):
+   * o sistema não consegue conferir nem estornar (ex.: Pix pago depois de a loja desconectar).
+   * Alerta para o ADMIN com o id do pagamento, um por pagamento. Conta nunca vista = nada.
+   */
+  async function avisarContaDesconectada(userId, dataId) {
+    const antiga = userId != null ? await conexaoRepo.buscarQualquerPorMpUserId(userId) : null;
+    if (!antiga) return 'LOJA_DESCONHECIDA';
+    const idPagamento = String(dataId).replace(/[^\w-]/g, '').slice(0, 40);
+    const marca = `pagamento ${idPagamento} `;
+    if (await prisma.alertaPlataforma.count({ where: { tipo: 'PAGAMENTO_CONTA_DESCONECTADA', mensagem: { contains: marca } } })) {
+      return 'CONTA_DESCONECTADA';
+    }
+    const [loja, nosso] = await Promise.all([lojaRepo.buscarPorId(antiga.lojaId), pagamentoRepo.buscarPorMpPaymentId(idPagamento)]);
+    await criarAlerta({
+      tipo: 'PAGAMENTO_CONTA_DESCONECTADA',
+      lojaId: antiga.lojaId,
+      pedidoId: nosso?.pedidoId ?? null,
+      mensagem:
+        `O Mercado Pago avisou de uma mudança no ${marca}(conta ${antiga.mpUserId}) da loja ${loja?.nome ?? antiga.lojaId}, ` +
+        `que está desconectada do Taaki${nosso ? ` (pedido ${nosso.pedidoId})` : ''}. Sem a conexão o sistema não confere nem estorna: ` +
+        'confira no Mercado Pago da loja e, se o cliente pagou, combine a devolução com a loja.',
+    });
+    log.warn(`[pagamento] notificação do pagamento ${idPagamento} numa conta desconectada (loja ${antiga.lojaId}): alerta criado`);
+    return 'CONTA_DESCONECTADA';
+  }
+
   async function processarNotificacao({ tipo, acao, dataId, userId }, agora) {
     if (tipo === 'mp-connect') {
       return /deauthoriz/i.test(acao ?? '') ? desvincularConta(userId, agora) : 'IGNORADO';
     }
     if (tipo !== 'payment' || !dataId) return 'IGNORADO';
     const conexao = userId != null ? await conexaoRepo.buscarPorMpUserId(userId) : null;
-    if (!conexao?.accessTokenCifrado) return 'LOJA_DESCONHECIDA';
+    if (!conexao?.accessTokenCifrado) return avisarContaDesconectada(userId, dataId);
     const r = await mp.consultarPagamento(decifrar(conexao.accessTokenCifrado, chaveDoAmbiente(env)), dataId);
     let pagamento = await pagamentoRepo.buscarPorMpPaymentId(r.id);
     if (!pagamento && /^\d+$/.test(r.referenciaExterna ?? '')) pagamento = await pagamentoRepo.ultimoDoPedido(Number(r.referenciaExterna));

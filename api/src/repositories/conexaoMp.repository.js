@@ -44,3 +44,8 @@ export function definirPagamentoOnlineAtivo(lojaId, ativo, db = prisma) {
 export function buscarPorMpUserId(mpUserId, db = prisma) {
   return db.conexaoMercadoPago.findFirst({ where: { mpUserId: String(mpUserId), status: { in: ['CONECTADA', 'EXPIRADA'] } } });
 }
+
+/** Conexão que já usou a conta Mercado Pago, em qualquer situação (a mais recente): a loja desconectada. */
+export function buscarQualquerPorMpUserId(mpUserId, db = prisma) {
+  return db.conexaoMercadoPago.findFirst({ where: { mpUserId: String(mpUserId) }, orderBy: { atualizadoEm: 'desc' } });
+}

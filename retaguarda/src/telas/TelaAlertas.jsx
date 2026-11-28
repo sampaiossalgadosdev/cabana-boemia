@@ -18,6 +18,7 @@ export const TIPOS_ALERTA = {
   ESTORNO_EXTERNO: 'Estornado fora do Taaki',
   PEDIDO_SEM_ACEITE: 'Pedido sem aceite da loja',
   FECHAMENTO_ATRASADO: 'Fechamento atrasado',
+  PAGAMENTO_CONTA_DESCONECTADA: 'Pagamento em conta desconectada',
 };
 
 /**

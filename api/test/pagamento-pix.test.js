@@ -855,6 +855,36 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     await prisma.conexaoMercadoPago.update({ where: { lojaId: 1 }, data: { accessTokenCifrado: cifrar(TOKEN_LOJA, Buffer.from(CHAVE_HEX, "hex")), status: 'CONECTADA' } });
   });
 
+  test('notificação de pagamento numa conta já desconectada: alerta para o ADMIN com o id do pagamento (um por pagamento)', async () => {
+    const c = await novoCliente();
+    const r = await pedir(c, { pagamentoOnline: 'PIX' });
+    assert.equal(r.status, 201, JSON.stringify(r.corpo));
+    const pedidoId = r.corpo.pedido.id;
+    const { mpPaymentId } = (await pedidoNoBanco(pedidoId)).pagamentos[0];
+    // A loja desconectou (tokens apagados) e o cliente pagou mesmo assim.
+    await prisma.conexaoMercadoPago.update({ where: { lojaId: 1 }, data: { status: 'DESCONECTADA', accessTokenCifrado: null } });
+    mp.mudar(mpPaymentId, { status: 'approved' });
+    const consultasAntes = chamadasDe('consultar').length;
+    try {
+      assert.equal((await notificar(notificacaoDePagamento(mpPaymentId))).status, 200);
+      assert.equal((await notificar(notificacaoDePagamento(mpPaymentId))).status, 200, 'segunda notificação do mesmo pagamento');
+      const alertas = await prisma.alertaPlataforma.findMany({ where: { tipo: 'PAGAMENTO_CONTA_DESCONECTADA' } });
+      assert.equal(alertas.length, 1);
+      assert.equal(alertas[0].lojaId, 1);
+      assert.equal(alertas[0].pedidoId, pedidoId);
+      assert.match(alertas[0].mensagem, new RegExp(`pagamento ${mpPaymentId} `));
+      assert.equal(chamadasDe('consultar').length, consultasAntes, 'sem token não há consulta');
+      // Conta que o Taaki nunca conectou: nada.
+      await notificar(notificacaoDePagamento('424242', { user_id: 999999 }));
+      assert.equal(await prisma.alertaPlataforma.count({ where: { tipo: 'PAGAMENTO_CONTA_DESCONECTADA' } }), 1);
+      const evento = await prisma.eventoWebhook.findFirst({ where: { recursoId: mpPaymentId }, orderBy: { id: 'desc' } });
+      assert.equal(evento.resultado, 'CONTA_DESCONECTADA');
+    } finally {
+      const { cifrar } = await import('../src/lib/cifra.js');
+      await prisma.conexaoMercadoPago.update({ where: { lojaId: 1 }, data: { accessTokenCifrado: cifrar(TOKEN_LOJA, Buffer.from(CHAVE_HEX, 'hex')), status: 'CONECTADA' } });
+    }
+  });
+
   test('mp-connect com o token ainda autorizado no Mercado Pago: ignorado (nada desliga), com aviso no log', async () => {
     mp.tokenAutorizado = true;
     const alertasAntes = await prisma.alertaPlataforma.count({ where: { tipo: 'MP_DESVINCULADA' } });

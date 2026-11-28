@@ -528,7 +528,8 @@ Respostas às perguntas da Etapa 3:
 
 ### Bloqueiam o lançamento
 
-- **Teste de ponta a ponta com as contas de teste do Mercado Pago** (vendedor = loja, comprador), no APK e no PDV real: Pix (aprovado, expirado aos 15 min, pago depois de expirar), cartão (aprovado, recusado e "Tentar de novo", "Escolher outra forma"), recusa da loja, cancelamento pelo cliente, estorno parcial e total pelo ADMIN, desconectar com Pix pendente. Conferir no teste: o template do HMAC e se o `ts` vem em segundos ou milissegundos (os dois são aceitos), se o `mp-connect` chega assinado e com que `action`, a comissão em `fee_details` (Pix e Checkout Pro), o `X-Idempotency-Key` em `/checkout/preferences`, a busca sem `range`, a resposta do `/refunds` (`approved` ou `in_process`), o `GET /users/me` com token revogado (401/403) e a Linha de Crédito no checkout. Conferir no painel o dinheiro na conta da loja e a comissão na conta da plataforma.
+- **Validar o split com dinheiro real numa loja com entregadores do Taaki: a taxa de entrega cai na conta do Taaki.** Um Pix de valor baixo, pago de verdade, numa loja `PLATAFORMA` conectada com uma conta Mercado Pago REAL com chave Pix; conferir no painel que o valor dos produtos menos a tarifa ficou na conta da loja e a comissão (`application_fee`) chegou na conta do Taaki. Depois, estornar esse pedido pelo ADMIN e conferir a devolução das duas partes.
+- **Teste de ponta a ponta** pelo roteiro abaixo ("Roteiro de teste antes de ligar em produção"), no APK e no PDV real. **O Pix só pode ser testado com uma conta Mercado Pago REAL com chave Pix**: a conta de vendedor de teste não tem chave Pix e o Mercado Pago recusa gerar o QR (erro 13253, "Collector user without key enabled for QR render"). Os cartões de teste continuam com a conta de vendedor de teste.
 - **Painel do Mercado Pago** configurado (aplicação, redirect, webhooks, chave secreta, credenciais de produção) e **variáveis no Railway** (lista no relatório da Etapa 8 e no `api/.env.example`). Fazer o deploy desta branch (duas migrations novas) antes de ligar.
 - **Revisão jurídica** da política e dos termos com o pagamento (`docs/rascunho-privacidade-pagamento.md`: hoje fala só do Pix; acrescentar o cartão pelo Checkout Pro, em que o cliente digita o cartão no site do Mercado Pago) e **trocar `DOCUMENTOS_APP.versao`** ao publicar (todos aceitam de novo). Termo com cada loja (uso dos dados, papel no pagamento, Mercado Pago da loja).
 - **PDV 0.3.4 instalado em todas as lojas antes do build do app** que manda `origem: 'APP'` (o 0.3.1 esconde os pedidos do app; o 0.3.3 funciona, mas mostra só "Cartão").
@@ -537,6 +538,22 @@ Respostas às perguntas da Etapa 3:
 - **Modo teste do telefone em produção**: apagar `PHONE_VERIFIER=test`, `PHONE_TEST_EM_PRODUCAO` e `PHONE_TEST_NUMBERS` antes da primeira loja real (o log do deploy não pode trazer "TESTE EM PRODUÇÃO").
 - **Play Console**: Segurança dos dados com o pagamento (e-mail e histórico de compras compartilhados com o processador de pagamentos), questionário de conteúdo (hoje diz "sem compras no app, pagamento na entrega"), textos da ficha ("O pagamento é feito na entrega") e link da política e da exclusão de conta no domínio do Taaki (`app/PUBLICACAO.md`). Na App Store, a observação da revisão ("pagamento feito na entrega") também muda.
 - **Campanha (só se ela entrar no lançamento)**: SMS real no `PHONE_VERIFIER` (Firebase previsto; sem ele ninguém verifica o telefone e a campanha nunca vale). Ligar `CAMPANHA_FRETE_GRATIS_ATIVA=sim` só no dia, com o `CAMPANHA_TELEFONE_SECRET` definido.
+
+### Roteiro de teste antes de ligar em produção
+
+Contas: **Pix = conta Mercado Pago REAL com chave Pix** (a loja; o pagador paga de verdade, com valores baixos, e o ADMIN estorna depois); **cartão = conta de vendedor de teste** + comprador de teste e os cartões de teste do Mercado Pago. A loja do Pix com entregadores do Taaki serve também para o split.
+
+1. Deploy desta branch (migrations novas aplicadas), variáveis no Railway, painel do Mercado Pago (redirect, webhooks com a chave secreta), PDV 0.3.4 e o APK do versionCode 5.
+2. Loja `PLATAFORMA` com pino, conectada à conta REAL com chave Pix; o dono liga o interruptor.
+3. **Pix aprovado + split** (o primeiro item bloqueante): prévia com a taxa por km; pagar; o pedido chega ao PDV com "PAGO ONLINE"; aceitar; finalizar sem caixa; no painel, a loja recebe os produtos (menos a tarifa) e o Taaki a taxa de entrega.
+4. **Pix sem pagar**: aos 15 min o pedido expira, o estoque volta e o Pix aparece cancelado no Mercado Pago (se o cancelamento falhar, o log mostra e a rotina tenta de novo até os 30 min).
+5. **Pix pago depois de expirar**: estorno automático e alerta `PAGO_APOS_EXPIRAR`.
+6. **Cartão** (conta de vendedor de teste): aprovado (o tipo real no cupom: crédito, débito); recusado e "Tentar de novo"; "Escolher outra forma".
+7. **Cancelamentos e estornos**: recusa da loja antes do aceite (estorno total); cancelamento pelo cliente antes do aceite; estorno parcial e total pelo ADMIN (dois parciais de mesmo valor saem os dois); "Tentar de novo" de um estorno pendente.
+8. **Webhook e conexão**: o log não pode trazer "webhook recusado: ts fora da janela" para notificações legítimas (se trouxer, a diferença em segundos aparece ali); desconectar com pedido pago aberto (bloqueado) e com Pix pendente (cancelado); desvincular a aplicação no Mercado Pago (alerta `MP_DESVINCULADA`); notificação de uma conta já desconectada (alerta `PAGAMENTO_CONTA_DESCONECTADA`).
+9. **Fechamento**: pedido em dinheiro com os entregadores do Taaki ("Recebi o dinheiro") e o lançamento na semana.
+10. **Conferir no teste real**: assinatura do webhook com o `data.id` como chega, `mp-connect` assinado e o `action`, comissão em `fee_details` (Pix e Checkout Pro), `X-Idempotency-Key` em `/checkout/preferences`, busca sem `range`, resposta do `/refunds` (`approved` ou `in_process`), `GET /users/me` com token revogado (401/403), Linha de Crédito no checkout.
+11. **Flags desligadas**: com `PAGAMENTO_ONLINE_ATIVO` e `CAMPANHA_FRETE_GRATIS_ATIVA` vazias, o app pede como antes (só na entrega, sem campanha nem a faixa "verifique seu telefone").
 
 ### Podem ficar para depois do lançamento
 

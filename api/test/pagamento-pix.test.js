@@ -565,6 +565,25 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     assert.equal(site.corpo.previa.campanha.disponivelSeVerificar, false);
   });
 
+  test('CAMPANHA_FRETE_GRATIS_ATIVA vazia: sem campanha nem convite, mesmo com o segredo e o pagamento online ligados', async () => {
+    const antes = process.env.CAMPANHA_FRETE_GRATIS_ATIVA;
+    process.env.CAMPANHA_FRETE_GRATIS_ATIVA = '';
+    try {
+      const verificado = await novoCliente({ verificado: true, telefone: '43988880009' });
+      const p = await previa(verificado);
+      assert.equal(p.corpo.previa.origemFreteGratis, 'NENHUM');
+      assert.ok(p.corpo.previa.taxaEntregaCentavos > 0);
+      const r = await pedir(verificado, { formaPagamento: 'DINHEIRO' });
+      assert.equal(r.status, 201, JSON.stringify(r.corpo));
+      const banco = await pedidoNoBanco(r.corpo.pedido.id);
+      assert.equal(banco.origemFreteGratis, 'NENHUM');
+      assert.equal(banco.usoCampanha, null);
+      assert.equal((await previa(await novoCliente())).corpo.previa.campanha.disponivelSeVerificar, false, 'sem a faixa "verifique seu telefone"');
+    } finally {
+      process.env.CAMPANHA_FRETE_GRATIS_ATIVA = antes;
+    }
+  });
+
   test('verificar o telefone da conta logada: código certo marca verificado; telefone de outra conta verificada = 409', async () => {
     const c = await novoCliente();
     assert.equal((await api('POST', '/cliente/telefone/enviar', { token: c.token, corpo: { telefone: '(43) 98888-0003' } })).status, 200);

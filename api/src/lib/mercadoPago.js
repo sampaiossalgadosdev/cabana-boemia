@@ -11,7 +11,7 @@
  *   validarAssinaturaWebhook (x-signature com MP_WEBHOOK_SECRET).
  * - Etapa 5: estornar (total ou parcial, com o token DA LOJA e X-Idempotency-Key) e
  *   erroNoEmailDoPagador (recusa do Pix por causa do e-mail).
- * - Etapa 8: consultarEstorno e listarEstornos (o "Tentar de novo" nunca estorna duas vezes).
+ * - Etapa 8: consultarEstorno (o "Tentar de novo" consulta o estorno já pedido) e tokenAindaAutorizado.
  * - Etapa 7 (cartão pelo Checkout Pro): criarPreferencia, buscarPagamentosDoPedido e
  *   expirarPreferencia (com o token DA LOJA).
  *
@@ -375,12 +375,6 @@ export function criarClienteMercadoPago({ fetch: buscar = globalThis.fetch, conf
         accessToken,
       );
       return estornoNormalizado(dados);
-    },
-
-    /** Todos os estornos do pagamento (GET /v1/payments/{id}/refunds), para não estornar duas vezes. */
-    async listarEstornos(accessToken, paymentId) {
-      const dados = await chamarPagamentos('GET', `/v1/payments/${encodeURIComponent(paymentId)}/refunds`, accessToken);
-      return (Array.isArray(dados) ? dados : []).filter((e) => e?.id != null).map(estornoNormalizado);
     },
 
     /**

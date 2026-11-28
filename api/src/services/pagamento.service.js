@@ -128,6 +128,17 @@ export function divergencias(pagamento, r, lojaIdDaConta = null, mpUserIdDaConta
   return problemas;
 }
 
+/**
+ * A chamada ao Mercado Pago falhou sem dizer se o estorno foi feito? Rede, tempo esgotado, 5xx ou
+ * erro nosso no meio: talvez sim. Recusa clara (4xx, estorno "rejected", sem id/token, que nem
+ * chamou) = não foi feito.
+ */
+export function resultadoIncerto(err) {
+  if (!(err instanceof ErroMercadoPago)) return true;
+  if (['REDE', 'TEMPO_ESGOTADO', 'RESPOSTA_INVALIDA'].includes(err.codigo)) return true;
+  return err.status != null && err.status >= 500;
+}
+
 /** Erro para o log: o código e, quando o Mercado Pago explicou, o detalhe (message + cause, já limpo). */
 const textoDoErro = (err) => `${err?.codigo ?? err?.message}${err?.detalhe ? `: ${err.detalhe}` : ''}`;
 
@@ -539,7 +550,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
   async function falharEstorno(estorno, err, agora) {
     const erro = textoDoErro(err).slice(0, 300);
     log.warn(`[pagamento] pedido ${estorno.pagamento.pedidoId}: estorno ${estorno.id} falhou (${err?.status ?? '-'}, ${erro})`);
-    await pagamentoRepo.atualizarEstornoSeEm(estorno.id, ['PROCESSANDO'], { status: 'FALHOU', erro });
+    await pagamentoRepo.atualizarEstornoSeEm(estorno.id, ['PROCESSANDO'], { status: 'FALHOU', erro, resultadoIncerto: resultadoIncerto(err) });
     const loja = await lojaRepo.buscarPorId(estorno.pagamento.pedido.lojaId);
     await alertarUmaVez({
       tipo: 'REEMBOLSO_FALHOU',
@@ -755,8 +766,12 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
   }
 
   /**
-   * Reembolso pendente, "Tentar de novo" (ADMIN): consulta o Mercado Pago antes (já estornado lá =
-   * só conclui, nunca estorna duas vezes); senão, nova tentativa com chave nova. Estorno ainda
+   * Reembolso pendente, "Tentar de novo" (ADMIN). Nunca repete o MESMO estorno pendente:
+   * 1. com o id do estorno no Mercado Pago (`mpRefundId`), consulta esse estorno;
+   * 2. o total já devolvido lá cobre este = só conclui;
+   * 3. resultado incerto (rede, tempo, 5xx, processo parado) = o mesmo registro e a mesma chave;
+   * 4. recusa clara = estorno novo com chave nova.
+   * Estornos parciais de mesmo valor feitos de propósito são independentes. Estorno ainda
    * processando há menos de 2 minutos = 409 (a chamada anterior pode estar em andamento).
    */
   async function tentarEstornoDeNovo(pagamentoId, { usuarioId, agora = new Date() }) {
@@ -784,24 +799,25 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
         if (e.status === 'approved') return concluirJaFeito(e.id);
         if (!ESTORNO_MP_RECUSADO.includes(e.status)) throw emAndamentoNoMp();
       }
-      // 2. O valor reembolsado no Mercado Pago já cobre este estorno.
+      // 2. O total já devolvido no Mercado Pago passa do que conhecemos + este estorno (não olha
+      //    o valor de cada estorno: dois parciais iguais de propósito continuam possíveis).
       const r = await mp.consultarPagamento(token, pagamento.mpPaymentId);
       const noMp = r.status === 'refunded' ? pagamento.valorTotalCentavos : r.valorReembolsadoCentavos;
       if (noMp >= pagamento.valorReembolsadoCentavos + aberto.valorCentavos) return concluirJaFeito(null);
-      // 3. Um estorno desse valor no Mercado Pago que não é um dos nossos já concluídos (ex.: a
-      //    chamada anterior caiu depois de o Mercado Pago criar): concluído = conclui; em
-      //    andamento = espera. Só sem nenhum, um estorno novo.
-      const conhecidos = await pagamentoRepo.idsDeEstornosConcluidos(pagamentoId);
-      const doValor = (await mp.listarEstornos(token, pagamento.mpPaymentId)).filter(
-        (e) => !conhecidos.has(e.id) && e.valorCentavos === aberto.valorCentavos && !ESTORNO_MP_RECUSADO.includes(e.status),
-      );
-      const feito = doValor.find((e) => e.status === 'approved');
-      if (feito) return concluirJaFeito(feito.id);
-      if (doValor.length) {
-        await pagamentoRepo.atualizarEstornoSeEm(aberto.id, ['PROCESSANDO', 'FALHOU'], { mpRefundId: doValor[0].id });
-        throw emAndamentoNoMp();
-      }
     }
+    // 3. Sem saber se o Mercado Pago fez (a chamada caiu, tempo esgotado, 5xx, ou o processo parou
+    //    no meio): repete ESTE estorno com a MESMA chave de idempotência. O Mercado Pago devolve o
+    //    estorno já criado, se houver, em vez de criar outro.
+    if (aberto.status === 'PROCESSANDO' || aberto.resultadoIncerto) {
+      const mudou = await pagamentoRepo.atualizarEstornoSeEm(aberto.id, ['PROCESSANDO', 'FALHOU'], {
+        status: 'PROCESSANDO',
+        erro: null,
+        resultadoIncerto: false,
+      });
+      if (!mudou) throw new ErroHttp(409, 'O reembolso mudou enquanto isso. Atualize a tela.', { codigo: 'ESTORNO_EM_ANDAMENTO' });
+      return { resultado: await executarEstorno(aberto.id, agora) };
+    }
+    // 4. O Mercado Pago recusou com clareza: uma tentativa nova, com chave nova.
     const novo = await prisma.$transaction(async (tx) => {
       await pagamentoRepo.travarPagamento(pagamentoId, tx);
       if ((await pagamentoRepo.atualizarEstornoSeEm(aberto.id, ['PROCESSANDO', 'FALHOU'], { status: 'FALHOU', erro: aberto.erro ?? 'Interrompido' }, tx)) === 0) {

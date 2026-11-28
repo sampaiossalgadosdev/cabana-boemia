@@ -924,6 +924,9 @@ model Estorno {
   mpRefundId     String?       @db.VarChar(30)
   /// Código e detalhe limpo do Mercado Pago (sem token nem dado pessoal).
   erro           String?       @db.VarChar(300)
+  /// Falhou sem saber se o Mercado Pago fez (rede, tempo esgotado, 5xx): o "Tentar de novo"
+  /// repete este mesmo estorno com a mesma chave; recusa clara = estorno novo com chave nova.
+  resultadoIncerto Boolean     @default(false)
   observacao     String?       @db.VarChar(500)
   usuarioId      Int?
   resolvidoPorId Int?

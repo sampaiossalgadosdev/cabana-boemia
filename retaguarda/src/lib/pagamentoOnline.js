@@ -46,6 +46,16 @@ export function mensagemDoRetorno(search) {
 }
 
 /** Texto do aviso antes de desconectar (Decisão 17). */
+/**
+ * Pedidos pagos online ainda abertos (nem finalizados nem cancelados): enquanto houver, a loja não
+ * desconecta (sem a conexão não haveria como devolver o dinheiro). Zero = null (pode desconectar).
+ */
+export function avisoPedidosPagosAbertos(quantidade) {
+  if (!quantidade) return null;
+  const n = quantidade === 1 ? '1 pedido pago online em aberto' : `${quantidade} pedidos pagos online em aberto`;
+  return `A loja tem ${n}. Finalize ou cancele ${quantidade === 1 ? 'o pedido' : 'os pedidos'} no PDV antes de desconectar o Mercado Pago.`;
+}
+
 export function avisoDesconectar(pendentes) {
   const base = 'A loja deixa de receber pagamento online até conectar de novo.';
   if (!pendentes) return base;

@@ -235,11 +235,11 @@ describe('livro-razão e fechamento semanal (Etapa 6)', { skip: semBancoDeTeste 
 
   async function notificar(mpPaymentId) {
     const requestId = `req-${++seq}`;
-    const v1 = createHmac('sha256', SEGREDO_WEBHOOK).update(manifestoDoWebhook({ dataId: mpPaymentId, requestId, ts: '1732700000' })).digest('hex');
+    const v1 = createHmac('sha256', SEGREDO_WEBHOOK).update(manifestoDoWebhook({ dataId: mpPaymentId, requestId, ts: String(Math.floor(agora.getTime() / 1000)) })).digest('hex');
     const corpo = { id: Number(`${Date.now()}${seq}`.slice(-12)), type: 'payment', action: 'payment.updated', user_id: Number(CONTA_MP), data: { id: String(mpPaymentId) } };
     const res = await fetch(`${base}/mercadopago/webhook?data.id=${mpPaymentId}&type=payment`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-signature': `ts=1732700000,v1=${v1}`, 'x-request-id': requestId },
+      headers: { 'content-type': 'application/json', 'x-signature': `ts=${Math.floor(agora.getTime() / 1000)},v1=${v1}`, 'x-request-id': requestId },
       body: JSON.stringify(corpo),
     });
     assert.equal(res.status, 200);

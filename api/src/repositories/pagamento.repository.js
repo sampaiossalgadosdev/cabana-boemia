@@ -157,3 +157,12 @@ export function listarParaAdmin({ status, lojaId, pedidoId, numeroDia }, db = pr
     },
   });
 }
+
+/** Pix expirados do nosso lado ainda com o cancelamento no Mercado Pago a refazer (até `cancelarNoMpAte`). */
+export function cancelamentosPendentes(agora, db = prisma) {
+  return db.pagamento.findMany({
+    where: { metodo: 'PIX', mpPaymentId: { not: null }, cancelarNoMpAte: { gt: agora } },
+    orderBy: { id: 'asc' },
+    include: COM_PEDIDO,
+  });
+}

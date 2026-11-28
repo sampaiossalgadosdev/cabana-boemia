@@ -147,11 +147,15 @@ export async function lancarNaFinalizacao(tx, pedidoId, agora = new Date()) {
   return pedido ? inserir(tx, pedido, lancamentosDaFinalizacao(pedido), agora) : 0;
 }
 
-/** Na aprovação do Pix (mesma transação): a parte do devido que o split não levou. */
+/**
+ * Na aprovação do Pix (mesma transação): a parte do devido que o split não levou. Devolve o
+ * valor lançado agora em centavos (0 = nada: dentro da trava, ou já lançado antes).
+ */
 export async function lancarComplemento(tx, pedidoId, valorNoSplitCentavos, agora = new Date()) {
   const pedido = await tx.pedido.findUnique({ where: { id: pedidoId }, select: CAMPOS_PEDIDO });
   const valor = pedido ? complementoDaAprovacao(pedido, valorNoSplitCentavos) : 0;
-  return valor > 0 ? inserir(tx, pedido, [{ tipo: 'TAXA_ENTREGA_COMPLEMENTO', valorCentavos: valor }], agora) : 0;
+  if (valor <= 0) return 0;
+  return (await inserir(tx, pedido, [{ tipo: 'TAXA_ENTREGA_COMPLEMENTO', valorCentavos: valor }], agora)) > 0 ? valor : 0;
 }
 
 /** No cancelamento (mesma transação): desfaz cada lançamento automático ainda não desfeito. */

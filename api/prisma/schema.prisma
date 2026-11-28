@@ -833,6 +833,7 @@ enum TipoAlerta {
   ESTORNO_EXTERNO // estorno feito direto no Mercado Pago com o pedido ainda aberto
   PEDIDO_SEM_ACEITE // pedido pago online há 10 minutos sem o aceite da loja
   FECHAMENTO_ATRASADO // fechamento semanal aguardando pagamento há mais de FECHAMENTO_ATRASO_DIAS
+  PAGAMENTO_CONTA_DESCONECTADA // notificação de pagamento na conta de uma loja já desconectada (sem token)
 }
 
 enum StatusFechamento {
@@ -885,6 +886,9 @@ model Pagamento {
   aprovadoEm               DateTime?
   /// Última consulta ao Mercado Pago (tela do Pix no app: no máximo a cada 30 s).
   consultadoEm             DateTime?
+  /// Pix expirado do nosso lado cujo cancelamento no Mercado Pago falhou: a rotina tenta de
+  /// novo até esta data (fim dos 30 minutos do Pix no Mercado Pago). Null = nada a fazer.
+  cancelarNoMpAte          DateTime?
   criadoEm                 DateTime              @default(now())
   atualizadoEm             DateTime              @updatedAt
 
@@ -920,6 +924,9 @@ model Estorno {
   mpRefundId     String?       @db.VarChar(30)
   /// Código e detalhe limpo do Mercado Pago (sem token nem dado pessoal).
   erro           String?       @db.VarChar(300)
+  /// Falhou sem saber se o Mercado Pago fez (rede, tempo esgotado, 5xx): o "Tentar de novo"
+  /// repete este mesmo estorno com a mesma chave; recusa clara = estorno novo com chave nova.
+  resultadoIncerto Boolean     @default(false)
   observacao     String?       @db.VarChar(500)
   usuarioId      Int?
   resolvidoPorId Int?

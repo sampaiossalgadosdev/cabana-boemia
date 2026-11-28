@@ -5,11 +5,14 @@ import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { cifrar, decifrar, problemaNaChave, chaveDoAmbiente } from '../src/lib/cifra.js';
 import {
+  campanhaAtivada,
+  campanhaLigada,
   formasDaLoja,
   minimoFreteGratisPlataforma,
   pagamentoOnlineDisponivel,
   pagamentoOnlineLigado,
   problemaNoSegredo,
+  problemasNaCampanha,
   problemasNoPagamentoOnline,
 } from '../src/lib/pagamentoOnline.js';
 import { raizApi } from './helpers/banco.js';
@@ -115,6 +118,28 @@ describe('flag PAGAMENTO_ONLINE_ATIVO e disponibilidade por loja', () => {
     assert.equal(minimoFreteGratisPlataforma({ FRETE_GRATIS_MINIMO_PLATAFORMA_CENTAVOS: '3500' }), 3500);
     assert.equal(minimoFreteGratisPlataforma({ FRETE_GRATIS_MINIMO_PLATAFORMA_CENTAVOS: 'abc' }), 2000);
     assert.equal(minimoFreteGratisPlataforma({ FRETE_GRATIS_MINIMO_PLATAFORMA_CENTAVOS: '0' }), 2000);
+  });
+});
+
+describe('flag CAMPANHA_FRETE_GRATIS_ATIVA (campanha da primeira compra)', () => {
+  const SEGREDO = { CAMPANHA_TELEFONE_SECRET: 'segredo-da-campanha-com-mais-de-32-caracteres' };
+
+  test('só liga com a flag "sim" E o segredo válido; independente do PAGAMENTO_ONLINE_ATIVO', () => {
+    assert.equal(campanhaLigada({}), false);
+    assert.equal(campanhaLigada(SEGREDO), false, 'só o segredo não liga (antes ligava)');
+    assert.equal(campanhaLigada({ ...SEGREDO, PAGAMENTO_ONLINE_ATIVO: 'sim' }), false, 'o pagamento online não liga a campanha');
+    assert.equal(campanhaLigada({ ...SEGREDO, CAMPANHA_FRETE_GRATIS_ATIVA: 'sim' }), true);
+    assert.equal(campanhaLigada({ ...SEGREDO, CAMPANHA_FRETE_GRATIS_ATIVA: ' SIM ' }), true);
+    assert.equal(campanhaLigada({ ...SEGREDO, CAMPANHA_FRETE_GRATIS_ATIVA: 'nao' }), false);
+    assert.equal(campanhaLigada({ CAMPANHA_FRETE_GRATIS_ATIVA: 'sim' }), false, 'flag sem segredo');
+    assert.equal(campanhaAtivada({ CAMPANHA_FRETE_GRATIS_ATIVA: 'sim' }), true);
+  });
+
+  test('flag ligada sem o segredo válido: a API não sobe; desligada: nada exigido', () => {
+    assert.deepEqual(problemasNaCampanha({}), []);
+    assert.deepEqual(problemasNaCampanha({ CAMPANHA_FRETE_GRATIS_ATIVA: 'sim', ...SEGREDO }), []);
+    assert.match(problemasNaCampanha({ CAMPANHA_FRETE_GRATIS_ATIVA: 'sim' })[0], /CAMPANHA_TELEFONE_SECRET ausente.*CAMPANHA_FRETE_GRATIS_ATIVA=sim/);
+    assert.match(problemasNaCampanha({ CAMPANHA_FRETE_GRATIS_ATIVA: 'sim', CAMPANHA_TELEFONE_SECRET: 'curto' })[0], /curto demais/);
   });
 });
 

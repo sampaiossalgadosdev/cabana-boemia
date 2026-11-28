@@ -26,7 +26,14 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { ErroHttp } from '../lib/erros.js';
 import { decifrar, chaveDoAmbiente } from '../lib/cifra.js';
-import { criarClienteMercadoPago, erroNoEmailDoPagador, ErroMercadoPago, validarAssinaturaWebhook } from '../lib/mercadoPago.js';
+import {
+  criarClienteMercadoPago,
+  diferencaDoTsEmSegundos,
+  erroNoEmailDoPagador,
+  ErroMercadoPago,
+  TOLERANCIA_TS_WEBHOOK_MS,
+  validarAssinaturaWebhook,
+} from '../lib/mercadoPago.js';
 import { faltasParaConectar, segredoDoWebhook } from '../lib/pagamentoOnline.js';
 import { mensagemDaRecusa, tipoDoPagamento } from '../lib/cartaoOnline.js';
 import { diaOperacional, paraCampoData } from '../lib/fuso.js';
@@ -45,6 +52,7 @@ import {
   pedidoDaEquipe,
   pedidoPublico,
   OPCOES_TRANSACAO,
+  PRAZO_PIX_MS,
   STATUS_ABERTOS,
   STATUS_FORA_DO_PDV,
 } from './pedido.service.js';
@@ -127,6 +135,17 @@ export function divergencias(pagamento, r, lojaIdDaConta = null, mpUserIdDaConta
   return problemas;
 }
 
+/**
+ * A chamada ao Mercado Pago falhou sem dizer se o estorno foi feito? Rede, tempo esgotado, 5xx ou
+ * erro nosso no meio: talvez sim. Recusa clara (4xx, estorno "rejected", sem id/token, que nem
+ * chamou) = não foi feito.
+ */
+export function resultadoIncerto(err) {
+  if (!(err instanceof ErroMercadoPago)) return true;
+  if (['REDE', 'TEMPO_ESGOTADO', 'RESPOSTA_INVALIDA'].includes(err.codigo)) return true;
+  return err.status != null && err.status >= 500;
+}
+
 /** Erro para o log: o código e, quando o Mercado Pago explicou, o detalhe (message + cause, já limpo). */
 const textoDoErro = (err) => `${err?.codigo ?? err?.message}${err?.detalhe ? `: ${err.detalhe}` : ''}`;
 
@@ -193,7 +212,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
    * Encerra o pedido que esperava o pagamento: EXPIRADO, estoque devolvido, campanha liberada e
    * o pagamento pendente com `statusPagamento`. Condicionado: já encerrado = nada (false).
    */
-  async function expirarPedido(pedidoId, { statusPagamento = 'EXPIRADO', dadosMp, agora = new Date() } = {}) {
+  async function expirarPedido(pedidoId, { statusPagamento = 'EXPIRADO', dadosMp, agora = new Date(), extra = {} } = {}) {
     return prisma.$transaction(async (tx) => {
       const linha = await pagamentoRepo.travarPedido(pedidoId, tx);
       if (linha?.status !== 'AGUARDANDO_PAGAMENTO') return false;
@@ -202,7 +221,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
       await liberarCampanha(tx, pedidoId);
       await tx.pagamento.updateMany({
         where: { pedidoId, status: 'PENDENTE' },
-        data: { status: statusPagamento, ...(dadosMp && { dadosMp }), consultadoEm: agora },
+        data: { status: statusPagamento, ...(dadosMp && { dadosMp }), consultadoEm: agora, ...extra },
       });
       return true;
     }, OPCOES_TRANSACAO);
@@ -363,7 +382,21 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
         });
         await usarCampanha(tx, pagamento.pedidoId, agora);
         // Livro-razão: a parte da taxa que a trava de 50% deixou fora do split (Decisão 2 da Etapa 6).
-        await lancarComplemento(tx, pagamento.pedidoId, pagamento.valorPlataformaCentavos, agora);
+        const complemento = await lancarComplemento(tx, pagamento.pedidoId, pagamento.valorPlataformaCentavos, agora);
+        // Alerta da trava de 50% só aqui, com o pagamento aprovado (um Pix que expira não deve ao Taaki).
+        if (complemento > 0) {
+          await criarAlerta(
+            {
+              tipo: 'TAXA_ENTREGA_COMPLEMENTO',
+              lojaId: linha.lojaId,
+              pedidoId: pagamento.pedidoId,
+              mensagem:
+                `A taxa de entrega (${formatarDinheiro(pagamento.valorPlataformaCentavos + complemento)}) passou de 50% do valor cobrado ` +
+                `do pedido ${pagamento.pedidoId}. ${formatarDinheiro(complemento)} ficam como débito da loja no fechamento.`,
+            },
+            tx,
+          );
+        }
         await tx.pagamento.update({
           where: { id: pagamento.id },
           data: { status: 'APROVADO', aprovadoEm: agora, dadosMp: resumoMp(r), consultadoEm: agora, mpPaymentId: r.id },
@@ -524,7 +557,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
   async function falharEstorno(estorno, err, agora) {
     const erro = textoDoErro(err).slice(0, 300);
     log.warn(`[pagamento] pedido ${estorno.pagamento.pedidoId}: estorno ${estorno.id} falhou (${err?.status ?? '-'}, ${erro})`);
-    await pagamentoRepo.atualizarEstornoSeEm(estorno.id, ['PROCESSANDO'], { status: 'FALHOU', erro });
+    await pagamentoRepo.atualizarEstornoSeEm(estorno.id, ['PROCESSANDO'], { status: 'FALHOU', erro, resultadoIncerto: resultadoIncerto(err) });
     const loja = await lojaRepo.buscarPorId(estorno.pagamento.pedido.lojaId);
     await alertarUmaVez({
       tipo: 'REEMBOLSO_FALHOU',
@@ -740,8 +773,12 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
   }
 
   /**
-   * Reembolso pendente, "Tentar de novo" (ADMIN): consulta o Mercado Pago antes (já estornado lá =
-   * só conclui, nunca estorna duas vezes); senão, nova tentativa com chave nova. Estorno ainda
+   * Reembolso pendente, "Tentar de novo" (ADMIN). Nunca repete o MESMO estorno pendente:
+   * 1. com o id do estorno no Mercado Pago (`mpRefundId`), consulta esse estorno;
+   * 2. o total já devolvido lá cobre este = só conclui;
+   * 3. resultado incerto (rede, tempo, 5xx, processo parado) = o mesmo registro e a mesma chave;
+   * 4. recusa clara = estorno novo com chave nova.
+   * Estornos parciais de mesmo valor feitos de propósito são independentes. Estorno ainda
    * processando há menos de 2 minutos = 409 (a chamada anterior pode estar em andamento).
    */
   async function tentarEstornoDeNovo(pagamentoId, { usuarioId, agora = new Date() }) {
@@ -755,14 +792,39 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
       throw new ErroHttp(409, 'O estorno ainda está sendo processado. Tente de novo em alguns minutos.', { codigo: 'ESTORNO_EM_ANDAMENTO' });
     }
     if (pagamento.mpPaymentId) {
-      const r = await mp.consultarPagamento(await tokenDaLoja(pagamento.pedido.lojaId), pagamento.mpPaymentId);
-      const noMp = r.status === 'refunded' ? pagamento.valorTotalCentavos : r.valorReembolsadoCentavos;
-      if (noMp >= pagamento.valorReembolsadoCentavos + aberto.valorCentavos) {
-        await concluirEstorno(aberto, { agora, observacao: 'Já estornado no Mercado Pago (conferido ao tentar de novo)' });
+      const token = await tokenDaLoja(pagamento.pedido.lojaId);
+      const concluirJaFeito = async (mpRefundId) => {
+        await concluirEstorno(aberto, { agora, mpRefundId, observacao: 'Já estornado no Mercado Pago (conferido ao tentar de novo)' });
         await avisarEquipe(pagamento.pedidoId);
         return { resultado: 'CONCLUIDO' };
+      };
+      const emAndamentoNoMp = () =>
+        new ErroHttp(409, 'O Mercado Pago ainda está processando este estorno. Confira de novo mais tarde.', { codigo: 'ESTORNO_EM_ANDAMENTO' });
+      // 1. O estorno já foi pedido e o Mercado Pago deu o id: consulta ESSE estorno, nunca pede outro por cima.
+      if (aberto.mpRefundId) {
+        const e = await mp.consultarEstorno(token, pagamento.mpPaymentId, aberto.mpRefundId);
+        if (e.status === 'approved') return concluirJaFeito(e.id);
+        if (!ESTORNO_MP_RECUSADO.includes(e.status)) throw emAndamentoNoMp();
       }
+      // 2. O total já devolvido no Mercado Pago passa do que conhecemos + este estorno (não olha
+      //    o valor de cada estorno: dois parciais iguais de propósito continuam possíveis).
+      const r = await mp.consultarPagamento(token, pagamento.mpPaymentId);
+      const noMp = r.status === 'refunded' ? pagamento.valorTotalCentavos : r.valorReembolsadoCentavos;
+      if (noMp >= pagamento.valorReembolsadoCentavos + aberto.valorCentavos) return concluirJaFeito(null);
     }
+    // 3. Sem saber se o Mercado Pago fez (a chamada caiu, tempo esgotado, 5xx, ou o processo parou
+    //    no meio): repete ESTE estorno com a MESMA chave de idempotência. O Mercado Pago devolve o
+    //    estorno já criado, se houver, em vez de criar outro.
+    if (aberto.status === 'PROCESSANDO' || aberto.resultadoIncerto) {
+      const mudou = await pagamentoRepo.atualizarEstornoSeEm(aberto.id, ['PROCESSANDO', 'FALHOU'], {
+        status: 'PROCESSANDO',
+        erro: null,
+        resultadoIncerto: false,
+      });
+      if (!mudou) throw new ErroHttp(409, 'O reembolso mudou enquanto isso. Atualize a tela.', { codigo: 'ESTORNO_EM_ANDAMENTO' });
+      return { resultado: await executarEstorno(aberto.id, agora) };
+    }
+    // 4. O Mercado Pago recusou com clareza: uma tentativa nova, com chave nova.
     const novo = await prisma.$transaction(async (tx) => {
       await pagamentoRepo.travarPagamento(pagamentoId, tx);
       if ((await pagamentoRepo.atualizarEstornoSeEm(aberto.id, ['PROCESSANDO', 'FALHOU'], { status: 'FALHOU', erro: aberto.erro ?? 'Interrompido' }, tx)) === 0) {
@@ -860,6 +922,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
    * (se ele aprovar depois, o webhook marca A_ESTORNAR).
    */
   async function expirarPendente(pagamento, agora = new Date(), statusPagamento = 'EXPIRADO') {
+    let cancelarDeNovo = false;
     if (pagamento.mpPaymentId || pagamento.mpPreferenceId) {
       try {
         const { token, mpUserId } = await contaDaLoja(pagamento.pedido.lojaId);
@@ -869,9 +932,33 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
         if (r && (r.status === 'pending' || r.status === 'in_process')) await mp.cancelarPagamento(token, r.id);
       } catch (err) {
         log.warn(`[pagamento] pedido ${pagamento.pedidoId}: cancelamento no Mercado Pago falhou (${err.status ?? '-'}, ${textoDoErro(err)})`);
+        // Pix: continua pagável no Mercado Pago até os 30 minutos; a rotina tenta cancelar de novo.
+        cancelarDeNovo = pagamento.metodo === 'PIX' && Boolean(pagamento.mpPaymentId);
       }
     }
-    return (await expirarPedido(pagamento.pedidoId, { statusPagamento, agora })) ? 'EXPIRADO' : 'JA_TRATADO';
+    const extra = cancelarDeNovo ? { cancelarNoMpAte: limiteDoPixNoMp(pagamento) } : {};
+    return (await expirarPedido(pagamento.pedidoId, { statusPagamento, agora, extra })) ? 'EXPIRADO' : 'JA_TRATADO';
+  }
+
+  /**
+   * Fim do Pix no Mercado Pago: criado com 30 minutos (Decisão 5), quando o nosso prazo (expiraEm)
+   * era de 15. Até lá um cancelamento que falhou vale a pena ser repetido.
+   */
+  const limiteDoPixNoMp = (pagamento) =>
+    new Date(new Date(pagamento.expiraEm).getTime() - PRAZO_PIX_MS + PRAZO_PIX_MERCADO_PAGO_MS);
+
+  /**
+   * Rotina: Pix expirado do nosso lado com o cancelamento no Mercado Pago a refazer. Consulta:
+   * aprovado = conciliação (pago depois de expirar: estorno automático); pendente = cancela;
+   * já encerrado lá = nada. Deu certo = sai da lista; falhou = tenta no próximo minuto.
+   */
+  async function recancelarPix(pagamento, agora) {
+    const { token, mpUserId } = await contaDaLoja(pagamento.pedido.lojaId);
+    const r = await mp.consultarPagamento(token, pagamento.mpPaymentId);
+    if (r.status === 'approved') await conciliar(pagamento, r, { agora, mpUserIdDaConta: mpUserId });
+    else if (r.status === 'pending' || r.status === 'in_process') await mp.cancelarPagamento(token, r.id);
+    await pagamentoRepo.atualizar(pagamento.id, { cancelarNoMpAte: null });
+    return r.status === 'approved' ? 'APROVADO_DEPOIS' : 'CANCELADO';
   }
 
   /** Situação do pagamento online (Pix ou cartão) para a tela do app (só o dono do pedido; outro = 404). */
@@ -909,6 +996,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
     }
     if (pagamento.status === 'PENDENTE' && pagamento.pedido.status === 'AGUARDANDO_PAGAMENTO') {
       let aprovado = false;
+      let cancelarDeNovo = false;
       try {
         const { token, mpUserId } = await contaDaLoja(pagamento.pedido.lojaId);
         const r = await situacaoNoMp(pagamento, token);
@@ -918,15 +1006,17 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
       } catch (err) {
         // Sem o Mercado Pago o cliente ainda desiste; se um pagamento for aprovado depois, ele é estornado (A_ESTORNAR).
         log.warn(`[pagamento] desistência do pedido ${pedidoId}: Mercado Pago (${err.status ?? '-'}, ${textoDoErro(err)})`);
+        cancelarDeNovo = pagamento.metodo === 'PIX' && Boolean(pagamento.mpPaymentId);
       }
-      if (!aprovado) await expirarPedido(pedidoId, { statusPagamento: 'CANCELADO', agora });
+      const extra = cancelarDeNovo ? { cancelarNoMpAte: limiteDoPixNoMp(pagamento) } : {};
+      if (!aprovado) await expirarPedido(pedidoId, { statusPagamento: 'CANCELADO', agora, extra });
     }
     return resposta(pedidoId);
   }
 
   /** Rotina de 1 minuto: expira os vencidos e consulta os outros pendentes (webhook perdido). */
   async function rodarRotina(agora = new Date()) {
-    const r = { expirados: 0, aprovados: 0, consultados: 0, falhas: 0 };
+    const r = { expirados: 0, aprovados: 0, consultados: 0, recancelados: 0, falhas: 0 };
     for (const p of await pagamentoRepo.pendentes()) {
       try {
         if (p.expiraEm <= agora) {
@@ -940,6 +1030,16 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
       } catch (err) {
         r.falhas += 1;
         log.warn(`[pagamento] rotina, pedido ${p.pedidoId}: ${err.status ?? '-'} ${textoDoErro(err)}`);
+      }
+    }
+    // Pix expirado do nosso lado que o Mercado Pago não cancelou: de novo, até os 30 minutos dele.
+    for (const p of await pagamentoRepo.cancelamentosPendentes(agora)) {
+      try {
+        await recancelarPix(p, agora);
+        r.recancelados += 1;
+      } catch (err) {
+        r.falhas += 1;
+        log.warn(`[pagamento] rotina, novo cancelamento do Pix do pedido ${p.pedidoId}: ${err.status ?? '-'} ${textoDoErro(err)}`);
       }
     }
     // Pago depois de expirar que ficou para trás (ex.: o servidor caiu antes do estorno): uma
@@ -979,6 +1079,26 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
   async function desvincularConta(mpUserId, agora = new Date()) {
     const conexao = await conexaoRepo.buscarPorMpUserId(mpUserId);
     if (!conexao) return 'CONTA_DESCONHECIDA';
+    // O corpo da notificação não é assinado (só o data.id, o request-id e o ts): só desconecta se
+    // o Mercado Pago responder que o token da loja é inválido (401/403). Token ainda autorizado =
+    // ignorada. Sem resposta clara (5xx, tempo, rede, sem token para perguntar) = nada muda.
+    let autorizado;
+    try {
+      const { token } = await contaDaLoja(conexao.lojaId);
+      if (!token) throw new ErroMercadoPago('Loja sem token para conferir', { codigo: 'SEM_TOKEN' });
+      autorizado = await mp.tokenAindaAutorizado(token);
+    } catch (err) {
+      log.warn(
+        `[pagamento] mp-connect da loja ${conexao.lojaId} não confirmado pelo Mercado Pago (${err.status ?? '-'}, ${err.codigo ?? 'ERRO'}): nada foi desconectado`,
+      );
+      // A notificação volta a ser processada no reenvio do Mercado Pago (o evento é apagado).
+      if (err.codigo === 'SEM_TOKEN') return 'NAO_CONFIRMADO';
+      throw err;
+    }
+    if (autorizado) {
+      log.warn(`[pagamento] mp-connect da loja ${conexao.lojaId} ignorado: o token da loja ainda está autorizado no Mercado Pago`);
+      return 'TOKEN_AINDA_AUTORIZADO';
+    }
     await cancelarPendentesDaLoja(conexao.lojaId, agora);
     const loja = await lojaRepo.buscarPorId(conexao.lojaId);
     await prisma.$transaction(async (tx) => {
@@ -1002,13 +1122,40 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
     return 'DESCONECTADA';
   }
 
+  /**
+   * Notificação de pagamento numa conta que o Taaki conhece mas que está desconectada (sem token):
+   * o sistema não consegue conferir nem estornar (ex.: Pix pago depois de a loja desconectar).
+   * Alerta para o ADMIN com o id do pagamento, um por pagamento. Conta nunca vista = nada.
+   */
+  async function avisarContaDesconectada(userId, dataId) {
+    const antiga = userId != null ? await conexaoRepo.buscarQualquerPorMpUserId(userId) : null;
+    if (!antiga) return 'LOJA_DESCONHECIDA';
+    const idPagamento = String(dataId).replace(/[^\w-]/g, '').slice(0, 40);
+    const marca = `pagamento ${idPagamento} `;
+    if (await prisma.alertaPlataforma.count({ where: { tipo: 'PAGAMENTO_CONTA_DESCONECTADA', mensagem: { contains: marca } } })) {
+      return 'CONTA_DESCONECTADA';
+    }
+    const [loja, nosso] = await Promise.all([lojaRepo.buscarPorId(antiga.lojaId), pagamentoRepo.buscarPorMpPaymentId(idPagamento)]);
+    await criarAlerta({
+      tipo: 'PAGAMENTO_CONTA_DESCONECTADA',
+      lojaId: antiga.lojaId,
+      pedidoId: nosso?.pedidoId ?? null,
+      mensagem:
+        `O Mercado Pago avisou de uma mudança no ${marca}(conta ${antiga.mpUserId}) da loja ${loja?.nome ?? antiga.lojaId}, ` +
+        `que está desconectada do Taaki${nosso ? ` (pedido ${nosso.pedidoId})` : ''}. Sem a conexão o sistema não confere nem estorna: ` +
+        'confira no Mercado Pago da loja e, se o cliente pagou, combine a devolução com a loja.',
+    });
+    log.warn(`[pagamento] notificação do pagamento ${idPagamento} numa conta desconectada (loja ${antiga.lojaId}): alerta criado`);
+    return 'CONTA_DESCONECTADA';
+  }
+
   async function processarNotificacao({ tipo, acao, dataId, userId }, agora) {
     if (tipo === 'mp-connect') {
       return /deauthoriz/i.test(acao ?? '') ? desvincularConta(userId, agora) : 'IGNORADO';
     }
     if (tipo !== 'payment' || !dataId) return 'IGNORADO';
     const conexao = userId != null ? await conexaoRepo.buscarPorMpUserId(userId) : null;
-    if (!conexao?.accessTokenCifrado) return 'LOJA_DESCONHECIDA';
+    if (!conexao?.accessTokenCifrado) return avisarContaDesconectada(userId, dataId);
     const r = await mp.consultarPagamento(decifrar(conexao.accessTokenCifrado, chaveDoAmbiente(env)), dataId);
     let pagamento = await pagamentoRepo.buscarPorMpPaymentId(r.id);
     if (!pagamento && /^\d+$/.test(r.referenciaExterna ?? '')) pagamento = await pagamentoRepo.ultimoDoPedido(Number(r.referenciaExterna));
@@ -1023,7 +1170,17 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
    */
   async function receberWebhook({ assinatura, requestId, dataIdQuery, corpo }, agora = new Date()) {
     const dataId = dataIdQuery ?? corpo?.data?.id ?? null;
-    if (!validarAssinaturaWebhook({ assinatura, requestId, dataId, segredo: segredoDoWebhook(env) })) {
+    const segredo = segredoDoWebhook(env);
+    if (!validarAssinaturaWebhook({ assinatura, requestId, dataId, segredo, agora })) {
+      // Assinatura certa, mas o ts fora dos 10 minutos: aviso com a diferença (para conferir no teste
+      // real se uma notificação legítima está sendo recusada). Sem id, corpo nem cabeçalho.
+      if (validarAssinaturaWebhook({ assinatura, requestId, dataId, segredo })) {
+        const diferenca = diferencaDoTsEmSegundos(assinatura, agora);
+        log.warn(
+          `[pagamento] webhook recusado: ts fora da janela de ${TOLERANCIA_TS_WEBHOOK_MS / 1000} s ` +
+            `(diferença de ${diferenca} s; positiva = notificação no passado)`,
+        );
+      }
       throw new ErroHttp(401, 'Assinatura inválida', { codigo: 'ASSINATURA_INVALIDA' });
     }
     const tipo = String(corpo?.type ?? corpo?.topic ?? 'desconhecido').slice(0, 60);

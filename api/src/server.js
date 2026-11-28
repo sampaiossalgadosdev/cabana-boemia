@@ -7,7 +7,7 @@ import { credenciaisApple } from './lib/apple.js';
 import { emailDoTitular } from './lib/controlador.js';
 import { lerHostsTaaki, origensPermitidas } from './lib/dominios.js';
 import { ehProducao, problemasNoVerificador } from './lib/verificadorTelefone.js';
-import { campanhaLigada, problemasNoPagamentoOnline } from './lib/pagamentoOnline.js';
+import { campanhaAtivada, campanhaLigada, problemasNaCampanha, problemasNoPagamentoOnline } from './lib/pagamentoOnline.js';
 import { iniciarLimpezaDiaria } from './services/registroAcesso.service.js';
 import { iniciarLimpezaDoCache, mapasPadrao } from './services/mapa.service.js';
 import { iniciarFechamentoSemanal } from './services/livroRazao.service.js';
@@ -25,9 +25,9 @@ if (problemas.length) {
   process.exit(1);
 }
 
-// Pagamento online ligado sem a chave dos tokens da loja: os tokens não poderiam ser
-// cifrados nem lidos. Não sobe.
-const problemasPagamento = problemasNoPagamentoOnline();
+// Pagamento online (ou a campanha) ligado sem a chave ou o segredo: os tokens não poderiam ser
+// cifrados nem lidos, nem o telefone da campanha virar hash. Não sobe.
+const problemasPagamento = [...problemasNoPagamentoOnline(), ...problemasNaCampanha()];
 if (problemasPagamento.length) {
   console.error('A API não vai iniciar (pagamento online):');
   for (const p of problemasPagamento) console.error(`  - ${p}`);
@@ -72,8 +72,10 @@ if (!mapasPadrao().ativo) {
   console.warn('Aviso: GOOGLE_MAPS_SERVER_KEY ausente. Sem busca de endereço no mapa (o cliente posiciona o pino) e a distância dos pedidos fica estimada.');
 }
 
-if (!campanhaLigada()) {
-  console.warn('Aviso: CAMPANHA_TELEFONE_SECRET ausente ou inválido. A campanha de frete grátis da primeira compra fica desligada.');
+if (!campanhaAtivada()) {
+  console.warn('Aviso: CAMPANHA_FRETE_GRATIS_ATIVA desligada. A campanha de frete grátis da primeira compra fica desligada.');
+} else if (campanhaLigada()) {
+  console.warn('Aviso: campanha de frete grátis da primeira compra LIGADA (CAMPANHA_FRETE_GRATIS_ATIVA=sim).');
 }
 
 // Registros de acesso do cliente: apaga os de mais de 6 meses ao iniciar e a cada 24 h.

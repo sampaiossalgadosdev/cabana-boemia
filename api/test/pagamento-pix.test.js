@@ -16,6 +16,8 @@ import {
   manifestoDoWebhook,
   urlDeNotificacao,
   validarAssinaturaWebhook,
+  instanteDoTs,
+  diferencaDoTsEmSegundos,
 } from '../src/lib/mercadoPago.js';
 import { resolverTaxa } from '../src/services/pedido.service.js';
 
@@ -29,6 +31,9 @@ const PINO_CLIENTE = { latitude: -23.31, longitude: -50.32 };
 const DISTANCIA = 3200; // 3,2 km → R$ 1,00 + 0,90 × 6,4 km = R$ 6,76
 
 /** Assinatura x-signature como o Mercado Pago manda. */
+/** ts da assinatura (segundos) no relógio do teste: o webhook recusa ts a mais de 10 min. */
+const tsDe = (instante) => String(Math.floor(instante.getTime() / 1000));
+
 function assinar({ dataId, requestId, ts = '1732700000', segredo = SEGREDO_WEBHOOK }) {
   const v1 = createHmac('sha256', segredo).update(manifestoDoWebhook({ dataId, requestId, ts })).digest('hex');
   return `ts=${ts},v1=${v1}`;
@@ -146,6 +151,56 @@ describe('módulo do Mercado Pago: Pix, consulta, cancelamento e assinatura', ()
     assert.equal(validarAssinaturaWebhook({ assinatura: 'lixo', requestId: 'req-1', dataId: 'ABC123', segredo: SEGREDO_WEBHOOK }), false);
   });
 
+  test('assinatura com o relógio: ts a até 10 min vale (segundos ou ms); mais velho ou no futuro = inválida', () => {
+    const agora = new Date('2026-11-28T12:00:00Z');
+    const valida = (instante, emMs = false) => {
+      const ts = emMs ? String(instante.getTime()) : tsDe(instante);
+      return validarAssinaturaWebhook({ assinatura: assinar({ dataId: '1', requestId: 'r', ts }), requestId: 'r', dataId: '1', segredo: SEGREDO_WEBHOOK, agora });
+    };
+    const min = (n) => new Date(agora.getTime() + n * 60_000);
+    assert.equal(valida(agora), true);
+    assert.equal(valida(min(-9.9)), true);
+    assert.equal(valida(min(9.9)), true);
+    assert.equal(valida(min(-10.1)), false, 'velha (reenvio de uma notificação assinada antiga)');
+    assert.equal(valida(min(10.1)), false, 'no futuro');
+    assert.equal(valida(min(-5), true), true, 'ts em milissegundos');
+    assert.equal(valida(min(-11), true), false);
+    assert.equal(instanteDoTs('1764331200'), 1764331200000);
+    assert.equal(instanteDoTs('1764331200000'), 1764331200000);
+    assert.equal(instanteDoTs('abc'), null);
+    assert.equal(diferencaDoTsEmSegundos(assinar({ dataId: '1', requestId: 'r', ts: tsDe(min(-11)) }), agora), 660);
+    assert.equal(diferencaDoTsEmSegundos('v1=abc', agora), null);
+  });
+
+  test('data.id alfanumérico: vale como chegou (o SDK oficial não muda a caixa) ou em minúsculas (documentação antiga)', () => {
+    const ts = '1764331200';
+    const comSegredo = (m) => `ts=${ts},v1=${createHmac('sha256', SEGREDO_WEBHOOK).update(m).digest('hex')}`;
+    const comoSdk = comSegredo(manifestoDoWebhook({ dataId: 'ABC123', requestId: 'r', ts, minusculas: false }));
+    assert.equal(manifestoDoWebhook({ dataId: 'ABC123', requestId: 'r', ts, minusculas: false }), 'id:ABC123;request-id:r;ts:1764331200;');
+    assert.equal(validarAssinaturaWebhook({ assinatura: comoSdk, requestId: 'r', dataId: 'ABC123', segredo: SEGREDO_WEBHOOK }), true);
+    const minusculo = comSegredo(manifestoDoWebhook({ dataId: 'ABC123', requestId: 'r', ts }));
+    assert.equal(validarAssinaturaWebhook({ assinatura: minusculo, requestId: 'r', dataId: 'ABC123', segredo: SEGREDO_WEBHOOK }), true);
+    assert.equal(validarAssinaturaWebhook({ assinatura: comoSdk, requestId: 'r', dataId: 'ABC124', segredo: SEGREDO_WEBHOOK }), false);
+    assert.equal(validarAssinaturaWebhook({ assinatura: comoSdk.replace('ts=', 'TS='), requestId: 'r', dataId: 'ABC123', segredo: SEGREDO_WEBHOOK }), true, 'chave do cabeçalho sem diferenciar maiúsculas');
+  });
+
+  test('tokenAindaAutorizado: /users/me com o token; SÓ 401/403 = false; 5xx, tempo, rede e sem token lançam', async () => {
+    const com = (status) => criarClienteMercadoPago({ config, fetch: async () => new Response(JSON.stringify(status < 300 ? { id: 1 } : { message: 'invalid_token' }), { status }) });
+    const f = fetchFalso();
+    assert.equal(await criarClienteMercadoPago({ config, fetch: f.fetch }).tokenAindaAutorizado(TOKEN_LOJA), true);
+    assert.equal(f.chamadas[0].url, 'https://api.mercadopago.com/users/me');
+    assert.equal(f.chamadas[0].headers.authorization, `Bearer ${TOKEN_LOJA}`);
+    assert.equal(await com(401).tokenAindaAutorizado(TOKEN_LOJA), false);
+    assert.equal(await com(403).tokenAindaAutorizado(TOKEN_LOJA), false);
+    await assert.rejects(() => com(200).tokenAindaAutorizado(null), (e) => e.codigo === 'SEM_TOKEN', 'sem token não responde "inválido"');
+    await assert.rejects(() => com(500).tokenAindaAutorizado(TOKEN_LOJA), (e) => e instanceof ErroMercadoPago && e.status === 500);
+    await assert.rejects(() => com(503).tokenAindaAutorizado(TOKEN_LOJA), (e) => e.status === 503);
+    const lento = criarClienteMercadoPago({ config, tempoLimiteMs: 5, fetch: (_u, o) => new Promise((_r, rej) => o.signal.addEventListener('abort', () => rej(o.signal.reason))) });
+    await assert.rejects(() => lento.tokenAindaAutorizado(TOKEN_LOJA), (e) => e.codigo === 'TEMPO_ESGOTADO');
+    const semRede = criarClienteMercadoPago({ config, fetch: async () => { throw new TypeError('fetch failed'); } });
+    await assert.rejects(() => semRede.tokenAindaAutorizado(TOKEN_LOJA), (e) => e.codigo === 'REDE');
+  });
+
   test('notification_url sai da origem do MP_REDIRECT_URI', () => {
     assert.equal(urlDeNotificacao(config), 'https://api.taakidelivery.com.br/api/mercadopago/webhook?source_news=webhooks');
     assert.equal(urlDeNotificacao({ redirectUri: '' }), null);
@@ -233,8 +288,21 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
       mp.mudar(id, { status: 'refunded', valorReembolsadoCentavos: mp.pagamentos.get(String(id)).r.valorCentavos });
       return { id: `r-${id}`, status: 'approved', valorCentavos: null };
     },
+    /**
+     * `tokenAutorizado`: o que o Mercado Pago responde no /users/me: true (a loja não desvinculou),
+     * false (401/403) ou um erro para lançar (5xx, tempo esgotado, rede).
+     */
+    tokenAutorizado: true,
+    async tokenAindaAutorizado(token) {
+      mp.chamadas.push({ tipo: 'tokenAutorizado', token });
+      if (mp.tokenAutorizado instanceof Error) throw mp.tokenAutorizado;
+      return mp.tokenAutorizado;
+    },
+    /** `falharCancelar`: o cancelamento do Pix dá erro de rede (o Pix continua pendente lá). */
+    falharCancelar: false,
     async cancelarPagamento(token, id) {
       mp.chamadas.push({ tipo: 'cancelar', token, id });
+      if (mp.falharCancelar) throw new ErroMercadoPago('Mercado Pago fora do ar ou sem resposta', { codigo: 'TEMPO_ESGOTADO' });
       const p = mp.pagamentos.get(String(id));
       p.r = { ...p.r, status: 'cancelled', statusDetail: 'by_collector' };
       return { ...p.r };
@@ -325,7 +393,7 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     const rota = dataId != null ? `/mercadopago/webhook?data.id=${dataId}&type=${corpo.type}` : '/mercadopago/webhook';
     const r = await api('POST', rota, {
       corpo,
-      headers: { 'x-signature': assinatura ?? assinar({ dataId, requestId }), 'x-request-id': requestId },
+      headers: { 'x-signature': assinatura ?? assinar({ dataId, requestId, ts: tsDe(agora) }), 'x-request-id': requestId },
     });
     await pagamentos.aguardarProcessamentos();
     return r;
@@ -521,6 +589,25 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     assert.equal(site.corpo.previa.campanha.disponivelSeVerificar, false);
   });
 
+  test('CAMPANHA_FRETE_GRATIS_ATIVA vazia: sem campanha nem convite, mesmo com o segredo e o pagamento online ligados', async () => {
+    const antes = process.env.CAMPANHA_FRETE_GRATIS_ATIVA;
+    process.env.CAMPANHA_FRETE_GRATIS_ATIVA = '';
+    try {
+      const verificado = await novoCliente({ verificado: true, telefone: '43988880009' });
+      const p = await previa(verificado);
+      assert.equal(p.corpo.previa.origemFreteGratis, 'NENHUM');
+      assert.ok(p.corpo.previa.taxaEntregaCentavos > 0);
+      const r = await pedir(verificado, { formaPagamento: 'DINHEIRO' });
+      assert.equal(r.status, 201, JSON.stringify(r.corpo));
+      const banco = await pedidoNoBanco(r.corpo.pedido.id);
+      assert.equal(banco.origemFreteGratis, 'NENHUM');
+      assert.equal(banco.usoCampanha, null);
+      assert.equal((await previa(await novoCliente())).corpo.previa.campanha.disponivelSeVerificar, false, 'sem a faixa "verifique seu telefone"');
+    } finally {
+      process.env.CAMPANHA_FRETE_GRATIS_ATIVA = antes;
+    }
+  });
+
   test('verificar o telefone da conta logada: código certo marca verificado; telefone de outra conta verificada = 409', async () => {
     const c = await novoCliente();
     assert.equal((await api('POST', '/cliente/telefone/enviar', { token: c.token, corpo: { telefone: '(43) 98888-0003' } })).status, 200);
@@ -571,7 +658,7 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     assert.equal(await prisma.pagamento.count({ where: { pedidoId: banco.id } }), 1);
   });
 
-  test('trava de 50%: taxa maior que metade do pedido = comissão limitada no Pix e alerta para o ADMIN', async () => {
+  test('trava de 50%: taxa maior que metade do pedido = comissão limitada no Pix e alerta para o ADMIN só na aprovação', async () => {
     const precoAntes = produto.precoCentavos;
     await prisma.produto.update({ where: { id: produto.id }, data: { precoCentavos: 500 } });
     try {
@@ -581,8 +668,20 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
       // Valor cobrado = 5,00 + 6,76 = 11,76; metade = 5,88 (para baixo) vai no split; 0,88 fica de débito.
       assert.equal(r.corpo.pedido.totalCentavos, 1176);
       assert.equal(chamadasDe('criarPix').at(-1).dados.comissaoCentavos, 588);
-      const alerta = await prisma.alertaPlataforma.findFirst({ where: { tipo: 'TAXA_ENTREGA_COMPLEMENTO', pedidoId: r.corpo.pedido.id } });
+      const doPedido = (id) => prisma.alertaPlataforma.findMany({ where: { tipo: 'TAXA_ENTREGA_COMPLEMENTO', pedidoId: id } });
+      assert.equal((await doPedido(r.corpo.pedido.id)).length, 0, 'na criação ainda não há débito');
+      // Aprovado: o alerta nasce junto com o lançamento do complemento.
+      const { mpPaymentId } = (await pedidoNoBanco(r.corpo.pedido.id)).pagamentos[0];
+      mp.mudar(mpPaymentId, { status: 'approved' });
+      await notificar(notificacaoDePagamento(mpPaymentId));
+      const [alerta, ...outros] = await doPedido(r.corpo.pedido.id);
+      assert.equal(outros.length, 0);
+      assert.match(alerta.mensagem, /R\$ 6,76/);
       assert.match(alerta.mensagem, /R\$ 0,88/);
+      // Pix da mesma situação que expira: nenhum alerta.
+      const expira = await pedir(await novoCliente(), { pagamentoOnline: 'PIX' });
+      await pagamentos.expirarPedido(expira.corpo.pedido.id);
+      assert.equal((await doPedido(expira.corpo.pedido.id)).length, 0);
       // Na entrega não há split: sem alerta.
       const naEntrega = await pedir(c, { formaPagamento: 'DINHEIRO' });
       assert.equal(await prisma.alertaPlataforma.count({ where: { tipo: 'TAXA_ENTREGA_COMPLEMENTO', pedidoId: naEntrega.corpo.pedido.id } }), 0);
@@ -644,6 +743,21 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     const notificacao = notificacaoDePagamento(mpPaymentId);
     const invalida = await notificar(notificacao, { assinatura: assinar({ dataId: mpPaymentId, requestId: 'x', segredo: 'errado' }) });
     assert.equal(invalida.status, 401);
+    // Assinada certo, mas com ts de 11 minutos atrás (reenvio de uma notificação velha): 401 também.
+    const velhaReq = `req-velha-${seq}`;
+    const velha = await notificar(notificacao, {
+      requestId: velhaReq,
+      assinatura: assinar({ dataId: mpPaymentId, requestId: velhaReq, ts: tsDe(new Date(agora.getTime() - 11 * 60_000)) }),
+    });
+    assert.equal(velha.status, 401);
+    // Aviso no log com a diferença em segundos (11 min = 660 s), sem o id do pagamento nem cabeçalhos.
+    const aviso = avisos.findLast((a) => a.includes('webhook recusado: ts fora da janela'));
+    assert.match(aviso, /diferença de 660 s/);
+    assert.ok(!aviso.includes(String(mpPaymentId)) && !aviso.includes(velhaReq) && !aviso.includes(SEGREDO_WEBHOOK));
+    // Assinatura errada (não é questão de ts): nenhum aviso de ts.
+    const quantos = avisos.filter((a) => a.includes('ts fora da janela')).length;
+    await notificar(notificacao, { assinatura: assinar({ dataId: mpPaymentId, requestId: 'y', segredo: 'errado' }) });
+    assert.equal(avisos.filter((a) => a.includes('ts fora da janela')).length, quantos);
 
     agora = new Date(SABADO_20H.getTime() + 3 * 60_000);
     mp.mudar(mpPaymentId, { status: 'approved', statusDetail: 'accredited', aprovadoEm: agora.toISOString() });
@@ -724,6 +838,59 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     assert.equal(chamadasDe('consultar').length, antes + 1);
   });
 
+  test('cancelamento do Pix que falhou aos 15 minutos: a rotina tenta de novo até os 30 minutos do Mercado Pago', async () => {
+    const min = (n) => new Date(SABADO_20H.getTime() + n * 60_000);
+    await pagamentos.rodarRotina(min(60)); // pendentes de testes anteriores saem antes
+    const pedidoPix = async () => {
+      const r = await pedir(await novoCliente(), { pagamentoOnline: 'PIX' });
+      assert.equal(r.status, 201, JSON.stringify(r.corpo));
+      return { id: r.corpo.pedido.id, mpPaymentId: (await pedidoNoBanco(r.corpo.pedido.id)).pagamentos[0].mpPaymentId };
+    };
+    const a = await pedidoPix();
+    const b = await pedidoPix();
+    try {
+      // 15 min: o cancelamento falha nos dois; o pedido expira assim mesmo e o novo cancelamento fica marcado.
+      mp.falharCancelar = true;
+      await pagamentos.rodarRotina(min(15.1));
+      for (const p of [a, b]) {
+        const banco = await pedidoNoBanco(p.id);
+        assert.equal(banco.status, 'EXPIRADO');
+        assert.equal(banco.pagamentos[0].cancelarNoMpAte.getTime(), min(30).getTime(), 'até os 30 minutos do Mercado Pago');
+      }
+      assert.ok(avisos.some((x) => x.includes(`pedido ${a.id}: cancelamento no Mercado Pago falhou`)));
+
+      // 16 min: o Mercado Pago ainda fora: continua marcado.
+      await pagamentos.rodarRotina(min(16));
+      assert.ok((await pedidoNoBanco(a.id)).pagamentos[0].cancelarNoMpAte);
+
+      // O cliente de B paga no intervalo; o Mercado Pago volta.
+      mp.falharCancelar = false;
+      mp.mudar(b.mpPaymentId, { status: 'approved' });
+      const rotina = await pagamentos.rodarRotina(min(17));
+      assert.equal(rotina.recancelados, 2);
+      const pa = (await pedidoNoBanco(a.id)).pagamentos[0];
+      assert.equal(pa.cancelarNoMpAte, null);
+      assert.equal(mp.pagamentos.get(a.mpPaymentId).r.status, 'cancelled', 'A cancelado no Mercado Pago');
+      // B: pago depois de expirar = estorno automático, pedido continua EXPIRADO.
+      const pb = await pedidoNoBanco(b.id);
+      assert.equal(pb.status, 'EXPIRADO');
+      assert.equal(pb.pagamentos[0].status, 'REEMBOLSADO');
+      assert.equal(pb.pagamentos[0].cancelarNoMpAte, null);
+      assert.equal(await prisma.alertaPlataforma.count({ where: { tipo: 'PAGO_APOS_EXPIRAR', pedidoId: b.id } }), 1);
+      assert.ok(chamadasDe('estornar').some((x) => x.id === b.mpPaymentId));
+
+      // Depois dos 30 minutos não há mais tentativa.
+      const c = await pedidoPix();
+      mp.falharCancelar = true;
+      await pagamentos.rodarRotina(min(15.1));
+      const cancelamentos = chamadasDe('cancelar').filter((x) => x.id === c.mpPaymentId).length;
+      await pagamentos.rodarRotina(min(30.5));
+      assert.equal(chamadasDe('cancelar').filter((x) => x.id === c.mpPaymentId).length, cancelamentos);
+    } finally {
+      mp.falharCancelar = false;
+    }
+  });
+
   test('expiração aos 15 minutos: cancela no Mercado Pago, pedido EXPIRADO, estoque e campanha de volta', async () => {
     const c = await novoCliente({ verificado: true, telefone: '43988880006' });
     // Pendentes de testes anteriores expiram antes (a rotina pega todos e mexeria no estoque).
@@ -789,6 +956,13 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     const c = await novoCliente();
     const r = await pedir(c, { pagamentoOnline: 'PIX' });
     const { mpPaymentId } = (await pedidoNoBanco(r.corpo.pedido.id)).pagamentos[0];
+    // Pedidos pagos (aprovados nos testes anteriores) ainda abertos bloqueiam a desconexão; a loja
+    // finaliza antes. O Pix pendente deste teste não bloqueia.
+    const pagosAbertos = { lojaId: 1, meioOnline: { not: null }, status: { in: ['ABERTO', 'CONFIRMADO', 'EM_PREPARO', 'SAIU_ENTREGA'] } };
+    if (await prisma.pedido.count({ where: pagosAbertos })) {
+      await assert.rejects(() => conexaoMp.desconectar(1, { confirmar: true }), (e) => e.codigo === 'PEDIDOS_PAGOS_ABERTOS');
+      await prisma.pedido.updateMany({ where: pagosAbertos, data: { status: 'FINALIZADO', finalizadoEm: agora } });
+    }
     const aviso = await conexaoMp.desconectar(1, { confirmar: false });
     assert.ok(aviso.pendentes >= 1);
     const feito = await conexaoMp.desconectar(1, { confirmar: true });
@@ -807,7 +981,102 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     await prisma.conexaoMercadoPago.update({ where: { lojaId: 1 }, data: { accessTokenCifrado: cifrar(TOKEN_LOJA, Buffer.from(CHAVE_HEX, "hex")), status: 'CONECTADA' } });
   });
 
+  test('notificação de pagamento numa conta já desconectada: alerta para o ADMIN com o id do pagamento (um por pagamento)', async () => {
+    const c = await novoCliente();
+    const r = await pedir(c, { pagamentoOnline: 'PIX' });
+    assert.equal(r.status, 201, JSON.stringify(r.corpo));
+    const pedidoId = r.corpo.pedido.id;
+    const { mpPaymentId } = (await pedidoNoBanco(pedidoId)).pagamentos[0];
+    // A loja desconectou (tokens apagados) e o cliente pagou mesmo assim.
+    await prisma.conexaoMercadoPago.update({ where: { lojaId: 1 }, data: { status: 'DESCONECTADA', accessTokenCifrado: null } });
+    mp.mudar(mpPaymentId, { status: 'approved' });
+    const consultasAntes = chamadasDe('consultar').length;
+    try {
+      assert.equal((await notificar(notificacaoDePagamento(mpPaymentId))).status, 200);
+      assert.equal((await notificar(notificacaoDePagamento(mpPaymentId))).status, 200, 'segunda notificação do mesmo pagamento');
+      const alertas = await prisma.alertaPlataforma.findMany({ where: { tipo: 'PAGAMENTO_CONTA_DESCONECTADA' } });
+      assert.equal(alertas.length, 1);
+      assert.equal(alertas[0].lojaId, 1);
+      assert.equal(alertas[0].pedidoId, pedidoId);
+      assert.match(alertas[0].mensagem, new RegExp(`pagamento ${mpPaymentId} `));
+      assert.equal(chamadasDe('consultar').length, consultasAntes, 'sem token não há consulta');
+      // Conta que o Taaki nunca conectou: nada.
+      await notificar(notificacaoDePagamento('424242', { user_id: 999999 }));
+      assert.equal(await prisma.alertaPlataforma.count({ where: { tipo: 'PAGAMENTO_CONTA_DESCONECTADA' } }), 1);
+      const evento = await prisma.eventoWebhook.findFirst({ where: { recursoId: mpPaymentId }, orderBy: { id: 'desc' } });
+      assert.equal(evento.resultado, 'CONTA_DESCONECTADA');
+    } finally {
+      const { cifrar } = await import('../src/lib/cifra.js');
+      await prisma.conexaoMercadoPago.update({ where: { lojaId: 1 }, data: { accessTokenCifrado: cifrar(TOKEN_LOJA, Buffer.from(CHAVE_HEX, 'hex')), status: 'CONECTADA' } });
+    }
+  });
+
+  test('mp-connect com o token ainda autorizado no Mercado Pago: ignorado (nada desliga), com aviso no log', async () => {
+    mp.tokenAutorizado = true;
+    const alertasAntes = await prisma.alertaPlataforma.count({ where: { tipo: 'MP_DESVINCULADA' } });
+    const r = await notificar(
+      { id: 555000, type: 'mp-connect', action: 'application.deauthorized', user_id: Number(CONTA_MP), data: { id: CONTA_MP } },
+      { dataId: CONTA_MP },
+    );
+    assert.equal(r.status, 200);
+    assert.equal(chamadasDe('tokenAutorizado').at(-1).token, TOKEN_LOJA, 'conferido com o token da loja');
+    const conexao = await prisma.conexaoMercadoPago.findUnique({ where: { lojaId: 1 } });
+    assert.equal(conexao.status, 'CONECTADA');
+    assert.ok(conexao.accessTokenCifrado);
+    assert.equal((await prisma.loja.findUnique({ where: { id: 1 } })).pagamentoOnlineAtivo, true);
+    assert.equal(await prisma.alertaPlataforma.count({ where: { tipo: 'MP_DESVINCULADA' } }), alertasAntes);
+    assert.ok(avisos.some((a) => a.includes('mp-connect da loja 1 ignorado')));
+    assert.ok(!avisos.some((a) => a.includes(TOKEN_LOJA)), 'token nunca no log');
+    const evento = await prisma.eventoWebhook.findFirst({ where: { tipo: 'mp-connect' }, orderBy: { id: 'desc' } });
+    assert.equal(evento.resultado, 'TOKEN_AINDA_AUTORIZADO');
+  });
+
+  test('mp-connect sem resposta clara do Mercado Pago (5xx, tempo, rede): nada desconecta, aviso no log e o reenvio é processado', async () => {
+    const notificacao = (id) => ({ id, type: 'mp-connect', action: 'application.deauthorized', user_id: Number(CONTA_MP), data: { id: CONTA_MP } });
+    const falhas = [
+      new ErroMercadoPago('Mercado Pago recusou (500)', { status: 500, codigo: 'internal_error' }),
+      new ErroMercadoPago('Mercado Pago fora do ar ou sem resposta', { codigo: 'TEMPO_ESGOTADO' }),
+      new ErroMercadoPago('Mercado Pago fora do ar ou sem resposta', { codigo: 'REDE' }),
+    ];
+    try {
+      for (const [i, falha] of falhas.entries()) {
+        mp.tokenAutorizado = falha;
+        const n = notificacao(556000 + i);
+        assert.equal((await notificar(n, { dataId: CONTA_MP })).status, 200);
+        const conexao = await prisma.conexaoMercadoPago.findUnique({ where: { lojaId: 1 } });
+        assert.equal(conexao.status, 'CONECTADA', falha.codigo);
+        assert.ok(conexao.accessTokenCifrado);
+        assert.equal((await prisma.loja.findUnique({ where: { id: 1 } })).pagamentoOnlineAtivo, true);
+        assert.ok(avisos.some((a) => a.includes('mp-connect da loja 1 não confirmado') && a.includes(falha.codigo)));
+        // O evento é apagado: o reenvio do Mercado Pago é processado (agora confirmado como válido).
+        assert.equal(await prisma.eventoWebhook.count({ where: { chave: { contains: String(556000 + i) } } }), 0);
+      }
+      mp.tokenAutorizado = true;
+      assert.equal((await notificar(notificacao(556000), { dataId: CONTA_MP })).status, 200);
+      const evento = await prisma.eventoWebhook.findFirst({ where: { chave: { contains: '556000' } } });
+      assert.equal(evento.resultado, 'TOKEN_AINDA_AUTORIZADO');
+      assert.equal(await prisma.alertaPlataforma.count({ where: { tipo: 'MP_DESVINCULADA' } }), 0);
+    } finally {
+      mp.tokenAutorizado = true;
+    }
+  });
+
+  test('mp-connect numa conexão sem token para perguntar: não desconecta (NAO_CONFIRMADO)', async () => {
+    await prisma.conexaoMercadoPago.update({ where: { lojaId: 1 }, data: { status: 'EXPIRADA', accessTokenCifrado: null } });
+    try {
+      const chamadas = chamadasDe('tokenAutorizado').length;
+      assert.equal((await notificar({ id: 557001, type: 'mp-connect', action: 'application.deauthorized', user_id: Number(CONTA_MP), data: { id: CONTA_MP } }, { dataId: CONTA_MP })).status, 200);
+      assert.equal((await prisma.conexaoMercadoPago.findUnique({ where: { lojaId: 1 } })).status, 'EXPIRADA');
+      assert.equal(chamadasDe('tokenAutorizado').length, chamadas);
+      assert.equal((await prisma.eventoWebhook.findFirst({ where: { chave: { contains: '557001' } } })).resultado, 'NAO_CONFIRMADO');
+    } finally {
+      const { cifrar } = await import('../src/lib/cifra.js');
+      await prisma.conexaoMercadoPago.update({ where: { lojaId: 1 }, data: { accessTokenCifrado: cifrar(TOKEN_LOJA, Buffer.from(CHAVE_HEX, 'hex')), status: 'CONECTADA' } });
+    }
+  });
+
   test('mp-connect: a loja desvinculou no Mercado Pago = desconectada, online desligado e alerta', async () => {
+    mp.tokenAutorizado = false;
     const r = await notificar(
       { id: 555001, type: 'mp-connect', action: 'application.deauthorized', user_id: Number(CONTA_MP), data: { id: CONTA_MP } },
       { dataId: CONTA_MP },

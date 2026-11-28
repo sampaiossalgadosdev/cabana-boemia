@@ -18,4 +18,5 @@ process.env.PHONE_VERIFIER = '';
 process.env.PHONE_TEST_NUMBERS = '';
 // Pagamento online: segredos próprios dos testes (o .env de dev pode não ter ou ter outros).
 process.env.CAMPANHA_TELEFONE_SECRET = 'teste-campanha-telefone-com-pelo-menos-32-caracteres';
+process.env.CAMPANHA_FRETE_GRATIS_ATIVA = 'sim';
 process.env.MP_STATE_SECRET = 'teste-state-mercado-pago-com-pelo-menos-32-caracteres';

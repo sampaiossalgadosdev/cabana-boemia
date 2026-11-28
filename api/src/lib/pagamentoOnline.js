@@ -9,8 +9,11 @@
  *   com entregador da plataforma (vazio = R$ 20,00), para a taxa não engolir o pedido.
  * - MP_STATE_SECRET: assina o state do OAuth (32+ caracteres, diferente dos segredos JWT);
  *   obrigatório para conectar uma loja e, com a flag ligada, para a API subir.
- * - CAMPANHA_TELEFONE_SECRET: HMAC do telefone da campanha (mesmas regras). Sem ele (ou inválido),
- *   a campanha fica desligada com aviso no log (Decisão 4 da Etapa 4); com a flag ligada, a API não sobe.
+ * - CAMPANHA_FRETE_GRATIS_ATIVA: "sim" liga a campanha do frete grátis da primeira compra (vazio =
+ *   desligada), independente do pagamento online (Etapa 8).
+ * - CAMPANHA_TELEFONE_SECRET: HMAC do telefone da campanha (mesmas regras). A campanha só funciona
+ *   com a flag dela ligada E o segredo válido; flag ligada sem o segredo = a API não sobe. Com
+ *   PAGAMENTO_ONLINE_ATIVO=sim a API também não sobe sem ele.
  * - MP_WEBHOOK_SECRET: assinatura das notificações do Mercado Pago (painel › Webhooks); com a flag
  *   ligada, a API não sobe sem ele (sem ele toda notificação seria recusada).
  * - MP_CLIENT_ID, MP_CLIENT_SECRET, MP_REDIRECT_URI: aplicativo no Mercado Pago (lib/mercadoPago.js).
@@ -62,8 +65,24 @@ export function faltasParaConectar(env = process.env) {
   return faltas;
 }
 
-/** Campanha da primeira compra ligada? Só com CAMPANHA_TELEFONE_SECRET válido. */
-export const campanhaLigada = (env = process.env) => problemaNoSegredo('CAMPANHA_TELEFONE_SECRET', env) === null;
+/**
+ * Interruptor próprio da campanha (CAMPANHA_FRETE_GRATIS_ATIVA: "sim" liga, vazio = desligada),
+ * independente do PAGAMENTO_ONLINE_ATIVO: o dono liga a campanha só no dia do lançamento.
+ */
+export function campanhaAtivada(env = process.env) {
+  return String(env.CAMPANHA_FRETE_GRATIS_ATIVA ?? '').trim().toLowerCase() === 'sim';
+}
+
+/** Campanha da primeira compra ligada? A flag própria ligada E CAMPANHA_TELEFONE_SECRET válido. */
+export const campanhaLigada = (env = process.env) =>
+  campanhaAtivada(env) && problemaNoSegredo('CAMPANHA_TELEFONE_SECRET', env) === null;
+
+/** Campanha ligada sem o segredo válido: a API não sobe (lista vazia = ok). */
+export function problemasNaCampanha(env = process.env) {
+  if (!campanhaAtivada(env)) return [];
+  const problema = problemaNoSegredo('CAMPANHA_TELEFONE_SECRET', env);
+  return problema ? [`${problema} (obrigatória com CAMPANHA_FRETE_GRATIS_ATIVA=sim)`] : [];
+}
 
 /** Segredo da assinatura das notificações do Mercado Pago ('' = sem). */
 export const segredoDoWebhook = (env = process.env) => String(env.MP_WEBHOOK_SECRET ?? '').trim();

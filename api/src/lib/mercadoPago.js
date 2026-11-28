@@ -11,6 +11,7 @@
  *   validarAssinaturaWebhook (x-signature com MP_WEBHOOK_SECRET).
  * - Etapa 5: estornar (total ou parcial, com o token DA LOJA e X-Idempotency-Key) e
  *   erroNoEmailDoPagador (recusa do Pix por causa do e-mail).
+ * - Etapa 8: consultarEstorno (o "Tentar de novo" consulta o estorno já pedido) e tokenAindaAutorizado.
  * - Etapa 7 (cartão pelo Checkout Pro): criarPreferencia, buscarPagamentosDoPedido e
  *   expirarPreferencia (com o token DA LOJA).
  *
@@ -162,37 +163,94 @@ export function pagamentoNormalizado(dados) {
   };
 }
 
+/** Estorno do Mercado Pago no nosso formato (id, status e valor). */
+function estornoNormalizado(dados) {
+  if (dados?.id == null) throw new ErroMercadoPago('Resposta do Mercado Pago sem estorno', { codigo: 'RESPOSTA_INVALIDA' });
+  return {
+    id: String(dados.id),
+    status: typeof dados.status === 'string' ? dados.status : null,
+    valorCentavos: emCentavos(dados.amount),
+  };
+}
+
 /** "2026-11-27T12:30:00.000-03:00": data com fuso, como o Mercado Pago aceita. */
 export function dataComFusoBrasilia(data) {
   const local = new Date(data.getTime() - 3 * 60 * 60 * 1000);
   return `${local.toISOString().slice(0, 23)}-03:00`;
 }
 
+/** Diferença máxima entre o `ts` da assinatura e o relógio do servidor (notificação velha = reenvio). */
+export const TOLERANCIA_TS_WEBHOOK_MS = 10 * 60 * 1000;
+
 /**
- * Assinatura da notificação (cabeçalho `x-signature: ts=…,v1=…`): HMAC-SHA256 (hex) com
- * MP_WEBHOOK_SECRET do manifesto `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`. O
- * `data.id` vai em minúsculas; a parte que não veio sai do manifesto. Comparação em tempo
- * constante. Sem segredo = sempre inválida.
- * @param {{ assinatura?: string, requestId?: string, dataId?: string | number | null, segredo?: string }} dados
+ * Instante do `ts` da assinatura em ms. O `ts` é em SEGUNDOS: o exemplo da documentação
+ * (`ts=1704908010`) tem 10 dígitos e o validador do SDK oficial (sdk-nodejs,
+ * src/utils/webhook/index.ts) faz `Number(ts) * 1000` antes de comparar com `Date.now()`
+ * (conferido em 2026-11-28). Por segurança, 12 dígitos ou mais = já em milissegundos.
+ * Não numérico = null.
  */
-export function validarAssinaturaWebhook({ assinatura, requestId, dataId, segredo }) {
-  if (!segredo || typeof assinatura !== 'string') return false;
-  const partes = Object.fromEntries(
+export function instanteDoTs(ts) {
+  if (!/^\d{1,16}$/.test(String(ts ?? ''))) return null;
+  const n = Number(ts);
+  return n < 1e11 ? n * 1000 : n;
+}
+
+/** `ts` e `v1` do cabeçalho `x-signature` (chaves sem diferenciar maiúsculas, como o SDK). */
+function lerAssinatura(assinatura) {
+  if (typeof assinatura !== 'string') return {};
+  return Object.fromEntries(
     assinatura.split(',').map((p) => {
       const [k, ...v] = p.split('=');
-      return [k.trim(), v.join('=').trim()];
+      return [k.trim().toLowerCase(), v.join('=').trim()];
     }),
   );
+}
+
+/**
+ * Diferença, em segundos inteiros, entre o `ts` da assinatura e `agora` (positiva = ts no
+ * passado). Sem ts legível = null. Só para o log da recusa (não tem dado sensível).
+ */
+export function diferencaDoTsEmSegundos(assinatura, agora) {
+  const instante = instanteDoTs(lerAssinatura(assinatura).ts);
+  return instante == null ? null : Math.round((agora.getTime() - instante) / 1000);
+}
+
+/**
+ * Assinatura da notificação (cabeçalho `x-signature: ts=…,v1=…`): HMAC-SHA256 (hex) com
+ * MP_WEBHOOK_SECRET do manifesto `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`; a parte que
+ * não veio sai do manifesto. O `data.id` vale como chegou (é o que o SDK oficial faz) ou em
+ * minúsculas (o que a documentação antiga pedia para ids alfanuméricos); os ids de pagamento são
+ * só números e nos dois casos dão o mesmo. Comparação em tempo constante. Sem segredo = sempre
+ * inválida. Com `agora`, o `ts` também precisa estar a no máximo 10 minutos do relógio do
+ * servidor (uma notificação assinada antiga não vale de novo).
+ * @param {{ assinatura?: string, requestId?: string, dataId?: string | number | null, segredo?: string,
+ *   agora?: Date | null, toleranciaMs?: number }} dados
+ */
+export function validarAssinaturaWebhook({ assinatura, requestId, dataId, segredo, agora = null, toleranciaMs = TOLERANCIA_TS_WEBHOOK_MS }) {
+  if (!segredo || typeof assinatura !== 'string') return false;
+  const partes = lerAssinatura(assinatura);
   if (!partes.ts || !/^[0-9a-f]{64}$/i.test(partes.v1 ?? '')) return false;
-  const esperado = createHmac('sha256', segredo).update(manifestoDoWebhook({ requestId, dataId, ts: partes.ts })).digest();
+  if (agora) {
+    const instante = instanteDoTs(partes.ts);
+    if (instante == null || Math.abs(agora.getTime() - instante) > toleranciaMs) return false;
+  }
   const recebido = Buffer.from(partes.v1, 'hex');
-  return recebido.length === esperado.length && timingSafeEqual(recebido, esperado);
+  const manifestos = new Set([
+    manifestoDoWebhook({ requestId, dataId, ts: partes.ts, minusculas: false }),
+    manifestoDoWebhook({ requestId, dataId, ts: partes.ts }),
+  ]);
+  let confere = false;
+  for (const m of manifestos) {
+    const esperado = createHmac('sha256', segredo).update(m).digest();
+    if (recebido.length === esperado.length && timingSafeEqual(recebido, esperado)) confere = true;
+  }
+  return confere;
 }
 
 /** Texto assinado pelo Mercado Pago (exportado para os testes montarem notificações). */
-export function manifestoDoWebhook({ requestId, dataId, ts }) {
+export function manifestoDoWebhook({ requestId, dataId, ts, minusculas = true }) {
   let manifesto = '';
-  if (dataId != null && String(dataId) !== '') manifesto += `id:${String(dataId).toLowerCase()};`;
+  if (dataId != null && String(dataId) !== '') manifesto += `id:${minusculas ? String(dataId).toLowerCase() : String(dataId)};`;
   if (requestId) manifesto += `request-id:${requestId};`;
   return `${manifesto}ts:${ts};`;
 }
@@ -330,12 +388,21 @@ export function criarClienteMercadoPago({ fetch: buscar = globalThis.fetch, conf
         corpo,
         idempotencyKey,
       });
-      if (dados?.id == null) throw new ErroMercadoPago('Resposta do Mercado Pago sem estorno', { codigo: 'RESPOSTA_INVALIDA' });
-      return {
-        id: String(dados.id),
-        status: typeof dados.status === 'string' ? dados.status : null,
-        valorCentavos: emCentavos(dados.amount),
-      };
+      return estornoNormalizado(dados);
+    },
+
+    /**
+     * Um estorno já pedido (GET /v1/payments/{id}/refunds/{refund_id}): o "Tentar de novo" do
+     * ADMIN consulta o estorno registrado em vez de pedir outro por cima.
+     * @returns {Promise<{ id: string, status: string | null, valorCentavos: number | null }>}
+     */
+    async consultarEstorno(accessToken, paymentId, refundId) {
+      const dados = await chamarPagamentos(
+        'GET',
+        `/v1/payments/${encodeURIComponent(paymentId)}/refunds/${encodeURIComponent(refundId)}`,
+        accessToken,
+      );
+      return estornoNormalizado(dados);
     },
 
     /**
@@ -393,6 +460,23 @@ export function criarClienteMercadoPago({ fetch: buscar = globalThis.fetch, conf
       const dados = await chamarPagamentos('GET', `/v1/payments/search?${q}`, accessToken);
       const lista = Array.isArray(dados?.results) ? dados.results : [];
       return lista.filter((p) => p?.id != null && typeof p.status === 'string').map(pagamentoNormalizado);
+    },
+
+    /**
+     * O token da loja ainda vale? (GET /users/me) Usado antes de desconectar a loja por uma
+     * notificação "mp-connect": o corpo da notificação não é assinado, então só o Mercado Pago
+     * confirma que a autorização acabou. SÓ 401/403 = não vale mais (false); sucesso = vale
+     * (true); qualquer outra coisa (5xx, tempo esgotado, rede, sem token para perguntar) =
+     * ErroMercadoPago: não dá para afirmar que acabou.
+     */
+    async tokenAindaAutorizado(accessToken) {
+      try {
+        await chamarPagamentos('GET', '/users/me', accessToken);
+        return true;
+      } catch (err) {
+        if (err instanceof ErroMercadoPago && (err.status === 401 || err.status === 403)) return false;
+        throw err;
+      }
     },
 
     /** Cancela um Pix ainda pendente (o Mercado Pago só cancela pending/in_process). */

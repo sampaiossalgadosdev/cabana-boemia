@@ -37,8 +37,7 @@ import { lerConfigMapas } from '../lib/mapas.js';
 import { campanhaLigada, pagamentoOnlineDisponivel } from '../lib/pagamentoOnline.js';
 import * as conexaoRepo from '../repositories/conexaoMp.repository.js';
 import * as pagamentoRepo from '../repositories/pagamento.repository.js';
-import { alertarUmaVez, criarAlerta } from './alerta.service.js';
-import { formatarDinheiro } from '@restaurante/shared/cupom';
+import { alertarUmaVez } from './alerta.service.js';
 
 /** APP: o app Taaki Delivery (antes ia como SITE). Fica por último: a ordem dos relatórios não muda. */
 export const CANAIS = ['SITE', 'WHATSAPP', 'SALAO', 'APP'];
@@ -612,20 +611,10 @@ function validarEntrada({ canal, itens, endereco, entrega, ajustes, pagoAgora, p
 }
 
 /** Alertas do ADMIN gerados pela criação (depois do commit; falha aqui nunca derruba o pedido). */
-async function alertasDaCriacao(lojaId, { pedido, split, lojaSemPino, pagamentoId }) {
+async function alertasDaCriacao(lojaId, { lojaSemPino }) {
+  // A trava dos 50% (TAXA_ENTREGA_COMPLEMENTO) alerta na aprovação do pagamento (pagamento.service),
+  // não aqui: um Pix que expira não deixa débito nenhum.
   try {
-    // Trava dos 50%: só no pagamento online (é o split que fica limitado). Na entrega, a loja
-    // deve a taxa inteira no fechamento de qualquer jeito.
-    if (split.alertaAdmin && pagamentoId) {
-      await criarAlerta({
-        tipo: 'TAXA_ENTREGA_COMPLEMENTO',
-        lojaId,
-        pedidoId: pedido.id,
-        mensagem:
-          `A taxa de entrega (${formatarDinheiro(split.devidoPelaLojaCentavos)}) passou de 50% do valor cobrado do pedido ` +
-          `${pedido.id}. ${formatarDinheiro(split.complementoLojaCentavos)} ficam como débito da loja no fechamento.`,
-      });
-    }
     if (lojaSemPino) {
       await alertarUmaVez({
         tipo: 'LOJA_SEM_LOCALIZACAO',

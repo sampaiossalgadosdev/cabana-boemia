@@ -26,7 +26,14 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { ErroHttp } from '../lib/erros.js';
 import { decifrar, chaveDoAmbiente } from '../lib/cifra.js';
-import { criarClienteMercadoPago, erroNoEmailDoPagador, ErroMercadoPago, validarAssinaturaWebhook } from '../lib/mercadoPago.js';
+import {
+  criarClienteMercadoPago,
+  diferencaDoTsEmSegundos,
+  erroNoEmailDoPagador,
+  ErroMercadoPago,
+  TOLERANCIA_TS_WEBHOOK_MS,
+  validarAssinaturaWebhook,
+} from '../lib/mercadoPago.js';
 import { faltasParaConectar, segredoDoWebhook } from '../lib/pagamentoOnline.js';
 import { mensagemDaRecusa, tipoDoPagamento } from '../lib/cartaoOnline.js';
 import { diaOperacional, paraCampoData } from '../lib/fuso.js';
@@ -1163,7 +1170,17 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
    */
   async function receberWebhook({ assinatura, requestId, dataIdQuery, corpo }, agora = new Date()) {
     const dataId = dataIdQuery ?? corpo?.data?.id ?? null;
-    if (!validarAssinaturaWebhook({ assinatura, requestId, dataId, segredo: segredoDoWebhook(env), agora })) {
+    const segredo = segredoDoWebhook(env);
+    if (!validarAssinaturaWebhook({ assinatura, requestId, dataId, segredo, agora })) {
+      // Assinatura certa, mas o ts fora dos 10 minutos: aviso com a diferença (para conferir no teste
+      // real se uma notificação legítima está sendo recusada). Sem id, corpo nem cabeçalho.
+      if (validarAssinaturaWebhook({ assinatura, requestId, dataId, segredo })) {
+        const diferenca = diferencaDoTsEmSegundos(assinatura, agora);
+        log.warn(
+          `[pagamento] webhook recusado: ts fora da janela de ${TOLERANCIA_TS_WEBHOOK_MS / 1000} s ` +
+            `(diferença de ${diferenca} s; positiva = notificação no passado)`,
+        );
+      }
       throw new ErroHttp(401, 'Assinatura inválida', { codigo: 'ASSINATURA_INVALIDA' });
     }
     const tipo = String(corpo?.type ?? corpo?.topic ?? 'desconhecido').slice(0, 60);

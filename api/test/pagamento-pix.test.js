@@ -17,6 +17,7 @@ import {
   urlDeNotificacao,
   validarAssinaturaWebhook,
   instanteDoTs,
+  diferencaDoTsEmSegundos,
 } from '../src/lib/mercadoPago.js';
 import { resolverTaxa } from '../src/services/pedido.service.js';
 
@@ -167,6 +168,20 @@ describe('módulo do Mercado Pago: Pix, consulta, cancelamento e assinatura', ()
     assert.equal(instanteDoTs('1764331200'), 1764331200000);
     assert.equal(instanteDoTs('1764331200000'), 1764331200000);
     assert.equal(instanteDoTs('abc'), null);
+    assert.equal(diferencaDoTsEmSegundos(assinar({ dataId: '1', requestId: 'r', ts: tsDe(min(-11)) }), agora), 660);
+    assert.equal(diferencaDoTsEmSegundos('v1=abc', agora), null);
+  });
+
+  test('data.id alfanumérico: vale como chegou (o SDK oficial não muda a caixa) ou em minúsculas (documentação antiga)', () => {
+    const ts = '1764331200';
+    const comSegredo = (m) => `ts=${ts},v1=${createHmac('sha256', SEGREDO_WEBHOOK).update(m).digest('hex')}`;
+    const comoSdk = comSegredo(manifestoDoWebhook({ dataId: 'ABC123', requestId: 'r', ts, minusculas: false }));
+    assert.equal(manifestoDoWebhook({ dataId: 'ABC123', requestId: 'r', ts, minusculas: false }), 'id:ABC123;request-id:r;ts:1764331200;');
+    assert.equal(validarAssinaturaWebhook({ assinatura: comoSdk, requestId: 'r', dataId: 'ABC123', segredo: SEGREDO_WEBHOOK }), true);
+    const minusculo = comSegredo(manifestoDoWebhook({ dataId: 'ABC123', requestId: 'r', ts }));
+    assert.equal(validarAssinaturaWebhook({ assinatura: minusculo, requestId: 'r', dataId: 'ABC123', segredo: SEGREDO_WEBHOOK }), true);
+    assert.equal(validarAssinaturaWebhook({ assinatura: comoSdk, requestId: 'r', dataId: 'ABC124', segredo: SEGREDO_WEBHOOK }), false);
+    assert.equal(validarAssinaturaWebhook({ assinatura: comoSdk.replace('ts=', 'TS='), requestId: 'r', dataId: 'ABC123', segredo: SEGREDO_WEBHOOK }), true, 'chave do cabeçalho sem diferenciar maiúsculas');
   });
 
   test('tokenAindaAutorizado: /users/me com o token; SÓ 401/403 = false; 5xx, tempo, rede e sem token lançam', async () => {
@@ -735,6 +750,14 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
       assinatura: assinar({ dataId: mpPaymentId, requestId: velhaReq, ts: tsDe(new Date(agora.getTime() - 11 * 60_000)) }),
     });
     assert.equal(velha.status, 401);
+    // Aviso no log com a diferença em segundos (11 min = 660 s), sem o id do pagamento nem cabeçalhos.
+    const aviso = avisos.findLast((a) => a.includes('webhook recusado: ts fora da janela'));
+    assert.match(aviso, /diferença de 660 s/);
+    assert.ok(!aviso.includes(String(mpPaymentId)) && !aviso.includes(velhaReq) && !aviso.includes(SEGREDO_WEBHOOK));
+    // Assinatura errada (não é questão de ts): nenhum aviso de ts.
+    const quantos = avisos.filter((a) => a.includes('ts fora da janela')).length;
+    await notificar(notificacao, { assinatura: assinar({ dataId: mpPaymentId, requestId: 'y', segredo: 'errado' }) });
+    assert.equal(avisos.filter((a) => a.includes('ts fora da janela')).length, quantos);
 
     agora = new Date(SABADO_20H.getTime() + 3 * 60_000);
     mp.mudar(mpPaymentId, { status: 'approved', statusDetail: 'accredited', aprovadoEm: agora.toISOString() });

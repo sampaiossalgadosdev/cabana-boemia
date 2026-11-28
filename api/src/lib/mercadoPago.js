@@ -183,8 +183,11 @@ export function dataComFusoBrasilia(data) {
 export const TOLERANCIA_TS_WEBHOOK_MS = 10 * 60 * 1000;
 
 /**
- * Instante do `ts` da assinatura em ms. O Mercado Pago manda em segundos ou em milissegundos
- * (a documentação mostra os dois): até 11 dígitos = segundos. Não numérico = null.
+ * Instante do `ts` da assinatura em ms. O `ts` é em SEGUNDOS: o exemplo da documentação
+ * (`ts=1704908010`) tem 10 dígitos e o validador do SDK oficial (sdk-nodejs,
+ * src/utils/webhook/index.ts) faz `Number(ts) * 1000` antes de comparar com `Date.now()`
+ * (conferido em 2026-11-28). Por segurança, 12 dígitos ou mais = já em milissegundos.
+ * Não numérico = null.
  */
 export function instanteDoTs(ts) {
   if (!/^\d{1,16}$/.test(String(ts ?? ''))) return null;
@@ -192,37 +195,62 @@ export function instanteDoTs(ts) {
   return n < 1e11 ? n * 1000 : n;
 }
 
+/** `ts` e `v1` do cabeçalho `x-signature` (chaves sem diferenciar maiúsculas, como o SDK). */
+function lerAssinatura(assinatura) {
+  if (typeof assinatura !== 'string') return {};
+  return Object.fromEntries(
+    assinatura.split(',').map((p) => {
+      const [k, ...v] = p.split('=');
+      return [k.trim().toLowerCase(), v.join('=').trim()];
+    }),
+  );
+}
+
+/**
+ * Diferença, em segundos inteiros, entre o `ts` da assinatura e `agora` (positiva = ts no
+ * passado). Sem ts legível = null. Só para o log da recusa (não tem dado sensível).
+ */
+export function diferencaDoTsEmSegundos(assinatura, agora) {
+  const instante = instanteDoTs(lerAssinatura(assinatura).ts);
+  return instante == null ? null : Math.round((agora.getTime() - instante) / 1000);
+}
+
 /**
  * Assinatura da notificação (cabeçalho `x-signature: ts=…,v1=…`): HMAC-SHA256 (hex) com
- * MP_WEBHOOK_SECRET do manifesto `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`. O
- * `data.id` vai em minúsculas; a parte que não veio sai do manifesto. Comparação em tempo
- * constante. Sem segredo = sempre inválida. Com `agora`, o `ts` também precisa estar a no
- * máximo 10 minutos do relógio do servidor (uma notificação assinada antiga não vale de novo).
+ * MP_WEBHOOK_SECRET do manifesto `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`; a parte que
+ * não veio sai do manifesto. O `data.id` vale como chegou (é o que o SDK oficial faz) ou em
+ * minúsculas (o que a documentação antiga pedia para ids alfanuméricos); os ids de pagamento são
+ * só números e nos dois casos dão o mesmo. Comparação em tempo constante. Sem segredo = sempre
+ * inválida. Com `agora`, o `ts` também precisa estar a no máximo 10 minutos do relógio do
+ * servidor (uma notificação assinada antiga não vale de novo).
  * @param {{ assinatura?: string, requestId?: string, dataId?: string | number | null, segredo?: string,
  *   agora?: Date | null, toleranciaMs?: number }} dados
  */
 export function validarAssinaturaWebhook({ assinatura, requestId, dataId, segredo, agora = null, toleranciaMs = TOLERANCIA_TS_WEBHOOK_MS }) {
   if (!segredo || typeof assinatura !== 'string') return false;
-  const partes = Object.fromEntries(
-    assinatura.split(',').map((p) => {
-      const [k, ...v] = p.split('=');
-      return [k.trim(), v.join('=').trim()];
-    }),
-  );
+  const partes = lerAssinatura(assinatura);
   if (!partes.ts || !/^[0-9a-f]{64}$/i.test(partes.v1 ?? '')) return false;
   if (agora) {
     const instante = instanteDoTs(partes.ts);
     if (instante == null || Math.abs(agora.getTime() - instante) > toleranciaMs) return false;
   }
-  const esperado = createHmac('sha256', segredo).update(manifestoDoWebhook({ requestId, dataId, ts: partes.ts })).digest();
   const recebido = Buffer.from(partes.v1, 'hex');
-  return recebido.length === esperado.length && timingSafeEqual(recebido, esperado);
+  const manifestos = new Set([
+    manifestoDoWebhook({ requestId, dataId, ts: partes.ts, minusculas: false }),
+    manifestoDoWebhook({ requestId, dataId, ts: partes.ts }),
+  ]);
+  let confere = false;
+  for (const m of manifestos) {
+    const esperado = createHmac('sha256', segredo).update(m).digest();
+    if (recebido.length === esperado.length && timingSafeEqual(recebido, esperado)) confere = true;
+  }
+  return confere;
 }
 
 /** Texto assinado pelo Mercado Pago (exportado para os testes montarem notificações). */
-export function manifestoDoWebhook({ requestId, dataId, ts }) {
+export function manifestoDoWebhook({ requestId, dataId, ts, minusculas = true }) {
   let manifesto = '';
-  if (dataId != null && String(dataId) !== '') manifesto += `id:${String(dataId).toLowerCase()};`;
+  if (dataId != null && String(dataId) !== '') manifesto += `id:${minusculas ? String(dataId).toLowerCase() : String(dataId)};`;
   if (requestId) manifesto += `request-id:${requestId};`;
   return `${manifesto}ts:${ts};`;
 }

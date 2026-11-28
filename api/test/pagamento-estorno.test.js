@@ -60,6 +60,22 @@ describe('módulo do Mercado Pago: estorno e e-mail recusado', () => {
     assert.equal((await consulta.consultarPagamento(TOKEN_LOJA, '1')).valorReembolsadoCentavos, 750);
   });
 
+  test('consultarEstorno e listarEstornos: GET com o token da loja, no nosso formato', async () => {
+    const um = fetchFalso({ id: 88, status: 'in_process', amount: 3 }, 200);
+    const mp = criarClienteMercadoPago({ config, fetch: um.fetch });
+    assert.deepEqual(await mp.consultarEstorno(TOKEN_LOJA, '123', '88'), { id: '88', status: 'in_process', valorCentavos: 300 });
+    assert.equal(um.chamadas[0].url, 'https://api.mercadopago.com/v1/payments/123/refunds/88');
+    assert.equal(um.chamadas[0].metodo, 'GET');
+    assert.equal(um.chamadas[0].headers.authorization, `Bearer ${TOKEN_LOJA}`);
+    const lista = fetchFalso([{ id: 1, status: 'approved', amount: 5 }, { id: 2, status: 'rejected', amount: 5 }, { sem: 'id' }], 200);
+    const todos = await criarClienteMercadoPago({ config, fetch: lista.fetch }).listarEstornos(TOKEN_LOJA, '123');
+    assert.equal(lista.chamadas[0].url, 'https://api.mercadopago.com/v1/payments/123/refunds');
+    assert.deepEqual(todos, [
+      { id: '1', status: 'approved', valorCentavos: 500 },
+      { id: '2', status: 'rejected', valorCentavos: 500 },
+    ]);
+  });
+
   test('erroNoEmailDoPagador: só quando o message/cause aponta o e-mail', () => {
     const email = new ErroMercadoPago('x', { status: 400, codigo: 'bad_request', detalhe: 'payer.email *** is invalid [4050: payer.email must be a valid email]' });
     const outro = new ErroMercadoPago('x', { status: 400, codigo: 'bad_request', detalhe: 'Collector user without key enabled for QR render [13253: x]' });
@@ -132,15 +148,39 @@ describe('estorno, aceite e PDV (pagamento online, Etapa 5)', { skip: semBancoDe
       mp.mudar(id, { status: 'cancelled' });
       return { ...mp.pagamentos.get(String(id)).r };
     },
+    /**
+     * `falharEstorno`: 'erro' (recusa sem criar), 'recusado' (cria rejeitado), 'processando'
+     * (cria em processamento, sem mexer no reembolsado) ou 'caiu' (cria aprovado, mas a resposta
+     * não chega: erro de rede).
+     */
     async estornar(token, id, dados) {
       mp.chamadas.push({ tipo: 'estornar', token, id, dados });
       if (mp.falharEstorno === 'erro') throw new ErroMercadoPago('Mercado Pago recusou (400)', { status: 400, codigo: 'bad_request', detalhe: 'Saldo insuficiente na conta' });
-      if (mp.falharEstorno === 'recusado') return { id: `r-${mp.chamadas.length}`, status: 'rejected', valorCentavos: null };
-      const p = mp.pagamentos.get(String(id)).r;
-      const valor = dados.valorCentavos ?? p.valorCentavos - p.valorReembolsadoCentavos;
-      const reembolsado = p.valorReembolsadoCentavos + valor;
-      mp.mudar(id, { valorReembolsadoCentavos: reembolsado, status: reembolsado >= p.valorCentavos ? 'refunded' : 'approved' });
-      return { id: `r-${mp.chamadas.length}`, status: 'approved', valorCentavos: valor };
+      const p = mp.pagamentos.get(String(id));
+      const valor = dados.valorCentavos ?? p.r.valorCentavos - p.r.valorReembolsadoCentavos;
+      const refund = { id: `r-${mp.chamadas.length}`, status: 'approved', valorCentavos: valor };
+      p.refunds = [...(p.refunds ?? []), refund];
+      if (mp.falharEstorno === 'recusado') return { ...refund, status: (refund.status = 'rejected') };
+      if (mp.falharEstorno === 'processando') return { ...refund, status: (refund.status = 'in_process') };
+      mp.aprovarEstorno(id, refund.id);
+      if (mp.falharEstorno === 'caiu') throw new ErroMercadoPago('Mercado Pago fora do ar ou sem resposta', { codigo: 'TEMPO_ESGOTADO' });
+      return { ...refund };
+    },
+    /** O Mercado Pago conclui um estorno (aprovado): soma no reembolsado do pagamento. */
+    aprovarEstorno(id, refundId) {
+      const p = mp.pagamentos.get(String(id));
+      const refund = p.refunds.find((e) => e.id === refundId);
+      refund.status = 'approved';
+      const reembolsado = p.r.valorReembolsadoCentavos + refund.valorCentavos;
+      mp.mudar(id, { valorReembolsadoCentavos: reembolsado, status: reembolsado >= p.r.valorCentavos ? 'refunded' : 'approved' });
+    },
+    async consultarEstorno(token, id, refundId) {
+      mp.chamadas.push({ tipo: 'consultarEstorno', token, id, refundId });
+      return { ...mp.pagamentos.get(String(id)).refunds.find((e) => e.id === refundId) };
+    },
+    async listarEstornos(token, id) {
+      mp.chamadas.push({ tipo: 'listarEstornos', token, id });
+      return (mp.pagamentos.get(String(id)).refunds ?? []).map((e) => ({ ...e }));
     },
     mudar(id, dados) {
       const p = mp.pagamentos.get(String(id));
@@ -527,6 +567,64 @@ describe('estorno, aceite e PDV (pagamento online, Etapa 5)', { skip: semBancoDe
     assert.equal(r.corpo.resultado, 'CONCLUIDO');
     assert.equal(chamadasDe('estornar').length, chamadas);
     assert.equal((await noBanco(id)).pagamentos[0].status, 'REEMBOLSADO');
+  });
+
+  test('tentar de novo com o estorno em processamento no Mercado Pago: consulta esse estorno, nunca pede outro', async () => {
+    const c = await novoCliente();
+    const { id, mpPaymentId } = await pedidoPago(c);
+    mp.falharEstorno = 'processando';
+    await api('PATCH', `/equipe/pedidos/${id}/cancelar`, { token: tk.ana });
+    mp.falharEstorno = null;
+    let pagamento = (await noBanco(id)).pagamentos[0];
+    assert.equal(pagamento.status, 'REEMBOLSO_PENDENTE');
+    const [estorno] = pagamento.estornos;
+    assert.equal(estorno.status, 'PROCESSANDO');
+    assert.ok(estorno.mpRefundId);
+    const chamadas = chamadasDe('estornar').length;
+
+    // Passados os 2 minutos, o ADMIN tenta de novo: ainda processando lá = 409, nada novo.
+    // (o criadoEm do estorno é o relógio do banco)
+    agora = new Date(Date.now() + 5 * MINUTO);
+    const r1 = await api('POST', `/plataforma/pagamentos/${pagamento.id}/tentar-estorno`, { token: tk.admin });
+    assert.equal(r1.status, 409);
+    assert.equal(r1.corpo.erro.codigo, 'ESTORNO_EM_ANDAMENTO');
+    assert.equal(chamadasDe('consultarEstorno').at(-1).refundId, estorno.mpRefundId);
+    assert.equal(chamadasDe('estornar').length, chamadas, 'nenhum estorno novo');
+
+    // O Mercado Pago conclui: tentar de novo só conclui o nosso (o mesmo id).
+    mp.aprovarEstorno(mpPaymentId, estorno.mpRefundId);
+    const r2 = await api('POST', `/plataforma/pagamentos/${pagamento.id}/tentar-estorno`, { token: tk.admin });
+    assert.equal(r2.corpo.resultado, 'CONCLUIDO');
+    assert.equal(chamadasDe('estornar').length, chamadas, 'nenhum estorno novo');
+    pagamento = (await noBanco(id)).pagamentos[0];
+    assert.equal(pagamento.status, 'REEMBOLSADO');
+    assert.equal(pagamento.estornos.length, 1);
+    assert.equal(pagamento.estornos[0].status, 'CONCLUIDO');
+  });
+
+  test('tentar de novo quando a resposta do estorno se perdeu (o Mercado Pago criou): acha pela lista e conclui', async () => {
+    const c = await novoCliente();
+    const { id, mpPaymentId } = await pedidoPago(c);
+    // Estorno parcial pelo ADMIN com a resposta perdida: no Mercado Pago o estorno existe.
+    await api('PATCH', `/equipe/pedidos/${id}/aceitar`, { token: tk.ana });
+    await api('PATCH', `/equipe/pedidos/${id}/finalizar`, { token: tk.ana, corpo: {} });
+    mp.falharEstorno = 'caiu';
+    const parcial = await api('POST', `/plataforma/pedidos/${id}/estornar`, { token: tk.admin, corpo: { valorCentavos: 300, motivo: 'Item faltando' } });
+    assert.equal(parcial.status, 200, JSON.stringify(parcial.corpo));
+    mp.falharEstorno = null;
+    let pagamento = (await noBanco(id)).pagamentos[0];
+    assert.equal(pagamento.status, 'REEMBOLSO_PENDENTE');
+    assert.equal(pagamento.estornos[0].status, 'FALHOU');
+    // O reembolsado lá já subiu, mas a regra da lista vale também quando a consulta ainda não mostra.
+    mp.mudar(mpPaymentId, { valorReembolsadoCentavos: 0, status: 'approved' });
+    const chamadas = chamadasDe('estornar').length;
+    const r = await api('POST', `/plataforma/pagamentos/${pagamento.id}/tentar-estorno`, { token: tk.admin });
+    assert.equal(r.corpo.resultado, 'CONCLUIDO', JSON.stringify(r.corpo));
+    assert.equal(chamadasDe('estornar').length, chamadas, 'nenhum estorno novo');
+    pagamento = (await noBanco(id)).pagamentos[0];
+    assert.equal(pagamento.status, 'REEMBOLSO_PARCIAL');
+    assert.equal(pagamento.valorReembolsadoCentavos, 300);
+    assert.ok(pagamento.estornos[0].mpRefundId);
   });
 
   test('resolvido por fora: observação obrigatória; pagamento REEMBOLSADO', async () => {

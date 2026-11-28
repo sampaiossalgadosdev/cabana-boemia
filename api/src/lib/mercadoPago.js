@@ -11,6 +11,7 @@
  *   validarAssinaturaWebhook (x-signature com MP_WEBHOOK_SECRET).
  * - Etapa 5: estornar (total ou parcial, com o token DA LOJA e X-Idempotency-Key) e
  *   erroNoEmailDoPagador (recusa do Pix por causa do e-mail).
+ * - Etapa 8: consultarEstorno e listarEstornos (o "Tentar de novo" nunca estorna duas vezes).
  * - Etapa 7 (cartão pelo Checkout Pro): criarPreferencia, buscarPagamentosDoPedido e
  *   expirarPreferencia (com o token DA LOJA).
  *
@@ -159,6 +160,16 @@ export function pagamentoNormalizado(dados) {
     aprovadoEm: typeof dados.date_approved === 'string' ? dados.date_approved : null,
     // Quanto já voltou ao comprador (estorno total ou parcial; feito por nós ou direto no Mercado Pago).
     valorReembolsadoCentavos: emCentavos(dados.transaction_amount_refunded) ?? 0,
+  };
+}
+
+/** Estorno do Mercado Pago no nosso formato (id, status e valor). */
+function estornoNormalizado(dados) {
+  if (dados?.id == null) throw new ErroMercadoPago('Resposta do Mercado Pago sem estorno', { codigo: 'RESPOSTA_INVALIDA' });
+  return {
+    id: String(dados.id),
+    status: typeof dados.status === 'string' ? dados.status : null,
+    valorCentavos: emCentavos(dados.amount),
   };
 }
 
@@ -330,12 +341,27 @@ export function criarClienteMercadoPago({ fetch: buscar = globalThis.fetch, conf
         corpo,
         idempotencyKey,
       });
-      if (dados?.id == null) throw new ErroMercadoPago('Resposta do Mercado Pago sem estorno', { codigo: 'RESPOSTA_INVALIDA' });
-      return {
-        id: String(dados.id),
-        status: typeof dados.status === 'string' ? dados.status : null,
-        valorCentavos: emCentavos(dados.amount),
-      };
+      return estornoNormalizado(dados);
+    },
+
+    /**
+     * Um estorno já pedido (GET /v1/payments/{id}/refunds/{refund_id}): o "Tentar de novo" do
+     * ADMIN consulta o estorno registrado em vez de pedir outro por cima.
+     * @returns {Promise<{ id: string, status: string | null, valorCentavos: number | null }>}
+     */
+    async consultarEstorno(accessToken, paymentId, refundId) {
+      const dados = await chamarPagamentos(
+        'GET',
+        `/v1/payments/${encodeURIComponent(paymentId)}/refunds/${encodeURIComponent(refundId)}`,
+        accessToken,
+      );
+      return estornoNormalizado(dados);
+    },
+
+    /** Todos os estornos do pagamento (GET /v1/payments/{id}/refunds), para não estornar duas vezes. */
+    async listarEstornos(accessToken, paymentId) {
+      const dados = await chamarPagamentos('GET', `/v1/payments/${encodeURIComponent(paymentId)}/refunds`, accessToken);
+      return (Array.isArray(dados) ? dados : []).filter((e) => e?.id != null).map(estornoNormalizado);
     },
 
     /**

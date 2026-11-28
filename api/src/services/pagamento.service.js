@@ -755,12 +755,36 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
       throw new ErroHttp(409, 'O estorno ainda está sendo processado. Tente de novo em alguns minutos.', { codigo: 'ESTORNO_EM_ANDAMENTO' });
     }
     if (pagamento.mpPaymentId) {
-      const r = await mp.consultarPagamento(await tokenDaLoja(pagamento.pedido.lojaId), pagamento.mpPaymentId);
-      const noMp = r.status === 'refunded' ? pagamento.valorTotalCentavos : r.valorReembolsadoCentavos;
-      if (noMp >= pagamento.valorReembolsadoCentavos + aberto.valorCentavos) {
-        await concluirEstorno(aberto, { agora, observacao: 'Já estornado no Mercado Pago (conferido ao tentar de novo)' });
+      const token = await tokenDaLoja(pagamento.pedido.lojaId);
+      const concluirJaFeito = async (mpRefundId) => {
+        await concluirEstorno(aberto, { agora, mpRefundId, observacao: 'Já estornado no Mercado Pago (conferido ao tentar de novo)' });
         await avisarEquipe(pagamento.pedidoId);
         return { resultado: 'CONCLUIDO' };
+      };
+      const emAndamentoNoMp = () =>
+        new ErroHttp(409, 'O Mercado Pago ainda está processando este estorno. Confira de novo mais tarde.', { codigo: 'ESTORNO_EM_ANDAMENTO' });
+      // 1. O estorno já foi pedido e o Mercado Pago deu o id: consulta ESSE estorno, nunca pede outro por cima.
+      if (aberto.mpRefundId) {
+        const e = await mp.consultarEstorno(token, pagamento.mpPaymentId, aberto.mpRefundId);
+        if (e.status === 'approved') return concluirJaFeito(e.id);
+        if (!ESTORNO_MP_RECUSADO.includes(e.status)) throw emAndamentoNoMp();
+      }
+      // 2. O valor reembolsado no Mercado Pago já cobre este estorno.
+      const r = await mp.consultarPagamento(token, pagamento.mpPaymentId);
+      const noMp = r.status === 'refunded' ? pagamento.valorTotalCentavos : r.valorReembolsadoCentavos;
+      if (noMp >= pagamento.valorReembolsadoCentavos + aberto.valorCentavos) return concluirJaFeito(null);
+      // 3. Um estorno desse valor no Mercado Pago que não é um dos nossos já concluídos (ex.: a
+      //    chamada anterior caiu depois de o Mercado Pago criar): concluído = conclui; em
+      //    andamento = espera. Só sem nenhum, um estorno novo.
+      const conhecidos = await pagamentoRepo.idsDeEstornosConcluidos(pagamentoId);
+      const doValor = (await mp.listarEstornos(token, pagamento.mpPaymentId)).filter(
+        (e) => !conhecidos.has(e.id) && e.valorCentavos === aberto.valorCentavos && !ESTORNO_MP_RECUSADO.includes(e.status),
+      );
+      const feito = doValor.find((e) => e.status === 'approved');
+      if (feito) return concluirJaFeito(feito.id);
+      if (doValor.length) {
+        await pagamentoRepo.atualizarEstornoSeEm(aberto.id, ['PROCESSANDO', 'FALHOU'], { mpRefundId: doValor[0].id });
+        throw emAndamentoNoMp();
       }
     }
     const novo = await prisma.$transaction(async (tx) => {

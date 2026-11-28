@@ -88,6 +88,15 @@ export function estornoAberto(pagamentoId, db = prisma) {
   });
 }
 
+/** Ids no Mercado Pago dos estornos já concluídos (ou resolvidos) do pagamento. */
+export async function idsDeEstornosConcluidos(pagamentoId, db = prisma) {
+  const lista = await db.estorno.findMany({
+    where: { pagamentoId, status: { in: ['CONCLUIDO', 'RESOLVIDO_POR_FORA'] }, mpRefundId: { not: null } },
+    select: { mpRefundId: true },
+  });
+  return new Set(lista.map((e) => e.mpRefundId));
+}
+
 /** Muda o estorno só se ele estiver num dos status dados. Devolve o count. */
 export async function atualizarEstornoSeEm(id, status, dados, db = prisma) {
   const { count } = await db.estorno.updateMany({ where: { id, status: { in: status } }, data: dados });

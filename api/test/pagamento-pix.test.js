@@ -634,7 +634,7 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     assert.equal(await prisma.pagamento.count({ where: { pedidoId: banco.id } }), 1);
   });
 
-  test('trava de 50%: taxa maior que metade do pedido = comissão limitada no Pix e alerta para o ADMIN', async () => {
+  test('trava de 50%: taxa maior que metade do pedido = comissão limitada no Pix e alerta para o ADMIN só na aprovação', async () => {
     const precoAntes = produto.precoCentavos;
     await prisma.produto.update({ where: { id: produto.id }, data: { precoCentavos: 500 } });
     try {
@@ -644,8 +644,20 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
       // Valor cobrado = 5,00 + 6,76 = 11,76; metade = 5,88 (para baixo) vai no split; 0,88 fica de débito.
       assert.equal(r.corpo.pedido.totalCentavos, 1176);
       assert.equal(chamadasDe('criarPix').at(-1).dados.comissaoCentavos, 588);
-      const alerta = await prisma.alertaPlataforma.findFirst({ where: { tipo: 'TAXA_ENTREGA_COMPLEMENTO', pedidoId: r.corpo.pedido.id } });
+      const doPedido = (id) => prisma.alertaPlataforma.findMany({ where: { tipo: 'TAXA_ENTREGA_COMPLEMENTO', pedidoId: id } });
+      assert.equal((await doPedido(r.corpo.pedido.id)).length, 0, 'na criação ainda não há débito');
+      // Aprovado: o alerta nasce junto com o lançamento do complemento.
+      const { mpPaymentId } = (await pedidoNoBanco(r.corpo.pedido.id)).pagamentos[0];
+      mp.mudar(mpPaymentId, { status: 'approved' });
+      await notificar(notificacaoDePagamento(mpPaymentId));
+      const [alerta, ...outros] = await doPedido(r.corpo.pedido.id);
+      assert.equal(outros.length, 0);
+      assert.match(alerta.mensagem, /R\$ 6,76/);
       assert.match(alerta.mensagem, /R\$ 0,88/);
+      // Pix da mesma situação que expira: nenhum alerta.
+      const expira = await pedir(await novoCliente(), { pagamentoOnline: 'PIX' });
+      await pagamentos.expirarPedido(expira.corpo.pedido.id);
+      assert.equal((await doPedido(expira.corpo.pedido.id)).length, 0);
       // Na entrega não há split: sem alerta.
       const naEntrega = await pedir(c, { formaPagamento: 'DINHEIRO' });
       assert.equal(await prisma.alertaPlataforma.count({ where: { tipo: 'TAXA_ENTREGA_COMPLEMENTO', pedidoId: naEntrega.corpo.pedido.id } }), 0);

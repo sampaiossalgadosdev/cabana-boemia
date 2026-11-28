@@ -364,7 +364,21 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
         });
         await usarCampanha(tx, pagamento.pedidoId, agora);
         // Livro-razão: a parte da taxa que a trava de 50% deixou fora do split (Decisão 2 da Etapa 6).
-        await lancarComplemento(tx, pagamento.pedidoId, pagamento.valorPlataformaCentavos, agora);
+        const complemento = await lancarComplemento(tx, pagamento.pedidoId, pagamento.valorPlataformaCentavos, agora);
+        // Alerta da trava de 50% só aqui, com o pagamento aprovado (um Pix que expira não deve ao Taaki).
+        if (complemento > 0) {
+          await criarAlerta(
+            {
+              tipo: 'TAXA_ENTREGA_COMPLEMENTO',
+              lojaId: linha.lojaId,
+              pedidoId: pagamento.pedidoId,
+              mensagem:
+                `A taxa de entrega (${formatarDinheiro(pagamento.valorPlataformaCentavos + complemento)}) passou de 50% do valor cobrado ` +
+                `do pedido ${pagamento.pedidoId}. ${formatarDinheiro(complemento)} ficam como débito da loja no fechamento.`,
+            },
+            tx,
+          );
+        }
         await tx.pagamento.update({
           where: { id: pagamento.id },
           data: { status: 'APROVADO', aprovadoEm: agora, dadosMp: resumoMp(r), consultadoEm: agora, mpPaymentId: r.id },

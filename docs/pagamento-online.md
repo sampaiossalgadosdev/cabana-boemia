@@ -359,7 +359,23 @@ Commits previstos:
 
 Fora: parcelamento, cartão salvo, Checkout Transparente para cartão.
 
-### Etapa 8 — Revisão final
+### Etapa 8 — Revisão final (revisão de código FEITA em 2026-11-28, branch `feat/pagamento-online`, sem merge nem push)
+
+**Feito** (um commit por problema, cada um com teste; Mercado Pago sempre falso):
+- `380e4a3` "Tentar de novo" nunca pede um segundo estorno: com o `mpRefundId` gravado, consulta esse estorno (`mercadoPago.consultarEstorno`); sem ele, procura na lista de estornos do pagamento (`mercadoPago.listarEstornos`) um do mesmo valor que não seja um dos nossos já concluídos. Só sem nenhum, um estorno novo. Em andamento lá = 409 `ESTORNO_EM_ANDAMENTO`.
+- `337e37b` `mp-connect` só desconecta a loja depois de o Mercado Pago confirmar: o token da loja é testado (`mercadoPago.tokenAindaAutorizado`, `GET /users/me`); ainda autorizado = notificação ignorada (`TOKEN_AINDA_AUTORIZADO`, aviso no log). Motivo: a assinatura não cobre o corpo (`user_id`, `action`).
+- `30ae867` webhook recusa `ts` a mais de 10 minutos do relógio do servidor (`TOLERANCIA_TS_WEBHOOK_MS`; segundos ou milissegundos, `instanteDoTs`) com 401.
+- `13f5592` notificação de pagamento numa conta que já foi de uma loja e está desconectada = alerta `PAGAMENTO_CONTA_DESCONECTADA` (id do pagamento, pedido, um por pagamento). Migration `20261201120000_alerta_conta_desconectada` (só o enum).
+- `ad1bec1` Pix cujo cancelamento no Mercado Pago falhou (aos 15 minutos ou na desistência): `Pagamento.cancelarNoMpAte` = fim dos 30 minutos do Pix lá; a rotina de 1 minuto consulta e cancela de novo até essa hora (aprovado no intervalo = estorno automático, o caminho do pago depois de expirar). Migration `20261201120100_pix_cancelar_de_novo` (só aditiva).
+- `f52ffc6` interruptor próprio da campanha: **`CAMPANHA_FRETE_GRATIS_ATIVA`** ("sim" liga, vazio por padrão). A campanha só funciona com ela ligada E o `CAMPANHA_TELEFONE_SECRET` válido; ligada sem o segredo = a API não sobe. Independente do `PAGAMENTO_ONLINE_ATIVO` (antes bastava o segredo preenchido).
+- `f6f3064` alerta `TAXA_ENTREGA_COMPLEMENTO` na aprovação (junto com o lançamento), não na criação: Pix que expira não gera alerta falso.
+- As duas migrations novas foram aplicadas no banco de dev (`migrate diff` sem diferença).
+
+**Risco aceito (decisão do dono, 2026-11-28)**: a "primeira compra" da campanha confere os pedidos `FINALIZADO` pelo telefone em texto do pedido, que a exclusão da conta apaga. Quem comprou **sem** a campanha, excluiu a conta e voltou com o mesmo número ganha o frete grátis uma vez. Não corrigido: corrigir exigiria guardar o hash do telefone de todo cliente que já comprou, mesmo depois da exclusão, sem consentimento claro (LGPD), e o risco é um frete grátis de poucos reais. (Quem já usou a campanha continua barrado: o hash do uso fica.)
+
+**Falta da Etapa 8** (fora do código): teste de ponta a ponta com as contas de teste do Mercado Pago (Pix e cartão, no APK e no PDV real), conferir no painel o dinheiro na conta da loja e a comissão na da plataforma, `app/PUBLICACAO.md` com o pagamento (Segurança dos dados, compras no app) e o README. A lista completa está em "Pendências para o lançamento" abaixo.
+
+Texto do plano (escrito antes):
 
 - Revisão de segurança (`/security-review`) e de código na branch inteira.
 - Teste de ponta a ponta com as contas de teste do Mercado Pago (vendedor e comprador de teste), Pix e cartão, no Expo Go/APK e no PDV real.
@@ -500,3 +516,38 @@ Respostas às perguntas da Etapa 3:
 2. **Formas no Checkout Pro**: saldo Mercado Pago aceito (não pode ser excluído). Excluídos só boleto, lotérica/caixa eletrônico e Pix (o Pix já é oferecido no app). **Débito e pré-pago continuam** (à vista, aprovam na hora, ajudam quem não tem crédito). Linha de Crédito Mercado Pago: não excluída por enquanto; conferir no teste real (pendência). Por isso a opção do app é "Cartão pelo app (pagar agora)" e a forma gravada na aprovação reflete o tipo real (crédito, débito, pré-pago) quando o Mercado Pago informa, para o relatório e o cupom.
 3. **Cartão recusado**: a recusa não encerra o pedido, que continua aguardando até os 15 minutos; o app mostra o motivo com "Tentar de novo"; "Escolher outra forma" desiste do pedido (estoque e campanha voltam) e volta ao checkout com as formas da loja.
 4. **Prazo**: 15 minutos na preferência; a rotina de 1 minuto expira o pedido; pago depois = estorno automático e alerta (caminho de hoje). Sem tolerância extra.
+
+### Decisões da Etapa 8 (2026-11-28)
+
+1. Corrigir os itens 1 a 7 da revisão, um commit por problema, cada um com teste (ver Etapa 8 › Feito).
+2. **Campanha com interruptor próprio** (`CAMPANHA_FRETE_GRATIS_ATIVA`, vazio por padrão), nem presa ao `PAGAMENTO_ONLINE_ATIVO` nem ligada só pelo segredo: o dono liga a campanha só no dia do lançamento.
+3. **"Tentar de novo" do estorno**: só cria estorno novo quando não existe nenhum estorno registrado em andamento ou concluído para aquele valor.
+4. **Primeira compra depois da exclusão da conta**: risco aceito, não corrigido (LGPD; ver Etapa 8).
+
+## 8. Pendências para o lançamento (2026-11-28)
+
+### Bloqueiam o lançamento
+
+- **Teste de ponta a ponta com as contas de teste do Mercado Pago** (vendedor = loja, comprador), no APK e no PDV real: Pix (aprovado, expirado aos 15 min, pago depois de expirar), cartão (aprovado, recusado e "Tentar de novo", "Escolher outra forma"), recusa da loja, cancelamento pelo cliente, estorno parcial e total pelo ADMIN, desconectar com Pix pendente. Conferir no teste: o template do HMAC e se o `ts` vem em segundos ou milissegundos (os dois são aceitos), se o `mp-connect` chega assinado e com que `action`, a comissão em `fee_details` (Pix e Checkout Pro), o `X-Idempotency-Key` em `/checkout/preferences`, a busca sem `range`, a resposta do `/refunds` (`approved` ou `in_process`), o `GET /users/me` com token revogado (401/403) e a Linha de Crédito no checkout. Conferir no painel o dinheiro na conta da loja e a comissão na conta da plataforma.
+- **Painel do Mercado Pago** configurado (aplicação, redirect, webhooks, chave secreta, credenciais de produção) e **variáveis no Railway** (lista no relatório da Etapa 8 e no `api/.env.example`). Fazer o deploy desta branch (duas migrations novas) antes de ligar.
+- **Revisão jurídica** da política e dos termos com o pagamento (`docs/rascunho-privacidade-pagamento.md`: hoje fala só do Pix; acrescentar o cartão pelo Checkout Pro, em que o cliente digita o cartão no site do Mercado Pago) e **trocar `DOCUMENTOS_APP.versao`** ao publicar (todos aceitam de novo). Termo com cada loja (uso dos dados, papel no pagamento, Mercado Pago da loja).
+- **PDV 0.3.4 instalado em todas as lojas antes do build do app** que manda `origem: 'APP'` (o 0.3.1 esconde os pedidos do app; o 0.3.3 funciona, mas mostra só "Cartão").
+- **Build do app** (versionCode 5, EAS) com `GOOGLE_MAPS_ANDROID_KEY`/`GOOGLE_MAPS_IOS_KEY`, testado no aparelho: Pix (QR, copiar, retomar ao reabrir), cartão no navegador e a volta pelo `deliveryabatia://cartao-retorno`, mapa, GPS e permissão.
+- **Mapas**: chaves do Google (servidor, web, Android, iOS; `app/CONFIGURACAO_MAPAS.md`). Loja com entregador do Taaki exige o pino e cobra por km. **Apagar `PINO_ENTREGA_OPCIONAL`** do Railway antes da primeira loja real.
+- **Modo teste do telefone em produção**: apagar `PHONE_VERIFIER=test`, `PHONE_TEST_EM_PRODUCAO` e `PHONE_TEST_NUMBERS` antes da primeira loja real (o log do deploy não pode trazer "TESTE EM PRODUÇÃO").
+- **Play Console**: Segurança dos dados com o pagamento (e-mail e histórico de compras compartilhados com o processador de pagamentos), questionário de conteúdo (hoje diz "sem compras no app, pagamento na entrega"), textos da ficha ("O pagamento é feito na entrega") e link da política e da exclusão de conta no domínio do Taaki (`app/PUBLICACAO.md`). Na App Store, a observação da revisão ("pagamento feito na entrega") também muda.
+- **Campanha (só se ela entrar no lançamento)**: SMS real no `PHONE_VERIFIER` (Firebase previsto; sem ele ninguém verifica o telefone e a campanha nunca vale). Ligar `CAMPANHA_FRETE_GRATIS_ATIVA=sim` só no dia, com o `CAMPANHA_TELEFONE_SECRET` definido.
+
+### Podem ficar para depois do lançamento
+
+- **Limpeza do domínio antigo** `cabana.managerpix.com.br`: o pagamento não depende dele (o retorno do OAuth volta para `taakidelivery.com.br`). Antes de tirar: versionCode 3 fora de uso, PDVs instalados com o servidor trocado, destino do site da Cabana, Google Branding/origens, `CORS_ORIGINS`. `managerpix.com.br` vence em 11/04/2027.
+- Recusa automática do pedido pago sem aceite (hoje só o toque extra aos 5 min e o alerta aos 10).
+- PKCE no OAuth (manter desligado no aplicativo do Mercado Pago até lá).
+- Segundo pagamento aprovado na mesma preferência do cartão: só alerta (o ADMIN estorna no Mercado Pago).
+- Tópico próprio `chargebacks` (hoje o chargeback chega pelo status do tópico `payment`).
+- Várias instâncias da API: as rotinas (pagamento, renovação, fechamento) supõem uma só.
+- Migração da API de Payments para a de Orders (só `api/src/lib/mercadoPago.js`).
+- Saldo diário e pagamento dos entregadores; arredondamento da taxa por km para R$ 0,50 (lote dos entregadores).
+- Liberação do `/app` por loja (Android e iOS separados): **vira bloqueante se o lançamento for primeiro no iPhone**.
+- Versões novas do SDK 58 apontadas pelo `expo-doctor`; README sem a seção do pagamento online.
+- Risco aceito: primeira compra depois da exclusão da conta (Etapa 8).

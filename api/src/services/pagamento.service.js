@@ -1003,6 +1003,13 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
   async function desvincularConta(mpUserId, agora = new Date()) {
     const conexao = await conexaoRepo.buscarPorMpUserId(mpUserId);
     if (!conexao) return 'CONTA_DESCONHECIDA';
+    // O corpo da notificação não é assinado (só o data.id, o request-id e o ts): confirma com o
+    // Mercado Pago antes de desligar. Token ainda autorizado = notificação ignorada.
+    const { token } = await contaDaLoja(conexao.lojaId);
+    if (token && (await mp.tokenAindaAutorizado(token))) {
+      log.warn(`[pagamento] mp-connect da loja ${conexao.lojaId} ignorado: o token da loja ainda está autorizado no Mercado Pago`);
+      return 'TOKEN_AINDA_AUTORIZADO';
+    }
     await cancelarPendentesDaLoja(conexao.lojaId, agora);
     const loja = await lojaRepo.buscarPorId(conexao.lojaId);
     await prisma.$transaction(async (tx) => {

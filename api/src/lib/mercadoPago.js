@@ -421,6 +421,22 @@ export function criarClienteMercadoPago({ fetch: buscar = globalThis.fetch, conf
       return lista.filter((p) => p?.id != null && typeof p.status === 'string').map(pagamentoNormalizado);
     },
 
+    /**
+     * O token da loja ainda vale? (GET /users/me) Usado antes de desconectar a loja por uma
+     * notificação "mp-connect": o corpo da notificação não é assinado, então só o Mercado Pago
+     * confirma que a autorização acabou. 401/403 = não vale mais (false); sucesso = vale (true);
+     * outro erro (rede, 5xx) = ErroMercadoPago (o webhook é reprocessado depois).
+     */
+    async tokenAindaAutorizado(accessToken) {
+      try {
+        await chamarPagamentos('GET', '/users/me', accessToken);
+        return true;
+      } catch (err) {
+        if (err instanceof ErroMercadoPago && (err.status === 401 || err.status === 403 || err.codigo === 'SEM_TOKEN')) return false;
+        throw err;
+      }
+    },
+
     /** Cancela um Pix ainda pendente (o Mercado Pago só cancela pending/in_process). */
     async cancelarPagamento(accessToken, paymentId) {
       return pagamentoNormalizado(

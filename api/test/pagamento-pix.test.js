@@ -146,6 +146,18 @@ describe('módulo do Mercado Pago: Pix, consulta, cancelamento e assinatura', ()
     assert.equal(validarAssinaturaWebhook({ assinatura: 'lixo', requestId: 'req-1', dataId: 'ABC123', segredo: SEGREDO_WEBHOOK }), false);
   });
 
+  test('tokenAindaAutorizado: /users/me com o token; 401/403 = false; outro erro lança', async () => {
+    const com = (status) => criarClienteMercadoPago({ config, fetch: async () => new Response(JSON.stringify(status < 300 ? { id: 1 } : { message: 'invalid_token' }), { status }) });
+    const f = fetchFalso();
+    assert.equal(await criarClienteMercadoPago({ config, fetch: f.fetch }).tokenAindaAutorizado(TOKEN_LOJA), true);
+    assert.equal(f.chamadas[0].url, 'https://api.mercadopago.com/users/me');
+    assert.equal(f.chamadas[0].headers.authorization, `Bearer ${TOKEN_LOJA}`);
+    assert.equal(await com(401).tokenAindaAutorizado(TOKEN_LOJA), false);
+    assert.equal(await com(403).tokenAindaAutorizado(TOKEN_LOJA), false);
+    assert.equal(await com(200).tokenAindaAutorizado(null), false, 'sem token');
+    await assert.rejects(() => com(500).tokenAindaAutorizado(TOKEN_LOJA), (e) => e instanceof ErroMercadoPago && e.status === 500);
+  });
+
   test('notification_url sai da origem do MP_REDIRECT_URI', () => {
     assert.equal(urlDeNotificacao(config), 'https://api.taakidelivery.com.br/api/mercadopago/webhook?source_news=webhooks');
     assert.equal(urlDeNotificacao({ redirectUri: '' }), null);
@@ -232,6 +244,12 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
       mp.chamadas.push({ tipo: 'estornar', token, id, dados });
       mp.mudar(id, { status: 'refunded', valorReembolsadoCentavos: mp.pagamentos.get(String(id)).r.valorCentavos });
       return { id: `r-${id}`, status: 'approved', valorCentavos: null };
+    },
+    /** `tokenAutorizado`: o que o Mercado Pago responde no /users/me (true = a loja não desvinculou). */
+    tokenAutorizado: true,
+    async tokenAindaAutorizado(token) {
+      mp.chamadas.push({ tipo: 'tokenAutorizado', token });
+      return mp.tokenAutorizado;
     },
     async cancelarPagamento(token, id) {
       mp.chamadas.push({ tipo: 'cancelar', token, id });
@@ -807,7 +825,28 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     await prisma.conexaoMercadoPago.update({ where: { lojaId: 1 }, data: { accessTokenCifrado: cifrar(TOKEN_LOJA, Buffer.from(CHAVE_HEX, "hex")), status: 'CONECTADA' } });
   });
 
+  test('mp-connect com o token ainda autorizado no Mercado Pago: ignorado (nada desliga), com aviso no log', async () => {
+    mp.tokenAutorizado = true;
+    const alertasAntes = await prisma.alertaPlataforma.count({ where: { tipo: 'MP_DESVINCULADA' } });
+    const r = await notificar(
+      { id: 555000, type: 'mp-connect', action: 'application.deauthorized', user_id: Number(CONTA_MP), data: { id: CONTA_MP } },
+      { dataId: CONTA_MP },
+    );
+    assert.equal(r.status, 200);
+    assert.equal(chamadasDe('tokenAutorizado').at(-1).token, TOKEN_LOJA, 'conferido com o token da loja');
+    const conexao = await prisma.conexaoMercadoPago.findUnique({ where: { lojaId: 1 } });
+    assert.equal(conexao.status, 'CONECTADA');
+    assert.ok(conexao.accessTokenCifrado);
+    assert.equal((await prisma.loja.findUnique({ where: { id: 1 } })).pagamentoOnlineAtivo, true);
+    assert.equal(await prisma.alertaPlataforma.count({ where: { tipo: 'MP_DESVINCULADA' } }), alertasAntes);
+    assert.ok(avisos.some((a) => a.includes('mp-connect da loja 1 ignorado')));
+    assert.ok(!avisos.some((a) => a.includes(TOKEN_LOJA)), 'token nunca no log');
+    const evento = await prisma.eventoWebhook.findFirst({ where: { tipo: 'mp-connect' }, orderBy: { id: 'desc' } });
+    assert.equal(evento.resultado, 'TOKEN_AINDA_AUTORIZADO');
+  });
+
   test('mp-connect: a loja desvinculou no Mercado Pago = desconectada, online desligado e alerta', async () => {
+    mp.tokenAutorizado = false;
     const r = await notificar(
       { id: 555001, type: 'mp-connect', action: 'application.deauthorized', user_id: Number(CONTA_MP), data: { id: CONTA_MP } },
       { dataId: CONTA_MP },

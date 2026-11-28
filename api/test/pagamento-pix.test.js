@@ -274,8 +274,11 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
       mp.chamadas.push({ tipo: 'tokenAutorizado', token });
       return mp.tokenAutorizado;
     },
+    /** `falharCancelar`: o cancelamento do Pix dá erro de rede (o Pix continua pendente lá). */
+    falharCancelar: false,
     async cancelarPagamento(token, id) {
       mp.chamadas.push({ tipo: 'cancelar', token, id });
+      if (mp.falharCancelar) throw new ErroMercadoPago('Mercado Pago fora do ar ou sem resposta', { codigo: 'TEMPO_ESGOTADO' });
       const p = mp.pagamentos.get(String(id));
       p.r = { ...p.r, status: 'cancelled', statusDetail: 'by_collector' };
       return { ...p.r };
@@ -770,6 +773,59 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     agora = new Date(SABADO_20H.getTime() + 31_000);
     await api('GET', `/cliente/pedidos/${pedidoId}/pagamento`, { token: c.token });
     assert.equal(chamadasDe('consultar').length, antes + 1);
+  });
+
+  test('cancelamento do Pix que falhou aos 15 minutos: a rotina tenta de novo até os 30 minutos do Mercado Pago', async () => {
+    const min = (n) => new Date(SABADO_20H.getTime() + n * 60_000);
+    await pagamentos.rodarRotina(min(60)); // pendentes de testes anteriores saem antes
+    const pedidoPix = async () => {
+      const r = await pedir(await novoCliente(), { pagamentoOnline: 'PIX' });
+      assert.equal(r.status, 201, JSON.stringify(r.corpo));
+      return { id: r.corpo.pedido.id, mpPaymentId: (await pedidoNoBanco(r.corpo.pedido.id)).pagamentos[0].mpPaymentId };
+    };
+    const a = await pedidoPix();
+    const b = await pedidoPix();
+    try {
+      // 15 min: o cancelamento falha nos dois; o pedido expira assim mesmo e o novo cancelamento fica marcado.
+      mp.falharCancelar = true;
+      await pagamentos.rodarRotina(min(15.1));
+      for (const p of [a, b]) {
+        const banco = await pedidoNoBanco(p.id);
+        assert.equal(banco.status, 'EXPIRADO');
+        assert.equal(banco.pagamentos[0].cancelarNoMpAte.getTime(), min(30).getTime(), 'até os 30 minutos do Mercado Pago');
+      }
+      assert.ok(avisos.some((x) => x.includes(`pedido ${a.id}: cancelamento no Mercado Pago falhou`)));
+
+      // 16 min: o Mercado Pago ainda fora: continua marcado.
+      await pagamentos.rodarRotina(min(16));
+      assert.ok((await pedidoNoBanco(a.id)).pagamentos[0].cancelarNoMpAte);
+
+      // O cliente de B paga no intervalo; o Mercado Pago volta.
+      mp.falharCancelar = false;
+      mp.mudar(b.mpPaymentId, { status: 'approved' });
+      const rotina = await pagamentos.rodarRotina(min(17));
+      assert.equal(rotina.recancelados, 2);
+      const pa = (await pedidoNoBanco(a.id)).pagamentos[0];
+      assert.equal(pa.cancelarNoMpAte, null);
+      assert.equal(mp.pagamentos.get(a.mpPaymentId).r.status, 'cancelled', 'A cancelado no Mercado Pago');
+      // B: pago depois de expirar = estorno automático, pedido continua EXPIRADO.
+      const pb = await pedidoNoBanco(b.id);
+      assert.equal(pb.status, 'EXPIRADO');
+      assert.equal(pb.pagamentos[0].status, 'REEMBOLSADO');
+      assert.equal(pb.pagamentos[0].cancelarNoMpAte, null);
+      assert.equal(await prisma.alertaPlataforma.count({ where: { tipo: 'PAGO_APOS_EXPIRAR', pedidoId: b.id } }), 1);
+      assert.ok(chamadasDe('estornar').some((x) => x.id === b.mpPaymentId));
+
+      // Depois dos 30 minutos não há mais tentativa.
+      const c = await pedidoPix();
+      mp.falharCancelar = true;
+      await pagamentos.rodarRotina(min(15.1));
+      const cancelamentos = chamadasDe('cancelar').filter((x) => x.id === c.mpPaymentId).length;
+      await pagamentos.rodarRotina(min(30.5));
+      assert.equal(chamadasDe('cancelar').filter((x) => x.id === c.mpPaymentId).length, cancelamentos);
+    } finally {
+      mp.falharCancelar = false;
+    }
   });
 
   test('expiração aos 15 minutos: cancela no Mercado Pago, pedido EXPIRADO, estoque e campanha de volta', async () => {

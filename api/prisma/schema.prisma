@@ -886,6 +886,9 @@ model Pagamento {
   aprovadoEm               DateTime?
   /// Última consulta ao Mercado Pago (tela do Pix no app: no máximo a cada 30 s).
   consultadoEm             DateTime?
+  /// Pix expirado do nosso lado cujo cancelamento no Mercado Pago falhou: a rotina tenta de
+  /// novo até esta data (fim dos 30 minutos do Pix no Mercado Pago). Null = nada a fazer.
+  cancelarNoMpAte          DateTime?
   criadoEm                 DateTime              @default(now())
   atualizadoEm             DateTime              @updatedAt
 

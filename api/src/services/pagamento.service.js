@@ -45,6 +45,7 @@ import {
   pedidoDaEquipe,
   pedidoPublico,
   OPCOES_TRANSACAO,
+  PRAZO_PIX_MS,
   STATUS_ABERTOS,
   STATUS_FORA_DO_PDV,
 } from './pedido.service.js';
@@ -193,7 +194,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
    * Encerra o pedido que esperava o pagamento: EXPIRADO, estoque devolvido, campanha liberada e
    * o pagamento pendente com `statusPagamento`. Condicionado: já encerrado = nada (false).
    */
-  async function expirarPedido(pedidoId, { statusPagamento = 'EXPIRADO', dadosMp, agora = new Date() } = {}) {
+  async function expirarPedido(pedidoId, { statusPagamento = 'EXPIRADO', dadosMp, agora = new Date(), extra = {} } = {}) {
     return prisma.$transaction(async (tx) => {
       const linha = await pagamentoRepo.travarPedido(pedidoId, tx);
       if (linha?.status !== 'AGUARDANDO_PAGAMENTO') return false;
@@ -202,7 +203,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
       await liberarCampanha(tx, pedidoId);
       await tx.pagamento.updateMany({
         where: { pedidoId, status: 'PENDENTE' },
-        data: { status: statusPagamento, ...(dadosMp && { dadosMp }), consultadoEm: agora },
+        data: { status: statusPagamento, ...(dadosMp && { dadosMp }), consultadoEm: agora, ...extra },
       });
       return true;
     }, OPCOES_TRANSACAO);
@@ -884,6 +885,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
    * (se ele aprovar depois, o webhook marca A_ESTORNAR).
    */
   async function expirarPendente(pagamento, agora = new Date(), statusPagamento = 'EXPIRADO') {
+    let cancelarDeNovo = false;
     if (pagamento.mpPaymentId || pagamento.mpPreferenceId) {
       try {
         const { token, mpUserId } = await contaDaLoja(pagamento.pedido.lojaId);
@@ -893,9 +895,33 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
         if (r && (r.status === 'pending' || r.status === 'in_process')) await mp.cancelarPagamento(token, r.id);
       } catch (err) {
         log.warn(`[pagamento] pedido ${pagamento.pedidoId}: cancelamento no Mercado Pago falhou (${err.status ?? '-'}, ${textoDoErro(err)})`);
+        // Pix: continua pagável no Mercado Pago até os 30 minutos; a rotina tenta cancelar de novo.
+        cancelarDeNovo = pagamento.metodo === 'PIX' && Boolean(pagamento.mpPaymentId);
       }
     }
-    return (await expirarPedido(pagamento.pedidoId, { statusPagamento, agora })) ? 'EXPIRADO' : 'JA_TRATADO';
+    const extra = cancelarDeNovo ? { cancelarNoMpAte: limiteDoPixNoMp(pagamento) } : {};
+    return (await expirarPedido(pagamento.pedidoId, { statusPagamento, agora, extra })) ? 'EXPIRADO' : 'JA_TRATADO';
+  }
+
+  /**
+   * Fim do Pix no Mercado Pago: criado com 30 minutos (Decisão 5), quando o nosso prazo (expiraEm)
+   * era de 15. Até lá um cancelamento que falhou vale a pena ser repetido.
+   */
+  const limiteDoPixNoMp = (pagamento) =>
+    new Date(new Date(pagamento.expiraEm).getTime() - PRAZO_PIX_MS + PRAZO_PIX_MERCADO_PAGO_MS);
+
+  /**
+   * Rotina: Pix expirado do nosso lado com o cancelamento no Mercado Pago a refazer. Consulta:
+   * aprovado = conciliação (pago depois de expirar: estorno automático); pendente = cancela;
+   * já encerrado lá = nada. Deu certo = sai da lista; falhou = tenta no próximo minuto.
+   */
+  async function recancelarPix(pagamento, agora) {
+    const { token, mpUserId } = await contaDaLoja(pagamento.pedido.lojaId);
+    const r = await mp.consultarPagamento(token, pagamento.mpPaymentId);
+    if (r.status === 'approved') await conciliar(pagamento, r, { agora, mpUserIdDaConta: mpUserId });
+    else if (r.status === 'pending' || r.status === 'in_process') await mp.cancelarPagamento(token, r.id);
+    await pagamentoRepo.atualizar(pagamento.id, { cancelarNoMpAte: null });
+    return r.status === 'approved' ? 'APROVADO_DEPOIS' : 'CANCELADO';
   }
 
   /** Situação do pagamento online (Pix ou cartão) para a tela do app (só o dono do pedido; outro = 404). */
@@ -933,6 +959,7 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
     }
     if (pagamento.status === 'PENDENTE' && pagamento.pedido.status === 'AGUARDANDO_PAGAMENTO') {
       let aprovado = false;
+      let cancelarDeNovo = false;
       try {
         const { token, mpUserId } = await contaDaLoja(pagamento.pedido.lojaId);
         const r = await situacaoNoMp(pagamento, token);
@@ -942,15 +969,17 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
       } catch (err) {
         // Sem o Mercado Pago o cliente ainda desiste; se um pagamento for aprovado depois, ele é estornado (A_ESTORNAR).
         log.warn(`[pagamento] desistência do pedido ${pedidoId}: Mercado Pago (${err.status ?? '-'}, ${textoDoErro(err)})`);
+        cancelarDeNovo = pagamento.metodo === 'PIX' && Boolean(pagamento.mpPaymentId);
       }
-      if (!aprovado) await expirarPedido(pedidoId, { statusPagamento: 'CANCELADO', agora });
+      const extra = cancelarDeNovo ? { cancelarNoMpAte: limiteDoPixNoMp(pagamento) } : {};
+      if (!aprovado) await expirarPedido(pedidoId, { statusPagamento: 'CANCELADO', agora, extra });
     }
     return resposta(pedidoId);
   }
 
   /** Rotina de 1 minuto: expira os vencidos e consulta os outros pendentes (webhook perdido). */
   async function rodarRotina(agora = new Date()) {
-    const r = { expirados: 0, aprovados: 0, consultados: 0, falhas: 0 };
+    const r = { expirados: 0, aprovados: 0, consultados: 0, recancelados: 0, falhas: 0 };
     for (const p of await pagamentoRepo.pendentes()) {
       try {
         if (p.expiraEm <= agora) {
@@ -964,6 +993,16 @@ export function criarServicoPagamentos({ mercadoPago, env = process.env, log = c
       } catch (err) {
         r.falhas += 1;
         log.warn(`[pagamento] rotina, pedido ${p.pedidoId}: ${err.status ?? '-'} ${textoDoErro(err)}`);
+      }
+    }
+    // Pix expirado do nosso lado que o Mercado Pago não cancelou: de novo, até os 30 minutos dele.
+    for (const p of await pagamentoRepo.cancelamentosPendentes(agora)) {
+      try {
+        await recancelarPix(p, agora);
+        r.recancelados += 1;
+      } catch (err) {
+        r.falhas += 1;
+        log.warn(`[pagamento] rotina, novo cancelamento do Pix do pedido ${p.pedidoId}: ${err.status ?? '-'} ${textoDoErro(err)}`);
       }
     }
     // Pago depois de expirar que ficou para trás (ex.: o servidor caiu antes do estorno): uma

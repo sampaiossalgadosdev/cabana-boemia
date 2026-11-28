@@ -169,7 +169,7 @@ describe('módulo do Mercado Pago: Pix, consulta, cancelamento e assinatura', ()
     assert.equal(instanteDoTs('abc'), null);
   });
 
-  test('tokenAindaAutorizado: /users/me com o token; 401/403 = false; outro erro lança', async () => {
+  test('tokenAindaAutorizado: /users/me com o token; SÓ 401/403 = false; 5xx, tempo, rede e sem token lançam', async () => {
     const com = (status) => criarClienteMercadoPago({ config, fetch: async () => new Response(JSON.stringify(status < 300 ? { id: 1 } : { message: 'invalid_token' }), { status }) });
     const f = fetchFalso();
     assert.equal(await criarClienteMercadoPago({ config, fetch: f.fetch }).tokenAindaAutorizado(TOKEN_LOJA), true);
@@ -177,8 +177,13 @@ describe('módulo do Mercado Pago: Pix, consulta, cancelamento e assinatura', ()
     assert.equal(f.chamadas[0].headers.authorization, `Bearer ${TOKEN_LOJA}`);
     assert.equal(await com(401).tokenAindaAutorizado(TOKEN_LOJA), false);
     assert.equal(await com(403).tokenAindaAutorizado(TOKEN_LOJA), false);
-    assert.equal(await com(200).tokenAindaAutorizado(null), false, 'sem token');
+    await assert.rejects(() => com(200).tokenAindaAutorizado(null), (e) => e.codigo === 'SEM_TOKEN', 'sem token não responde "inválido"');
     await assert.rejects(() => com(500).tokenAindaAutorizado(TOKEN_LOJA), (e) => e instanceof ErroMercadoPago && e.status === 500);
+    await assert.rejects(() => com(503).tokenAindaAutorizado(TOKEN_LOJA), (e) => e.status === 503);
+    const lento = criarClienteMercadoPago({ config, tempoLimiteMs: 5, fetch: (_u, o) => new Promise((_r, rej) => o.signal.addEventListener('abort', () => rej(o.signal.reason))) });
+    await assert.rejects(() => lento.tokenAindaAutorizado(TOKEN_LOJA), (e) => e.codigo === 'TEMPO_ESGOTADO');
+    const semRede = criarClienteMercadoPago({ config, fetch: async () => { throw new TypeError('fetch failed'); } });
+    await assert.rejects(() => semRede.tokenAindaAutorizado(TOKEN_LOJA), (e) => e.codigo === 'REDE');
   });
 
   test('notification_url sai da origem do MP_REDIRECT_URI', () => {
@@ -268,10 +273,14 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
       mp.mudar(id, { status: 'refunded', valorReembolsadoCentavos: mp.pagamentos.get(String(id)).r.valorCentavos });
       return { id: `r-${id}`, status: 'approved', valorCentavos: null };
     },
-    /** `tokenAutorizado`: o que o Mercado Pago responde no /users/me (true = a loja não desvinculou). */
+    /**
+     * `tokenAutorizado`: o que o Mercado Pago responde no /users/me: true (a loja não desvinculou),
+     * false (401/403) ou um erro para lançar (5xx, tempo esgotado, rede).
+     */
     tokenAutorizado: true,
     async tokenAindaAutorizado(token) {
       mp.chamadas.push({ tipo: 'tokenAutorizado', token });
+      if (mp.tokenAutorizado instanceof Error) throw mp.tokenAutorizado;
       return mp.tokenAutorizado;
     },
     /** `falharCancelar`: o cancelamento do Pix dá erro de rede (o Pix continua pendente lá). */
@@ -990,6 +999,50 @@ describe('pagamento online na API (canal APP, split, Pix, webhook, expiração)'
     assert.ok(!avisos.some((a) => a.includes(TOKEN_LOJA)), 'token nunca no log');
     const evento = await prisma.eventoWebhook.findFirst({ where: { tipo: 'mp-connect' }, orderBy: { id: 'desc' } });
     assert.equal(evento.resultado, 'TOKEN_AINDA_AUTORIZADO');
+  });
+
+  test('mp-connect sem resposta clara do Mercado Pago (5xx, tempo, rede): nada desconecta, aviso no log e o reenvio é processado', async () => {
+    const notificacao = (id) => ({ id, type: 'mp-connect', action: 'application.deauthorized', user_id: Number(CONTA_MP), data: { id: CONTA_MP } });
+    const falhas = [
+      new ErroMercadoPago('Mercado Pago recusou (500)', { status: 500, codigo: 'internal_error' }),
+      new ErroMercadoPago('Mercado Pago fora do ar ou sem resposta', { codigo: 'TEMPO_ESGOTADO' }),
+      new ErroMercadoPago('Mercado Pago fora do ar ou sem resposta', { codigo: 'REDE' }),
+    ];
+    try {
+      for (const [i, falha] of falhas.entries()) {
+        mp.tokenAutorizado = falha;
+        const n = notificacao(556000 + i);
+        assert.equal((await notificar(n, { dataId: CONTA_MP })).status, 200);
+        const conexao = await prisma.conexaoMercadoPago.findUnique({ where: { lojaId: 1 } });
+        assert.equal(conexao.status, 'CONECTADA', falha.codigo);
+        assert.ok(conexao.accessTokenCifrado);
+        assert.equal((await prisma.loja.findUnique({ where: { id: 1 } })).pagamentoOnlineAtivo, true);
+        assert.ok(avisos.some((a) => a.includes('mp-connect da loja 1 não confirmado') && a.includes(falha.codigo)));
+        // O evento é apagado: o reenvio do Mercado Pago é processado (agora confirmado como válido).
+        assert.equal(await prisma.eventoWebhook.count({ where: { chave: { contains: String(556000 + i) } } }), 0);
+      }
+      mp.tokenAutorizado = true;
+      assert.equal((await notificar(notificacao(556000), { dataId: CONTA_MP })).status, 200);
+      const evento = await prisma.eventoWebhook.findFirst({ where: { chave: { contains: '556000' } } });
+      assert.equal(evento.resultado, 'TOKEN_AINDA_AUTORIZADO');
+      assert.equal(await prisma.alertaPlataforma.count({ where: { tipo: 'MP_DESVINCULADA' } }), 0);
+    } finally {
+      mp.tokenAutorizado = true;
+    }
+  });
+
+  test('mp-connect numa conexão sem token para perguntar: não desconecta (NAO_CONFIRMADO)', async () => {
+    await prisma.conexaoMercadoPago.update({ where: { lojaId: 1 }, data: { status: 'EXPIRADA', accessTokenCifrado: null } });
+    try {
+      const chamadas = chamadasDe('tokenAutorizado').length;
+      assert.equal((await notificar({ id: 557001, type: 'mp-connect', action: 'application.deauthorized', user_id: Number(CONTA_MP), data: { id: CONTA_MP } }, { dataId: CONTA_MP })).status, 200);
+      assert.equal((await prisma.conexaoMercadoPago.findUnique({ where: { lojaId: 1 } })).status, 'EXPIRADA');
+      assert.equal(chamadasDe('tokenAutorizado').length, chamadas);
+      assert.equal((await prisma.eventoWebhook.findFirst({ where: { chave: { contains: '557001' } } })).resultado, 'NAO_CONFIRMADO');
+    } finally {
+      const { cifrar } = await import('../src/lib/cifra.js');
+      await prisma.conexaoMercadoPago.update({ where: { lojaId: 1 }, data: { accessTokenCifrado: cifrar(TOKEN_LOJA, Buffer.from(CHAVE_HEX, 'hex')), status: 'CONECTADA' } });
+    }
   });
 
   test('mp-connect: a loja desvinculou no Mercado Pago = desconectada, online desligado e alerta', async () => {
